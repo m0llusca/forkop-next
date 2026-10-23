@@ -8,6 +8,7 @@ on:
       - 'forkop/Makefile'
       - 'build.sh'
       - 'tests/**'
+      - 'tools/provision-test-cores.py'
       - '.github/workflows/build.yml'
       - '.github/workflows/backend-ci.yml'
   push:
@@ -18,6 +19,7 @@ on:
       - 'forkop/Makefile'
       - 'build.sh'
       - 'tests/**'
+      - 'tools/provision-test-cores.py'
       - '.github/workflows/build.yml'
       - '.github/workflows/backend-ci.yml'
 
@@ -41,7 +43,7 @@ jobs:
         shell: bash
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential cmake git libjson-c-dev pkg-config
+          sudo apt-get install -y build-essential cmake git libjson-c-dev pkg-config openssl
           git clone https://github.com/openwrt/libubox.git /tmp/libubox
           git -C /tmp/libubox checkout da2d205a5cf3e877c45a2eec488218cbaf452e7d
           cmake -S /tmp/libubox -B /tmp/libubox/build -DBUILD_LUA=OFF
@@ -75,6 +77,8 @@ jobs:
 
       - name: Run backend tests
         shell: bash
+        env:
+          FORKOP_REQUIRE_CURRENT_CORES: '1'
         run: |
           bash tests/run-backend.sh
 
