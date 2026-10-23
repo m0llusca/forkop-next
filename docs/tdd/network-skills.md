@@ -82,7 +82,14 @@ After this observation, infer TLS from peer/ALPN/fingerprint and REALITY from a
 public-key hint only when no explicit security mode was selected. REALITY gets
 the same default Chrome uTLS profile as the parser. Explicit none still returns
 before TLS generation, and explicit TLS remains TLS even with unrelated hints.
-Fresh native verification and final package verification are pending.
+Native GREEN: b89a79a2, Backend CI 40024419563, 243 tests in 24.135 seconds,
+no failures/skips, all 70 shell suites pass. This includes all eight additional
+hint cases, the TProxy guard matrices and the original actual-core REALITY,
+authentication/certificate and Extended preservation checks. Artifact SHA256:
+c8c7a1f0df1152aa9f04908d41724435198323c8350225279fc4603dc784cb68.
+The independent final hint review found no new blocker. The final documentation
+commit reruns all gates; its source/package/workflow identities are recorded in
+the output manifest. Nineteen backend methods were added relative to d57ff974.
 
 ## Primary networking references
 
