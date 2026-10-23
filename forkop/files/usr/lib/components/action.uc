@@ -20,6 +20,7 @@ let tmp_dir = "";
 let lock_held = false;
 let forkop_was_running = false;
 let forkop_stopped_for_sing_box_change = false;
+let reality = null;
 
 function as_string(value) {
     return value == null ? "" : "" + value;
@@ -1074,6 +1075,12 @@ function validate_sing_box_extended_binary(binary, library_dir) {
     return index(version, "extended") >= 0 ? version : "";
 }
 
+function sing_box_verified_runtime(version, binary) {
+    if (reality == null)
+        reality = require("singbox.reality");
+    return reality.verified_runtime(version, binary);
+}
+
 function download_verified_sing_box_extended(release, output_path) {
     let tag = as_string(release.tag);
     let name = as_string(release.asset_name);
@@ -1146,6 +1153,9 @@ function restore_file_backup(target_path, backup_path) {
 }
 
 function restore_sing_box_service_from_marker(marker) {
+    if (as_string(marker) == "extended" && file_nonempty("/usr/bin/sing-box") &&
+        managed_sing_box_service_installed())
+        return true;
     if (as_string(marker) == "extended-compressed" ||
         (!file_exists("/etc/init.d/sing-box") && file_nonempty("/usr/bin/sing-box")))
         return install_managed_sing_box_service_script();
@@ -1349,7 +1359,8 @@ function restore_sing_box_after_failed_extended_install(previous_variant, backup
     if (!restore_sing_box_install_backup(previous_variant, backup_binary))
         restore_status = false;
     restore_sing_box_variant_state(previous_marker, previous_version_state);
-    restore_sing_box_service_from_marker(previous_marker);
+    if (!restore_sing_box_service_from_marker(previous_marker))
+        restore_status = false;
     clear_version_caches();
     return restore_status;
 }
@@ -1366,7 +1377,8 @@ function restore_sing_box_after_failed_extended_package_install(previous_variant
             restore_status = false;
     }
     restore_sing_box_variant_state(previous_marker, previous_version_state);
-    restore_sing_box_service_from_marker(previous_marker);
+    if (!restore_sing_box_service_from_marker(previous_marker))
+        restore_status = false;
     clear_version_caches();
     return restore_status;
 }
@@ -1426,6 +1438,7 @@ function install_sing_box_extended_package(action) {
         check_success("sing_box", normalize_sing_box_version(current_version), normalize_sing_box_version(latest_version), release.release_url);
     }
 
+    let previous_profile = sing_box_verified_runtime(current_version, "/usr/bin/sing-box");
     let package_file = tmp_dir + "/" + release.asset_name;
     if (!download_verified_sing_box_extended(release, package_file))
         action_fail("sing_box", action, "Failed to download or verify sing-box-extended package", current_version, latest_version);
@@ -1486,6 +1499,11 @@ function install_sing_box_extended_package(action) {
     }
     remove_file(package_file);
 
+    if (previous_profile != null && sing_box_verified_runtime(latest_version, "/usr/bin/sing-box") == null) {
+        if (restore_sing_box_after_failed_extended_package_install(current_variant, backup_binary, backup_cronet, previous_marker, previous_version_state, package_file, cronet_touched))
+            action_fail("sing_box", action, "Downloaded sing-box-extended package lacks verified REALITY capability; previous sing-box variant was restored", current_version, latest_version);
+        action_fail("sing_box", action, "Downloaded sing-box-extended package lacks verified REALITY capability and previous sing-box variant could not be restored", current_version, latest_version);
+    }
     let new_version = validate_sing_box_extended_binary("/usr/bin/sing-box", "/usr/lib");
     if (new_version == "") {
         if (restore_sing_box_after_failed_extended_package_install(current_variant, backup_binary, backup_cronet, previous_marker, previous_version_state, package_file, cronet_touched))
@@ -1539,6 +1557,7 @@ function install_sing_box_extended(action, compressed) {
         check_success("sing_box", normalize_sing_box_version(current_version), normalize_sing_box_version(latest_version), release.release_url);
     }
 
+    let previous_profile = sing_box_verified_runtime(current_version, "/usr/bin/sing-box");
     let archive_file = tmp_dir + "/" + release.asset_name;
     if (!download_verified_sing_box_extended(release, archive_file))
         action_fail("sing_box", action, "Failed to download or verify " + label, current_version, latest_version);
@@ -1578,6 +1597,12 @@ function install_sing_box_extended(action, compressed) {
         }
     }
 
+    if (previous_profile != null && sing_box_verified_runtime(latest_version, tmp_binary) == null) {
+        remove_file(tmp_binary);
+        remove_file(tmp_cronet);
+        remove_file(archive_file);
+        action_fail("sing_box", action, "Downloaded sing-box-extended lacks verified REALITY capability; current sing-box was preserved", current_version, latest_version);
+    }
     remove_file(archive_file);
     stop_forkop_before_sing_box_change();
     let new_version = validate_sing_box_extended_binary(tmp_binary, tmp_dir);

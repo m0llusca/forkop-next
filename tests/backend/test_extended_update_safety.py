@@ -71,7 +71,7 @@ function updates_log(message,level){}
         code = prelude + functions('as_string', 'shell_quote', 'command_from_args',
             'command_status', 'command_success', 'command_success_from_args',
             'command_output', 'command_output_from_args', 'file_nonempty',
-            'remove_file', 'download_verified_sing_box_extended',
+            'remove_file', 'sing_box_verified_runtime', 'download_verified_sing_box_extended',
             'install_sing_box_extended_package', 'install_sing_box_extended')
         code += '\nlet message=""; try { install_sing_box_extended("update", ' + ('true' if compressed else 'false') + '); } catch(e) { message=""+e; }\nprint(sprintf("%J",{events,message}));'
         return self.run_code(code, self.d, json.dumps(release), self.payload)
@@ -285,7 +285,7 @@ function restore_sing_box_package_variant(variant){die("fixture forbids network 
             'restore_file_backup', 'restore_sing_box_backup',
             'sing_box_variant_is_package_managed', 'restore_sing_box_install_backup',
             'restore_sing_box_after_failed_extended_package_install',
-            'download_verified_sing_box_extended',
+            'sing_box_verified_runtime', 'download_verified_sing_box_extended',
             'install_sing_box_extended_package', 'install_sing_box_extended')
         code = code.replace('/usr/bin/sing-box', str(binary))
         code += '\nlet message="";try{install_sing_box_extended("update",' + ('true' if compressed else 'false') + ');}catch(e){message=""+e;}print(sprintf("%J",{events,message}));'

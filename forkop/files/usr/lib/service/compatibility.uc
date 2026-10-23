@@ -136,12 +136,12 @@ function check(payload){
         }
         if(c.security=='reality'){
             // Pinned native handshake evidence; do not extrapolate future versions.
-            if(replace(str(obj(payload.installed).xray),/^v/,'')=='26.10.21'){
+            if(index(['26.9.30','26.10.21'],replace(str(obj(payload.installed).xray),/^v/,''))>=0){
                 let known_stock=index(['1.13.7','1.14.3'],replace(v,/^v/,''))>=0;
                 let adapter=require('singbox.reality'),profile=adapter.verified_runtime(v);
                 let hybrid=local&&adapter.hybrid_enabled(local,profile);
                 add('reality_key_exchange',hybrid?'matched':(known_stock?'unsupported':'unknown'),
-                    hybrid?'Selected outbound uses the validated Extended hybrid REALITY profile.':(known_stock?'This stock client omits the hybrid key share required by Xray 26.10.21.':'This client has no validated hybrid REALITY handshake profile for Xray 26.10.21.'),
+                    hybrid?'Selected outbound uses the validated Extended hybrid REALITY profile.':(known_stock?'This stock client omits the hybrid key share required by the selected Xray version.':'This client has no validated hybrid REALITY handshake profile for the selected Xray version.'),
                     hybrid?'':'Use the validated Extended binary with Chrome uTLS and generated support_x25519mlkem768 enabled, then probe this section. Preserve explicit legacy choices and certificate validation.');
             }
             let client_id=canonical_short_id(c.short_id),server_ids=[],invalid_id=client_id==null;

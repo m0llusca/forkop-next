@@ -46,3 +46,19 @@ fixing them. Also extend the exact known-hybrid server profile to tested 26.9.30
 Ruling: capability/fingerprint admission is scoped to known hybrid-required
 server releases, 26.9.30 and 26.10.21. Preserve older 26.6.27 legacy probe behavior;
 do not impose an unrelated blanket fingerprint ban on older working servers.
+
+Second native RED: 41aa8c8b, Backend CI 40011087401, 218 tests in 25.886
+seconds, 10 failed assertions. Five 26.9.30 preflight negatives incorrectly say
+verified. Unadmitted compressed replacement reaches service stop; package
+replacement executes and starts. Late rollback loses the only init script;
+both rollback forms ignore failed service recreation. All new positive controls
+and actual core transfer/authentication tests pass, including hybrid-disabled
+rejection against both hybrid-required releases. Artifact SHA256:
+f0c93be6fee73a1f8c640dfa46362284062526c9bf1a642707b5753e6214839c.
+
+Only after observing those failures, extend the exact server guard, preserve an
+admitted current core's capability by checking the replacement ELF before
+execution/activation (compressed before service stop, package with exact runtime
+rollback on rejection), retain usable service scripts and propagate recreation
+failure. No assertion is relaxed; installer fixture changes only expose the new
+lazy adapter helper to its isolated native-function harness.

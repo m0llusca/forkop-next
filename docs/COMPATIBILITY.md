@@ -90,6 +90,54 @@ Primary implementation references:
 
 See `docs/tdd/current-core-compatibility.md` for the RED/GREEN trail and limits.
 
+## Verified Extended REALITY profile (Forkop 1.1.4)
+
+The primary corrected core is official sing-box Extended
+`1.14.3-extended-2.7.3`. Upstream already supplies the opt-in correction
+`tls.reality.support_x25519mlkem768`; Forkop integrates it rather than replacing
+Extended with stock sing-box or maintaining another cryptographic fork.
+Legacy Extended `1.13.18-extended-2.6.5` cannot parse this field and must be updated
+explicitly before using this profile. No component is installed automatically.
+
+The final generator pass applies to manual links, JSON outbounds and subscriptions.
+It enables the field only for a SHA256-admitted actual executable with enabled
+REALITY and Chrome uTLS, and only when the option is absent. Explicit false is
+the legacy opt-out; explicit fingerprints/security choices remain unchanged.
+Stock, legacy and unknown core builds do not receive the new automatic field.
+An existing user-supplied unsupported field is not silently erased to make an
+incompatible core pass its mandatory configuration validation.
+
+`singbox/validated-cores.json` is the packaged identity trust anchor. A version
+suffix or a variant marker alone does not admit a runtime. Changing the executable
+invalidates its profile; hashing is streaming and occurs once per adapter request.
+Profiles cover published standard/compressed Linux binaries and OpenWrt IPKs;
+native interoperability runs on Linux amd64, not every listed architecture.
+
+The first complete native run, ee74ff0f / 40010332390, proves generated
+REALITY/Vision random HTTPS transfers against Xray **26.6.27, 26.9.30 and
+26.10.21**, with untrusted-certificate and wrong UUID/key/short-ID rejection.
+Legacy opt-out also succeeds against 26.6.27. Extended XHTTP and VLESS Encryption
+retain generated-schema and core-start checks; these are not live protocol tests.
+The same test suite retains unmodified stock-client rejection controls.
+
+For the known hybrid-required server profiles, admission of core, fingerprint and
+generated flag permits the existing explicit selected-section HTTPS probe. It
+does not certify a connection without that probe. Older 26.6.27 keeps its legacy
+probe behavior. Unsupported modern fingerprints stay unconfirmed. Xray remains
+an optional reserve architecture; no second router process is introduced.
+
+Operator sequence: explicitly update the sing-box component to the validated
+Extended release, apply/reload the configuration, then probe the selected section.
+Keep private server metadata out of reports. No certificate verification, server
+REALITY policy or remote Xray version is weakened or downgraded.
+
+Release archives/packages are accepted only from the exact official HTTPS
+tag/asset URL with a valid release SHA256, checked before extracting/executing or
+stopping services. Redirect transport behavior is unchanged. Exact local runtime
+backups are used for rollback; this does not reconstruct package-manager database
+registration. See `docs/tdd/reality-extended.md` for subsequent review regressions
+and final acceptance results.
+
 The response envelope is `{success:true,data:{status,checks,outbounds,client,server}}`.
 Each check contains `capability,status,detail,next_step`. Status is `unsupported`
 for known mismatches, `probe_required` for missing or unconfirmed evidence, and

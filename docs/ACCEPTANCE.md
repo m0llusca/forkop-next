@@ -1,7 +1,7 @@
 # Forkop Next v1 acceptance
 
 This checklist separates development verification from deployment acceptance.
-Tests run in an isolated localhost-only Alpine VM using real ucode fs/UCI modules;
+Tests run in isolated localhost-only Linux fixtures using real ucode fs/UCI modules;
 the production ASUS router and Aeza VPS are not changed by development checks.
 Fresh complete-suite and package-build outcomes are recorded in
 [integration evidence](tdd/integration.md). A passing fixture does not certify a
@@ -21,6 +21,8 @@ live device, remote server or an untested future core release.
 | Smart Detect suggestions | `test_smart_detect.py`, `test_next_policies.py` | Opt-in bounded log-candidate scan; repeated failures with alternate success; explicit transactional acceptance only |
 | 3x-ui/Xray update awareness | `test_compatibility.py` | Fixed official release endpoints, numeric comparison, bounded transport, unknown on insufficient evidence; no install |
 | Current sing-box schemas | `test_compatibility.py` | Real published 1.13.7 and 1.14.3 check generated fixtures; migration preserves download route and source DNS scope |
+| Extended REALITY with old/current Xray | `test_extended_reality.py`, `test_extended_reality_generation.py` | Official SHA-pinned Extended 2.7.3, actual generated connections against Xray 26.6.27 / 26.9.30 / 26.10.21, strict certificate/authentication negatives, explicit legacy mode; native Linux amd64 |
+| Preserve Extended through updates | `test_extended_update_safety.py` | Verified official release content and exact local runtime rollback; package database registration remains separate |
 | Selected-section compatibility preflight | `test_compatibility.py`, `test_probe.py` | Generated mixed listener and outbound association; mismatches blocked, secrets omitted, HTTPS evidence required |
 | Usable desktop/mobile UI | Frontend component tests, native LuCI bundle integration and four browser captures | Simple/detailed modes, themes, reconnect states, actionable read failures, narrow screens |
 | Verified release inputs | `test_release_download.py` | SDK hashes checked before use; translation tool built from pinned official LuCI commit |
