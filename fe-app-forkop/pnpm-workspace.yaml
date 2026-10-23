@@ -1,0 +1,7 @@
+# The frontend compiler needs only these reviewed esbuild postinstall scripts.
+# Unknown future versions still fail the default strict dependency-build policy.
+allowBuilds:
+  'esbuild@0.25.12 || 0.28.2': true
+  # SFTP upload tooling is not used by build/tests; these native add-ons stay off.
+  cpu-features: false
+  ssh2: false

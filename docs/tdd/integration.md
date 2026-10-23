@@ -69,3 +69,13 @@ GitHub publication: draft PR https://github.com/m0llusca/forkop-next/pull/1.
 Actions were initially disabled by GitHub for the new fork and were explicitly
 enabled after reviewing its workflows. A documentation follow-up triggers the PR
 quality gates and package build; their outcome must be checked before release.
+
+## Clean GitHub runner follow-up
+
+The first GitHub run confirms all 125 Python tests and 69 shell suites. The
+historical contract suite fails because GitHub's new fork did not copy the
+upstream 0.7.19.9 tag. Its fixture resolver now fetches that tag from the explicit
+original repository and verifies commit 68d516e85b9a81b5a37e8e258610098ed03b02d1.
+A separate clean frontend install reproduces pnpm 11's dependency-build approval
+failure; its exact allow/deny policy is recorded in product.md. These setup
+corrections retain every existing runtime test and release gate.

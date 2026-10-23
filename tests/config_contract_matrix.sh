@@ -19,12 +19,16 @@ fail() {
 }
 
 ensure_stable_ref() {
-  if git -C "$ROOT_DIR" rev-parse --verify "$STABLE_REF^{commit}" >/dev/null 2>&1; then
-    return 0
+  if ! git -C "$ROOT_DIR" rev-parse --verify "$STABLE_REF^{commit}" >/dev/null 2>&1; then
+    # New GitHub forks do not copy upstream tags. Fetch the historical fixture
+    # explicitly from its original source, independently of the personal remote.
+    git -C "$ROOT_DIR" fetch --depth=1 https://github.com/ushan0v/forkop.git "refs/tags/$STABLE_REF:refs/tags/$STABLE_REF" >/dev/null 2>&1 ||
+      fail "stable ref is unavailable and could not be fetched: $STABLE_REF"
   fi
-
-  git -C "$ROOT_DIR" fetch --force --depth=1 origin "refs/tags/$STABLE_REF:refs/tags/$STABLE_REF" >/dev/null 2>&1 ||
-    fail "stable ref is unavailable and could not be fetched: $STABLE_REF"
+  if [ "$STABLE_REF" = "0.7.19.9" ]; then
+    [ "$(git -C "$ROOT_DIR" rev-parse "$STABLE_REF^{commit}")" = "68d516e85b9a81b5a37e8e258610098ed03b02d1" ] ||
+      fail "historical stable fixture does not match its pinned commit"
+  fi
 }
 
 prepare_stable_repo() {

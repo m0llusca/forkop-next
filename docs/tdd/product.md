@@ -72,3 +72,13 @@ Fresh integration verification 18:59 Moscow: `pnpm lint`, `pnpm exec tsc --noEmi
 - Actual selected-server overview: RED missing selected server → GREEN consumes existing dashboard loader, includes actual latency/time if available.
 
 Fresh final verification at 19:11 Moscow: frontend lint passed; 51 files / 551 tests passed; build passed (`tsc --noEmit`, tsup and native LuCI patch). Generated main.js is475.51KB. Build now additionally loads the generated LuCI module plus native next.js in a VM with real HappyDOM, creates the overview, and verifies required controls/exports/styles are usable. This is independent of source-only tests and does not contact the router.
+
+## Clean CI dependency installation — 2026-10-23 19:31 Moscow
+
+A real fresh copy under work/ci-clean-a89fe209, with no node_modules and no build-policy file, reproduced CI: `pnpm install --frozen-lockfile` exited1 with ERR_PNPM_IGNORED_BUILDS for cpu-features0.0.10, esbuild0.25.12, esbuild0.28.2 and ssh2 1.17.0. The current working installation was not removed or modified.
+
+The sole production configuration change is fe-app-forkop/pnpm-workspace.yaml. Its allowBuilds grants install scripts only to the two exact lockfile esbuild versions (`esbuild@0.25.12 || 0.28.2`). Native optional cpu-features and ssh2 scripts are explicitly denied; they are not needed by frontend compilation/tests or the router-delivered static bundle. Unknown future dependency build scripts remain blocked by pnpm11's default strict policy. Syntax checked against the official pnpm11 documentation: https://github.com/pnpm/pnpm/blob/main/pnpm11/docs/cli/approve-builds.md and https://github.com/pnpm/pnpm/blob/main/pnpm/docs/settings/build.md.
+
+GREEN used another new directory, work/ci-green-ab6c641d, again with no node_modules. The same frozen install succeeded; output confirmed only both approved esbuild postinstall scripts ran. Then formatting check, ESLint with zero warnings, all51 files/551 tests, TypeScript/tsup and actual generated LuCI-module render checker passed. The first copy of test fixtures omitted native server.js and produced three ENOENT fixture failures; copying the complete native LuCI tree corrected the isolated test setup, with no source change, and the entire suite was rerun successfully.
+
+The clean generated bundle is byte-identical to the current checked-in bundle: SHA256 36096ff6063e4ceee5d23dba57ed5bb3dc3a886a5a619be46dd5a4380e7533ea. This verifies the fresh Windows install/build. Linux cross-platform identity still requires the GitHub Actions runner; it is not claimed from a Windows-only run.
