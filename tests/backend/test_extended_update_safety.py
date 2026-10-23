@@ -358,12 +358,15 @@ function restore_sing_box_package_variant(variant){die("fixture forbids network 
         """
         binary = self.d / 'runtime/sing-box'
         binary.parent.mkdir()
-        binary.write_bytes(b'exact previous Extended core')
+        previous_core = b'exact previous stable core' if variant == 'stable' else b'exact previous Extended core'
+        binary.write_bytes(previous_core)
         library = self.d / 'runtime/libcronet.so'
         library.write_bytes(b'exact previous cronet library')
         init = self.d / 'init.d/sing-box'
         init.parent.mkdir()
-        init.write_text('#!/bin/sh\n# Forkop managed sing-box service for binary variants\nexit 0\n')
+        service_comment = ('upstream package service' if variant == 'stable' else
+                           'Forkop managed sing-box service for binary variants')
+        init.write_text('#!/bin/sh\n# ' + service_comment + '\nexit 0\n')
         init.chmod(0o755)
         archive = self.d / 'candidate.tar.gz'
         with tarfile.open(archive, 'w:gz') as tar:
@@ -374,31 +377,32 @@ function restore_sing_box_package_variant(variant){die("fixture forbids network 
                 tar.addfile(member, io.BytesIO(content))
         release = dict(tag=TAG, asset_name=NAME, asset_url=URL, release_url='',
                        sha256=hashlib.sha256(archive.read_bytes()).hexdigest())
-        prelude = '''let fs=require("fs");let events=[];let rollback=[];
+        prelude = '''let fs=require("fs");let events=[];
 let tmp_dir=ARGV[0];let release=json(ARGV[1]);let reality={verified_runtime:function(version,path){return null;}};
 const SB_MANAGED_SERVICE_MARKER="Forkop managed sing-box service for binary variants";
 const SERVICE_INIT=tmp_dir+"/missing-forkop-init";
+const BIN_PATH=tmp_dir+"/missing-forkop-bin";
+let forkop_was_running=false;let forkop_stopped_for_sing_box_change=false;
 let uci_core={available:function(){return false;}};
 function init_tmp_dir(){return true;}
 function owner_pid(){return "fixture";}
 function updates_log(message,level){}
 function sing_box_runtime_output(mode,args){
  if(mode=="variant")return ARGV[4];
- if(mode=="read-variant-marker")return "extended";
- return "1.14.3-extended-2.7.3";}
+ if(mode=="read-variant-marker")return ARGV[4];
+ return ARGV[4]=="stable"?"1.13.0":"1.14.3-extended-2.7.3";}
 function sing_box_runtime_success(mode,args){return true;}
 function normalize_sing_box_version(value){return replace(value,/^v/,"");}
 function resolve_sing_box_extended_release(compressed){return release;}
 function download_with_retry(url,path,label){return fs.writefile(path,fs.readfile(ARGV[2]))!=null;}
 function select_archive_member_path(archive,name){return name;}
 function validate_sing_box_extended_binary(path,library){return "1.14.3-extended-2.7.3";}
-function stop_forkop_before_sing_box_change(){prepare_sing_box_service_disabled();}
 function pkg_list_update_command(){return "update";}
 function pkg_install_files_command(files){return "install";}
 function run_logged(label,command){push(events,command);return true;}
 function pkg_remove_sing_box_conflict(package){push(events,"remove-"+package);return true;}
 function run_logged_pkg_remove_sing_box_conflict(package,label){return pkg_remove_sing_box_conflict(package);}
-function restore_sing_box_package_variant(variant){return false;}
+function restore_sing_box_package_variant(variant){push(events,"restore-package-"+variant);return false;}
 function restore_sing_box_variant_state(marker,version){}
 function clear_version_caches(){}
 function action_fail(component,action,message){
@@ -413,6 +417,7 @@ function action_success(component,action,message){die("unexpected install succes
             'managed_sing_box_service_installed', 'managed_sing_box_service_text',
             'install_managed_sing_box_service_script', 'remove_managed_sing_box_service_script',
             'disable_sing_box_service_config', 'prepare_sing_box_service_disabled',
+            'stop_forkop_before_sing_box_change',
             'prepare_sing_box_package_service_install', 'restore_sing_box_service_from_marker',
             'sing_box_variant_is_package_managed', 'restore_sing_box_install_backup',
             'restore_sing_box_after_failed_extended_install',
@@ -423,14 +428,9 @@ function action_success(component,action,message){die("unexpected install succes
             'function move_file_to_backup(target_path, backup_path) {',
             'function move_file_to_backup(target_path, backup_path) {\n'
             '    if (target_path == ARGV[3]) { push(events,"injected-backup-failure"); return false; }')
-        for helper in ('restore_sing_box_after_failed_extended_install',
-                       'restore_sing_box_after_failed_extended_package_install'):
-            implementation = implementation.replace('function ' + helper + '(', 'function real_' + helper + '(')
-            implementation += '\nfunction ' + helper + '(variant,binary,cronet,marker,version,archive,touched) {\n'
-            implementation += 'let ok=real_' + helper + '(variant,binary,cronet,marker,version,archive,touched);push(rollback,ok);return ok;\n}\n'
         code = (prelude + implementation).replace('/usr/bin/sing-box', str(binary))
         code = code.replace('/usr/lib/libcronet.so', str(library)).replace('/etc/init.d/sing-box', str(init))
-        code += '\nlet message="";try{install_sing_box_extended("update",' + ('true' if compressed else 'false') + ');}catch(e){message=""+e;}print(sprintf("%J",{events,rollback,message}));'
+        code += '\nlet message="",error_detail="";try{install_sing_box_extended("update",' + ('true' if compressed else 'false') + ');}catch(e){message=""+e;error_detail=sprintf("%J",e);}print(sprintf("%J",{events,message,error_detail}));'
         result = self.run_code(code, self.d, json.dumps(release), archive,
                                library if failed_target == 'library' else binary, variant, init)
         return result, binary, library, init
@@ -447,12 +447,12 @@ function action_success(component,action,message){die("unexpected install succes
                             compressed, variant, 'library')
                         self.assertIn('injected-backup-failure', result['events'], result)
                         self.assertIn('backup', result['message'].lower(), result)
-                        self.assertFalse(any(event.startswith('remove-') or event == 'install'
+                        self.assertFalse(any(event.startswith(('remove-', 'restore-package-')) or event == 'install'
                                              for event in result['events']), result)
-                        self.assertEqual(binary.read_bytes(), b'exact previous Extended core')
+                        previous_core = b'exact previous stable core' if variant == 'stable' else b'exact previous Extended core'
+                        self.assertEqual(binary.read_bytes(), previous_core)
                         self.assertTrue(library.exists(), 'Failed backup deleted the original libcronet.so')
                         self.assertEqual(library.read_bytes(), b'exact previous cronet library')
-                        self.assertEqual(result['rollback'], [True], result)
                         self.assertTrue(init.exists(), 'Rollback must restore a usable service')
                     finally:
                         self.d = previous
@@ -461,7 +461,7 @@ function action_success(component,action,message){die("unexpected install succes
         result, binary, library, init = self.backup_failure_install(False, 'extended', 'binary')
         self.assertIn('injected-backup-failure', result['events'], result)
         self.assertIn('backup', result['message'].lower(), result)
-        self.assertFalse(any(event.startswith('remove-') or event == 'install'
+        self.assertFalse(any(event.startswith(('remove-', 'restore-package-')) or event == 'install'
                              for event in result['events']), result)
         self.assertEqual(binary.read_bytes(), b'exact previous Extended core')
         self.assertEqual(library.read_bytes(), b'exact previous cronet library')
