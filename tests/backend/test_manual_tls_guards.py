@@ -55,18 +55,22 @@ class ManualTlsGuards(unittest.TestCase):
         self.assertIs(outbound.get('tls', {}).get('enabled'), True, outbound)
         self.assertIsNot(outbound['tls'].get('insecure'), True, outbound)
 
+    def parse(self, link):
+        result = subprocess.run([
+            'ucode', '-L', str(LIB), str(LIB / 'subscription/parser.uc'),
+            'share-link-outbound', link, 'fixture-node',
+        ], env=self.env, capture_output=True, text=True, timeout=15)
+        outbound = json.loads(result.stdout) if result.returncode == 0 else None
+        return result, outbound
+
     def test_bare_trojan_preserves_subscription_parser_tls_default(self):
         # Trojan specifies a real TLS handshake before its authentication frame:
         # https://trojan-gfw.github.io/trojan/protocol
         for query in ('', '?sni=proxy.example'):
             with self.subTest(query=query):
                 link = 'trojan://fixture-password@proxy.example:443' + query
-                parsed = subprocess.run([
-                    'ucode', '-L', str(LIB), str(LIB / 'subscription/parser.uc'),
-                    'share-link-outbound', link, 'fixture-node',
-                ], env=self.env, capture_output=True, text=True, timeout=15)
+                parsed, subscription = self.parse(link)
                 self.assertEqual(parsed.returncode, 0, parsed.stdout + parsed.stderr)
-                subscription = json.loads(parsed.stdout)
                 self.assert_tls(subscription)
                 result, manual = self.generate(link)
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
@@ -97,7 +101,7 @@ class ManualTlsGuards(unittest.TestCase):
 
     def test_unknown_security_fails_instead_of_emitting_plaintext(self):
         for scheme, credential in (('vless', UUID), ('trojan', 'fixture-password')):
-            for security in ('reailty', 'xtls'):
+            for security in ('reailty',):
                 with self.subTest(scheme=scheme, security=security):
                     result, _ = self.generate(
                         f'{scheme}://{credential}@proxy.example:443?security={security}')
@@ -106,9 +110,9 @@ class ManualTlsGuards(unittest.TestCase):
                     self.assertRegex((result.stdout + result.stderr).lower(),
                                      r'security|tls', 'A rejection must explain the TLS setting')
 
-    def test_mixed_case_security_is_secure_or_clearly_rejected(self):
+    def test_mixed_case_and_legacy_security_are_secure_or_clearly_rejected(self):
         for scheme, credential in (('vless', UUID), ('trojan', 'fixture-password')):
-            for security in ('TLS', 'REALITY'):
+            for security in ('TLS', 'REALITY', 'xtls'):
                 with self.subTest(scheme=scheme, security=security):
                     result, outbound = self.generate(
                         f'{scheme}://{credential}@proxy.example:443?security={security}'
@@ -119,6 +123,58 @@ class ManualTlsGuards(unittest.TestCase):
                             self.assertIs(outbound['tls'].get('reality', {}).get('enabled'), True)
                     else:
                         self.assertRegex((result.stdout + result.stderr).lower(), r'security|tls')
+
+    def test_vless_missing_security_with_sni_cannot_silently_disable_tls(self):
+        link = f'vless://{UUID}@proxy.example:443?sni=proxy.example'
+        parsed, subscription = self.parse(link)
+        self.assertEqual(parsed.returncode, 0, parsed.stdout + parsed.stderr)
+        self.assert_tls(subscription)
+        result, manual = self.generate(link)
+        if result.returncode == 0:
+            self.assert_tls(manual)
+            self.assertEqual(manual['tls'].get('server_name'), 'proxy.example')
+        else:
+            self.assertRegex((result.stdout + result.stderr).lower(), r'security|tls')
+
+    def test_subscription_parser_preserves_known_secure_security_modes(self):
+        for scheme, credential in (('vless', UUID), ('trojan', 'fixture-password')):
+            for security in ('tls', 'reality', 'xtls'):
+                with self.subTest(scheme=scheme, security=security):
+                    link = (f'{scheme}://{credential}@proxy.example:443?security={security}'
+                            '&sni=proxy.example&fp=chrome')
+                    if security == 'reality':
+                        link += f'&pbk={PUBLIC_KEY}&sid=aabb'
+                    result, outbound = self.parse(link)
+                    self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                    self.assert_tls(outbound)
+                    self.assertEqual(outbound['tls'].get('server_name'), 'proxy.example')
+                    if security == 'reality':
+                        self.assertIs(outbound['tls']['reality']['enabled'], True)
+                        self.assertEqual(outbound['tls']['reality']['public_key'], PUBLIC_KEY)
+
+    def test_subscription_parser_preserves_explicit_none(self):
+        for scheme, credential in (('vless', UUID), ('trojan', 'fixture-password')):
+            with self.subTest(scheme=scheme):
+                result, outbound = self.parse(
+                    f'{scheme}://{credential}@proxy.example:443?security=none')
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertFalse(outbound.get('tls', {}).get('enabled', False), outbound)
+
+    def test_subscription_parser_unknown_or_mixed_case_never_emits_plaintext(self):
+        for scheme, credential in (('vless', UUID), ('trojan', 'fixture-password')):
+            for security in ('reailty', 'TLS', 'REALITY'):
+                with self.subTest(scheme=scheme, security=security):
+                    link = (f'{scheme}://{credential}@proxy.example:443?security={security}'
+                            '&sni=proxy.example&fp=chrome')
+                    if security == 'REALITY':
+                        link += f'&pbk={PUBLIC_KEY}&sid=aabb'
+                    result, outbound = self.parse(link)
+                    # The parser may reject an unsupported node with no output;
+                    # accepting it must retain the requested security boundary.
+                    if result.returncode == 0:
+                        self.assert_tls(outbound)
+                        if security == 'REALITY':
+                            self.assertIs(outbound['tls'].get('reality', {}).get('enabled'), True)
 
 
 if __name__ == '__main__':
