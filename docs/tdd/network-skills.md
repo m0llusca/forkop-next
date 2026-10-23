@@ -61,8 +61,28 @@ default manual Trojan and missing-security/SNI links to TLS, reject unknown
 manual modes and invalid subscription nodes. Preserve explicit none and all
 certificate-verification defaults. Parse one complete universal marking rule at
 a time; require exact default-route destination and exact lo interface tokens.
-Unknown policy-rule selectors are conservatively unconfirmed. Fresh GREEN and
-package validation are pending.
+Unknown policy-rule selectors are conservatively unconfirmed.
+
+First GREEN: cbcd85b7, Backend CI 40023642826, 242 tests in 23.961 seconds,
+no skips/failures; all 70 shell suites pass. Artifact SHA256:
+8e79f7b54b81a40be77ab7d9709967dd8ddd4746130c5caac778279bfffec161.
+Independent patch reviews found no blockers in NFT guards, TLS enum rejection
+or the clarified DNS documentation. The original core matrix remains green.
+
+One review observation extends the same TLS-intent family: the subscription
+parser also understands peer, ALPN, fingerprint and public-key hints when
+security is omitted. Manual links can still lose that intent. Tests-only
+a4d6147d adds eight cases, preserving explicit-none controls. Native RED,
+Backend CI 40023977937: 243 tests in 24.372 seconds, six failed assertions:
+four VLESS hints omit TLS; Trojan loses peer SNI and inferred REALITY. The
+other two hint controls pass. Artifact SHA256:
+9f1870d20cb94e76197d793594a22283ec8cf138f5485bb01f92b42618bd2791.
+
+After this observation, infer TLS from peer/ALPN/fingerprint and REALITY from a
+public-key hint only when no explicit security mode was selected. REALITY gets
+the same default Chrome uTLS profile as the parser. Explicit none still returns
+before TLS generation, and explicit TLS remains TLS even with unrelated hints.
+Fresh native verification and final package verification are pending.
 
 ## Primary networking references
 

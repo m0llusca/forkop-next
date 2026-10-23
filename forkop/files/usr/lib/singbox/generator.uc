@@ -1673,11 +1673,18 @@ function tls_alpn_array(value, transport) {
 function apply_link_tls(outbound, scheme, query) {
     query = object_or_empty(query);
     let security = lc(as_string(query.security || ""));
+    let sni = as_string(query.sni || query.peer || "");
+    let public_key = as_string(query.pbk || "");
+    let fingerprint = as_string(query.fp || "");
+    // Share-link hints infer security only when no explicit mode was selected.
+    if (security == "" && (scheme == "vless" || scheme == "trojan") && public_key != "")
+        security = "reality";
     if (security == "xtls")
         security = "tls";
-    // Trojan defaults to TLS; SNI also expresses TLS intent on a share link.
+    // Keep implicit TLS hints consistent with the subscription parser.
     // An explicit none remains an intentional opt-out.
-    if (security == "" && (scheme == "trojan" || scheme == "hysteria2" || scheme == "hy2" || as_string(query.sni || "") != ""))
+    if (security == "" && (scheme == "trojan" || scheme == "hysteria2" || scheme == "hy2" ||
+        sni != "" || as_string(query.alpn || "") != "" || fingerprint != ""))
         security = "tls";
 
     if (security == "" || security == "none")
@@ -1686,8 +1693,8 @@ function apply_link_tls(outbound, scheme, query) {
         runtime_generate_unsupported("manual proxy link security is unsupported");
 
     let tls = { enabled: true };
-    if (as_string(query.sni || "") != "")
-        tls.server_name = as_string(query.sni);
+    if (sni != "")
+        tls.server_name = sni;
     if (bool_query(query.allowInsecure || query.insecure || ""))
         tls.insecure = true;
 
@@ -1695,16 +1702,18 @@ function apply_link_tls(outbound, scheme, query) {
     if (length(alpn) > 0)
         tls.alpn = alpn;
 
-    if (scheme != "hysteria2" && scheme != "hy2" && as_string(query.fp || "") != "") {
+    if (security == "reality" && fingerprint == "")
+        fingerprint = "chrome";
+    if (scheme != "hysteria2" && scheme != "hy2" && fingerprint != "") {
         tls.utls = {
             enabled: true,
-            fingerprint: as_string(query.fp)
+            fingerprint
         };
     }
     if (security == "reality") {
         tls.reality = {
             enabled: true,
-            public_key: as_string(query.pbk || ""),
+            public_key,
             short_id: as_string(query.sid || "")
         };
     }
