@@ -166,7 +166,8 @@ function clear_version_caches(){}
         result = self.run_code(code)
         self.assertFalse(result['restored'], result)
 
-    def rollback_service(self, existing_service=True, install_failure=False, package=False):
+    def rollback_service(self, existing_service=True, install_failure=False, package=False,
+                         previous_marker='extended'):
         binary = self.d / 'runtime/sing-box'
         binary.parent.mkdir()
         binary.write_bytes(b'failed new core')
@@ -198,8 +199,8 @@ function write_file(path,value){return ARGV[2]!="fail" && fs.writefile(path,valu
             'restore_sing_box_after_failed_extended_package_install')
         code = code.replace('/usr/bin/sing-box', str(binary)).replace('/etc/init.d/sing-box', str(init))
         helper = 'restore_sing_box_after_failed_extended_' + ('package_install' if package else 'install')
-        code += '\nlet restored=' + helper + '("extended",ARGV[0],"","extended","old","",false);print(sprintf("%J",{restored}));'
-        result = self.run_code(code, backup, init, 'fail' if install_failure else 'ok')
+        code += '\nlet restored=' + helper + '("extended",ARGV[0],"",ARGV[3],"old","",false);print(sprintf("%J",{restored}));'
+        result = self.run_code(code, backup, init, 'fail' if install_failure else 'ok', previous_marker)
         return result, binary, init
 
     def test_late_compressed_failure_restores_exact_extended_binary_and_usable_init(self):
@@ -224,6 +225,30 @@ function write_file(path,value){return ARGV[2]!="fail" && fs.writefile(path,valu
                         self.d = previous
                     self.assertFalse(result['restored'], result)
                     self.assertFalse(init.exists())
+
+    def test_markerless_extended_rollback_preserves_usable_managed_service(self):
+        # Upstream package installations are identified by their executable's
+        # version and need not have a Forkop variant marker. A failed compressed
+        # upgrade has already replaced their package init with the managed init.
+        result, binary, init = self.rollback_service(previous_marker='')
+        self.assertTrue(result['restored'], result)
+        self.assertEqual(binary.read_bytes(), b'exact previous Extended core')
+        self.assertTrue(init.exists(), 'Markerless Extended rollback removed the only usable init')
+        self.assertTrue(os.access(init, os.X_OK))
+
+    def test_markerless_extended_rollback_recreates_missing_service(self):
+        result, binary, init = self.rollback_service(existing_service=False, previous_marker='')
+        self.assertTrue(result['restored'], result)
+        self.assertEqual(binary.read_bytes(), b'exact previous Extended core')
+        self.assertTrue(init.exists())
+        self.assertTrue(os.access(init, os.X_OK))
+
+    def test_markerless_extended_rollback_reports_service_recreation_failure(self):
+        result, binary, init = self.rollback_service(existing_service=False,
+                                                    install_failure=True, previous_marker='')
+        self.assertFalse(result['restored'], result)
+        self.assertEqual(binary.read_bytes(), b'exact previous Extended core')
+        self.assertFalse(init.exists())
 
     def profile_install(self, compressed=True, current_admitted=True, candidate_admitted=False):
         # Model different authentic release artifacts carrying the same displayed
