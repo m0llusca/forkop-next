@@ -76,6 +76,20 @@ attempts are logged; per-request timeouts and TLS/authentication controls remain
 unchanged. Each stock client's rejection must appear in its own fresh server-log
 range, excluding errors from earlier clients and controls.
 
+GREEN: ebed05268daebd20f27d68782b8dd126845eb663, native build release gate
+40005681722: **188 Python tests in 12.150 seconds, OK; all 70 shell suites
+pass; no skips**. Normal and strict ucode compilation pass. Both published
+sing-box schema checks execute. TLS/Vision exact-payload transfers through both
+stock clients pass, with wrong-UUID and strict certificate rejection controls.
+The same-version Xray REALITY positive control succeeds against the same
+server/cover/keys/target; each stock client is then rejected in its own fresh log
+range. This establishes the observed incompatibility; the hybrid-key mechanism
+is supported by the pinned implementation sources, not a packet-capture claim.
+Downloaded native artifact SHA256:
+d02af5f5098bb6b5cfa30b62dd6fb5a9a8e090ee7e37815cd37c13dbba82ec59.
+The frontend release gate also passes formatting, lint, 594 tests and build.
+Final archive/metadata verification is reported with the downloaded artifacts.
+
 ## Additional review skills
 
 Installed from pinned primary repositories: Trail of Bits property-based-testing
