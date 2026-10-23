@@ -119,9 +119,9 @@ class ExtendedRealityPreflightTests(unittest.TestCase):
         self.write_config(config)
         return config
 
-    def probe(self):
+    def probe(self, xray_version='26.10.21'):
         return self.call(section='main', server=self.server, probe=True, domain='example.org',
-                         installed={'xray': '26.10.21', 'panel': '3.10.2'})
+                         installed={'xray': xray_version, 'panel': '3.10.2'})
 
     def test_trusted_generated_hybrid_profile_allows_selected_section_probe(self):
         self.prepare()
@@ -137,6 +137,9 @@ class ExtendedRealityPreflightTests(unittest.TestCase):
         self.assertFalse((self.d / 'curl.log').exists())
 
     def test_missing_or_false_flag_and_unvalidated_fingerprint_require_evidence(self):
+        self.assert_unvalidated_profiles_require_evidence('26.10.21')
+
+    def assert_unvalidated_profiles_require_evidence(self, xray_version):
         for field in ('absent', 'false', 'firefox', 'disabled_utls'):
             with self.subTest(field=field):
                 # Each call gets a fresh trust fixture and independent probe log.
@@ -154,9 +157,35 @@ class ExtendedRealityPreflightTests(unittest.TestCase):
                 else:
                     tls['utls']['enabled'] = False
                 self.write_config(config)
-                result = self.probe()
+                result = self.probe(xray_version)
                 self.assertEqual(result['data']['status'], 'probe_required', result)
                 self.assertFalse((self.d / 'curl.log').exists())
+
+    def test_xray_26_9_30_requires_same_hybrid_and_fingerprint_evidence(self):
+        # Native matrix confirms that this exact older release also requires
+        # the hybrid key share. A generic HTTPS fixture must not certify it.
+        self.assert_unvalidated_profiles_require_evidence('26.9.30')
+
+    def test_xray_26_9_30_version_label_cannot_forge_binary_identity(self):
+        self.prepare()
+        (self.d / 'sing-box').write_text('#!/bin/sh\necho "sing-box version ' + VERSION + '"\n# changed\n')
+        result = self.probe('26.9.30')
+        self.assertEqual(result['data']['status'], 'probe_required', result)
+        self.assertFalse((self.d / 'curl.log').exists())
+
+    def test_xray_26_9_30_admitted_chrome_hybrid_allows_selected_section_probe(self):
+        self.prepare()
+        result = self.probe('26.9.30')
+        self.assertEqual(result['data']['status'], 'verified', result)
+        self.assertTrue(result['data']['probe']['reachable'])
+
+    def test_xray_26_6_27_explicit_legacy_chrome_still_allows_section_probe(self):
+        config = self.prepare()
+        config['outbounds'][0]['tls']['reality'][FLAG] = False
+        self.write_config(config)
+        result = self.probe('26.6.27')
+        self.assertEqual(result['data']['status'], 'verified', result)
+        self.assertTrue(result['data']['probe']['reachable'])
 
 
 if __name__ == '__main__':

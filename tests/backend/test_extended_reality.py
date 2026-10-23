@@ -173,14 +173,15 @@ class ExtendedRealityTests(unittest.TestCase):
                             self.assertNotEqual(result.stdout, self.marker)
 
     def test_current_xray_rejects_same_extended_client_with_hybrid_explicitly_disabled(self):
-        with self.server('26.10.21') as outbound:
-            outbound['tls']['reality']['support_x25519mlkem768'] = False
-            offset = len((self.d / 'xray.log').read_text(errors='replace'))
-            with self.client(outbound, 'extended-hybrid-disabled') as port:
-                result = self.curl(port)
-                self.assertIn(result.returncode, (28, 97), result.stderr.decode())
-                self.assertNotEqual(result.stdout, self.marker)
-            self.assert_fresh_reality_rejection(offset)
+        for version in ('26.10.21', '26.9.30'):
+            with self.subTest(xray=version), self.server(version) as outbound:
+                outbound['tls']['reality']['support_x25519mlkem768'] = False
+                offset = len((self.d / 'xray.log').read_text(errors='replace'))
+                with self.client(outbound, 'extended-hybrid-disabled-' + version) as port:
+                    result = self.curl(port)
+                    self.assertIn(result.returncode, (28, 97), result.stderr.decode())
+                    self.assertNotEqual(result.stdout, self.marker)
+                self.assert_fresh_reality_rejection(offset)
 
     def test_legacy_mode_connects_to_older_xray_without_hybrid_share(self):
         with self.server('26.6.27') as outbound:

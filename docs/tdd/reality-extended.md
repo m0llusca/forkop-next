@@ -29,3 +29,20 @@ control: their freedom outbound also blocks private targets. Pinned old sources
 support finalRules; apply the same exact TCP 127.0.0.1/32 HTTPS-port allow plus
 block-all fixture rule to all three releases. This fixture failure does not
 establish old-core incompatibility. All negative/authentication controls remain.
+
+First native GREEN: ee74ff0f, Backend CI 40010332390, 209 tests in 23.249
+seconds, no failures/skips; all 70 shell suites pass. Official Extended completes
+random strict-HTTPS transfers through Xray 26.6.27, 26.9.30 and 26.10.21, rejects
+wrong UUID/public key/short ID and untrusted target certificates. Legacy false
+works with 26.6.27; current hybrid-off rejection remains. XHTTP and VLESS
+Encryption generated schema/start checks pass. Artifact SHA256:
+7bdb0ae3c1e17796b7ddd0f3155540de4999dea8ee67d1b8ed7002854fd8ab3b.
+
+Independent review found two remaining update/rollback gaps: an unadmitted future
+Extended could remove automatic hybrid generation, and package-to-compressed late
+rollback could lose its only service script. Add behavioral regressions before
+fixing them. Also extend the exact known-hybrid server profile to tested 26.9.30.
+
+Ruling: capability/fingerprint admission is scoped to known hybrid-required
+server releases, 26.9.30 and 26.10.21. Preserve older 26.6.27 legacy probe behavior;
+do not impose an unrelated blanket fingerprint ban on older working servers.

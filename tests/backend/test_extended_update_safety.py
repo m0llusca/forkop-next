@@ -4,10 +4,13 @@ Function extraction follows components_updater_job.sh. No fixture calls a router
 service or package manager; checksums and local backup moves use real files.
 """
 import hashlib
+import io
 import json
+import os
 from pathlib import Path
 import re
 import subprocess
+import tarfile
 import tempfile
 import unittest
 
@@ -50,6 +53,7 @@ class ExtendedUpdateSafetyTests(unittest.TestCase):
         release = dict(tag=TAG, asset_name=NAME, asset_url=url,
                        sha256=self.digest if digest is None else digest)
         prelude = '''let fs=require("fs"); let events=[];
+let reality={verified_runtime:function(version,path){return null;}};
 let tmp_dir=ARGV[0]; let release=json(ARGV[1]);
 function init_tmp_dir(){return true;}
 function sing_box_runtime_output(mode,args){return "extended";}
@@ -161,6 +165,164 @@ function clear_version_caches(){}
         code += '\nlet restored=restore_sing_box_after_failed_extended_install("extended","binary.backup","lib.backup","extended","old","",true); print(sprintf("%J",{restored,events}));'
         result = self.run_code(code)
         self.assertFalse(result['restored'], result)
+
+    def rollback_service(self, existing_service=True, install_failure=False, package=False):
+        binary = self.d / 'runtime/sing-box'
+        binary.parent.mkdir()
+        binary.write_bytes(b'failed new core')
+        backup = self.d / 'previous-core'
+        backup.write_bytes(b'exact previous Extended core')
+        init = self.d / 'init.d/sing-box'
+        init.parent.mkdir()
+        if existing_service:
+            init.write_text('#!/bin/sh\n# Forkop managed sing-box service for binary variants\nstart_service() { :; }\n')
+            init.chmod(0o755)
+        prelude = '''let fs=require("fs");
+const SB_MANAGED_SERVICE_MARKER="Forkop managed sing-box service for binary variants";
+function owner_pid(){return "fixture";}
+function updates_log(message,level){}
+function pkg_remove_sing_box_conflict(package){return true;}
+function restore_sing_box_package_variant(variant){die("network rollback is forbidden");}
+function restore_sing_box_variant_state(marker,version){}
+function clear_version_caches(){}
+function write_file(path,value){return ARGV[2]!="fail" && fs.writefile(path,value)!=null;}
+'''
+        code = prelude + functions('as_string', 'shell_quote', 'command_from_args',
+            'command_status', 'command_success', 'command_success_from_args',
+            'file_exists', 'file_nonempty', 'read_file', 'remove_file', 'move_file_portable',
+            'restore_file_backup', 'restore_sing_box_backup',
+            'managed_sing_box_service_installed', 'managed_sing_box_service_text',
+            'install_managed_sing_box_service_script', 'remove_managed_sing_box_service_script',
+            'restore_sing_box_service_from_marker', 'sing_box_variant_is_package_managed',
+            'restore_sing_box_install_backup', 'restore_sing_box_after_failed_extended_install',
+            'restore_sing_box_after_failed_extended_package_install')
+        code = code.replace('/usr/bin/sing-box', str(binary)).replace('/etc/init.d/sing-box', str(init))
+        helper = 'restore_sing_box_after_failed_extended_' + ('package_install' if package else 'install')
+        code += '\nlet restored=' + helper + '("extended",ARGV[0],"","extended","old","",false);print(sprintf("%J",{restored}));'
+        result = self.run_code(code, backup, init, 'fail' if install_failure else 'ok')
+        return result, binary, init
+
+    def test_late_compressed_failure_restores_exact_extended_binary_and_usable_init(self):
+        result, binary, init = self.rollback_service()
+        self.assertTrue(result['restored'], result)
+        self.assertEqual(binary.read_bytes(), b'exact previous Extended core')
+        self.assertTrue(init.exists(), 'Rollback removed the only usable service script')
+        self.assertTrue(os.access(init, os.X_OK), 'Restored service must remain executable')
+        self.assertIn('start_service', init.read_text())
+
+    def test_extended_rollback_reports_failed_service_recreation(self):
+        for package in (False, True):
+            with self.subTest(package=package):
+                # Each invocation owns an independent runtime tree.
+                with tempfile.TemporaryDirectory() as directory:
+                    previous = self.d
+                    self.d = Path(directory)
+                    try:
+                        result, binary, init = self.rollback_service(
+                            existing_service=False, install_failure=True, package=package)
+                    finally:
+                        self.d = previous
+                    self.assertFalse(result['restored'], result)
+                    self.assertFalse(init.exists())
+
+    def profile_install(self, compressed=True, current_admitted=True, candidate_admitted=False):
+        # Model different authentic release artifacts carrying the same displayed
+        # version. Admission is about the candidate ELF, not a release label.
+        binary = self.d / 'runtime/sing-box'
+        binary.parent.mkdir()
+        binary.write_bytes(b'old admitted ELF')
+        candidate = b'new official ELF'
+        archive = self.d / 'candidate.tar.gz'
+        with tarfile.open(archive, 'w:gz') as tar:
+            member = tarfile.TarInfo('sing-box')
+            member.size = len(candidate)
+            tar.addfile(member, io.BytesIO(candidate))
+        release = dict(tag=TAG, asset_name=NAME, asset_url=URL, release_url='',
+                       sha256=hashlib.sha256(archive.read_bytes()).hexdigest())
+        prelude = '''let fs=require("fs");let events=[];let tmp_dir=ARGV[0];
+let release=json(ARGV[1]);let current_admitted=ARGV[3]=="true",candidate_admitted=ARGV[4]=="true";
+const SERVICE_INIT=tmp_dir+"/missing-forkop-init";
+let reality={verified_runtime:function(version,path){
+ let content=fs.readfile(path);
+ if(content=="old admitted ELF" && current_admitted)return {reality_hybrid:true};
+ if(content=="new official ELF" && candidate_admitted)return {reality_hybrid:true};
+ return null;
+}};
+function init_tmp_dir(){return true;}
+function owner_pid(){return "fixture";}
+function sing_box_runtime_output(mode,args){
+ return mode=="version"?"1.14.3-extended-2.7.3":"extended";}
+function sing_box_runtime_success(mode,args){return true;}
+function normalize_sing_box_version(value){return replace(value,/^v/,"");}
+function resolve_sing_box_extended_release(compressed){return release;}
+function action_fail(component,action,message){die(message);}
+function action_success(component,action,message){push(events,"success");die("fixture success");}
+function updates_log(message,level){}
+function download_with_retry(url,path,label){fs.writefile(path,fs.readfile(ARGV[2]));return true;}
+function select_archive_member_path(archive,name){return name=="sing-box"?"sing-box":"";}
+function stop_forkop_before_sing_box_change(){push(events,"stop");if(ARGV[5]=="compressed")die("fixture reached service stop");}
+function prepare_sing_box_package_service_install(){}
+function pkg_list_update_command(){return "update";}
+function pkg_install_files_command(files){return "install";}
+function run_logged(label,command){
+ if(command=="install"){push(events,"package-install");fs.writefile(ARGV[6],"new official ELF");}
+ return true;}
+function run_logged_pkg_remove_sing_box_conflict(package,label){return true;}
+function pkg_remove_sing_box_conflict(package){return true;}
+function validate_sing_box_extended_binary(path,library){push(events,"execute-candidate");return "1.14.3-extended-2.7.3";}
+function write_sing_box_variant_state(marker,version){}
+function restore_sing_box_variant_state(marker,version){}
+function restore_sing_box_service_from_marker(marker){return true;}
+function restart_forkop_after_successful_change(){push(events,"start");}
+function wait_forkop_running_after_sing_box_change(){return true;}
+function clear_version_caches(){}
+function restore_sing_box_package_variant(variant){die("fixture forbids network rollback");}
+'''
+        code = prelude + functions('as_string', 'shell_quote', 'command_from_args',
+            'command_status', 'command_success', 'command_success_from_args',
+            'command_output', 'command_output_from_args', 'read_file', 'file_exists',
+            'file_nonempty', 'remove_file', 'move_file_portable', 'move_file_to_backup',
+            'restore_file_backup', 'restore_sing_box_backup',
+            'sing_box_variant_is_package_managed', 'restore_sing_box_install_backup',
+            'restore_sing_box_after_failed_extended_package_install',
+            'download_verified_sing_box_extended',
+            'install_sing_box_extended_package', 'install_sing_box_extended')
+        code = code.replace('/usr/bin/sing-box', str(binary))
+        code += '\nlet message="";try{install_sing_box_extended("update",' + ('true' if compressed else 'false') + ');}catch(e){message=""+e;}print(sprintf("%J",{events,message}));'
+        result = self.run_code(code, self.d, json.dumps(release), archive,
+            str(current_admitted).lower(), str(candidate_admitted).lower(),
+            'compressed' if compressed else 'package', binary)
+        return result, binary
+
+    def test_admitted_current_core_rejects_unadmitted_compressed_elf_before_stop(self):
+        result, binary = self.profile_install()
+        self.assertNotIn('stop', result['events'], result)
+        self.assertEqual(binary.read_bytes(), b'old admitted ELF')
+        self.assertIn('capabil', result['message'].lower(), result)
+
+    def test_admitted_current_core_rolls_back_unadmitted_package_before_execution_or_start(self):
+        result, binary = self.profile_install(compressed=False)
+        self.assertNotIn('execute-candidate', result['events'], result)
+        self.assertNotIn('start', result['events'], result)
+        self.assertNotIn('success', result['events'], result)
+        self.assertEqual(binary.read_bytes(), b'old admitted ELF')
+        self.assertIn('capabil', result['message'].lower(), result)
+
+    def test_admitted_candidate_and_legacy_current_retain_existing_install_behavior(self):
+        for current_admitted, candidate_admitted in ((True, True), (False, False)):
+            for compressed in (True, False):
+                with self.subTest(current=current_admitted, candidate=candidate_admitted, compressed=compressed):
+                    with tempfile.TemporaryDirectory() as directory:
+                        previous = self.d
+                        self.d = Path(directory)
+                        try:
+                            result, binary = self.profile_install(compressed=compressed,
+                                current_admitted=current_admitted, candidate_admitted=candidate_admitted)
+                        finally:
+                            self.d = previous
+                        self.assertIn('stop', result['events'], result)
+                        if not compressed:
+                            self.assertIn('success', result['events'], result)
 
 
 if __name__ == '__main__':
