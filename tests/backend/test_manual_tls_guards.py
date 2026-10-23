@@ -136,6 +136,44 @@ class ManualTlsGuards(unittest.TestCase):
         else:
             self.assertRegex((result.stdout + result.stderr).lower(), r'security|tls')
 
+    def test_missing_security_retains_peer_alpn_fingerprint_and_reality_hints(self):
+        hints = (
+            ('peer', 'peer=proxy.example'),
+            ('alpn', 'alpn=h2,http/1.1'),
+            ('fp', 'fp=firefox'),
+            ('pbk', f'pbk={PUBLIC_KEY}&sid=aabb'),
+        )
+        for scheme, credential in (('vless', UUID), ('trojan', 'fixture-password')):
+            for hint, query in hints:
+                with self.subTest(scheme=scheme, hint=hint):
+                    link = f'{scheme}://{credential}@proxy.example:443?{query}'
+                    parsed, subscription = self.parse(link)
+                    self.assertEqual(parsed.returncode, 0, parsed.stdout + parsed.stderr)
+                    self.assert_tls(subscription)
+                    result, manual = self.generate(link)
+                    if result.returncode != 0:
+                        self.assertRegex((result.stdout + result.stderr).lower(), r'security|tls')
+                        continue
+                    self.assert_tls(manual)
+                    if hint == 'peer':
+                        self.assertEqual(manual['tls'].get('server_name'), 'proxy.example')
+                        self.assertEqual(manual['tls'].get('server_name'),
+                                         subscription['tls'].get('server_name'))
+                    elif hint == 'alpn':
+                        self.assertEqual(manual['tls'].get('alpn'), ['h2', 'http/1.1'])
+                        self.assertEqual(manual['tls'].get('alpn'), subscription['tls'].get('alpn'))
+                    elif hint == 'fp':
+                        self.assertIs(manual['tls'].get('utls', {}).get('enabled'), True)
+                        self.assertEqual(manual['tls']['utls'].get('fingerprint'), 'firefox')
+                    elif hint == 'pbk':
+                        reality = manual['tls'].get('reality', {})
+                        self.assertIs(reality.get('enabled'), True)
+                        self.assertEqual(reality.get('public_key'), PUBLIC_KEY)
+                        self.assertEqual(reality.get('short_id'), 'aabb')
+                        self.assertIs(manual['tls'].get('utls', {}).get('enabled'), True)
+                        self.assertEqual(manual['tls']['utls'].get('fingerprint'),
+                                         subscription['tls']['utls']['fingerprint'])
+
     def test_subscription_parser_preserves_known_secure_security_modes(self):
         for scheme, credential in (('vless', UUID), ('trojan', 'fixture-password')):
             for security in ('tls', 'reality', 'xtls'):
