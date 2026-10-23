@@ -1153,14 +1153,24 @@ function restore_file_backup(target_path, backup_path) {
 }
 
 function restore_sing_box_service_from_marker(marker) {
-    if (as_string(marker) == "extended" && file_nonempty("/usr/bin/sing-box") &&
-        managed_sing_box_service_installed())
+    // The old variant can be inferred from the ELF without a persisted marker.
+    // Preserve a usable managed init whenever a runtime has been restored.
+    if (file_nonempty("/usr/bin/sing-box") && managed_sing_box_service_installed())
         return true;
     if (as_string(marker) == "extended-compressed" ||
         (!file_exists("/etc/init.d/sing-box") && file_nonempty("/usr/bin/sing-box")))
         return install_managed_sing_box_service_script();
     remove_managed_sing_box_service_script();
     return true;
+}
+
+function restore_sing_box_after_backup_failure(backup_binary, previous_marker) {
+    // No package has changed yet: restore only files already moved locally.
+    // In particular, a failed library backup leaves the original in place.
+    let restored = restore_sing_box_backup(backup_binary);
+    if (!restore_sing_box_service_from_marker(previous_marker))
+        restored = false;
+    return restored;
 }
 
 function resolve_sing_box_extended_arch_suffix() {
@@ -1447,26 +1457,26 @@ function install_sing_box_extended_package(action) {
         action_fail("sing_box", action, "Failed to update package lists", current_version, latest_version);
 
     stop_forkop_before_sing_box_change();
-    prepare_sing_box_package_service_install();
-
     let backup_binary = "";
     let backup_cronet = "";
     let cronet_touched = false;
-    if (current_variant == "extended" || current_variant == "extended-compressed") {
-        if (file_exists("/usr/bin/sing-box")) {
-            backup_binary = "/usr/bin/sing-box.forkop-backup." + owner_pid();
-            if (!move_file_to_backup("/usr/bin/sing-box", backup_binary))
-                action_fail("sing_box", action, "Failed to backup current sing-box binary", current_version, latest_version);
-        }
-        if (file_exists("/usr/lib/libcronet.so")) {
-            cronet_touched = true;
-            backup_cronet = "/usr/lib/libcronet.so.forkop-backup." + owner_pid();
-            if (!move_file_to_backup("/usr/lib/libcronet.so", backup_cronet)) {
-                restore_sing_box_after_failed_extended_package_install(current_variant, backup_binary, backup_cronet, previous_marker, previous_version_state, package_file, cronet_touched);
-                action_fail("sing_box", action, "Failed to backup current libcronet.so", current_version, latest_version);
-            }
+    if (file_exists("/usr/bin/sing-box")) {
+        backup_binary = "/usr/bin/sing-box.forkop-backup." + owner_pid();
+        if (!move_file_to_backup("/usr/bin/sing-box", backup_binary))
+            action_fail("sing_box", action, "Failed to backup current sing-box binary", current_version, latest_version);
+    }
+    if (file_exists("/usr/lib/libcronet.so")) {
+        backup_cronet = "/usr/lib/libcronet.so.forkop-backup." + owner_pid();
+        if (!move_file_to_backup("/usr/lib/libcronet.so", backup_cronet)) {
+            let restored = restore_sing_box_after_backup_failure(backup_binary, previous_marker);
+            action_fail("sing_box", action, "Failed to backup current libcronet.so" +
+                (restored ? "" : "; previous runtime could not be restored"), current_version, latest_version);
         }
     }
+    // Package removal/installation may add or remove the library even when the
+    // old installation had none. Backups are complete before either mutation.
+    cronet_touched = true;
+    prepare_sing_box_package_service_install();
 
     if (!run_logged_pkg_remove_sing_box_conflict("sing-box-tiny", "Removing sing-box-tiny before sing-box-extended package installation")) {
         restore_sing_box_after_failed_extended_package_install(current_variant, backup_binary, backup_cronet, previous_marker, previous_version_state, package_file, cronet_touched);
@@ -1475,22 +1485,6 @@ function install_sing_box_extended_package(action) {
     if (!run_logged_pkg_remove_sing_box_conflict("sing-box", "Removing sing-box before sing-box-extended package installation")) {
         restore_sing_box_after_failed_extended_package_install(current_variant, backup_binary, backup_cronet, previous_marker, previous_version_state, package_file, cronet_touched);
         action_fail("sing_box", action, "Failed to remove sing-box before sing-box-extended package installation", current_version, latest_version);
-    }
-
-    if (backup_binary == "" && file_exists("/usr/bin/sing-box")) {
-        backup_binary = "/usr/bin/sing-box.forkop-backup." + owner_pid();
-        if (!move_file_to_backup("/usr/bin/sing-box", backup_binary)) {
-            restore_sing_box_after_failed_extended_package_install(current_variant, backup_binary, backup_cronet, previous_marker, previous_version_state, package_file, cronet_touched);
-            action_fail("sing_box", action, "Failed to backup existing sing-box binary", current_version, latest_version);
-        }
-    }
-    if (!cronet_touched && file_exists("/usr/lib/libcronet.so")) {
-        cronet_touched = true;
-        backup_cronet = "/usr/lib/libcronet.so.forkop-backup." + owner_pid();
-        if (!move_file_to_backup("/usr/lib/libcronet.so", backup_cronet)) {
-            restore_sing_box_after_failed_extended_package_install(current_variant, backup_binary, backup_cronet, previous_marker, previous_version_state, package_file, cronet_touched);
-            action_fail("sing_box", action, "Failed to backup current libcronet.so", current_version, latest_version);
-        }
     }
 
     if (!run_logged("Installing sing-box-extended package " + release.asset_name, pkg_install_files_command([ package_file ]))) {
@@ -1625,17 +1619,20 @@ function install_sing_box_extended(action, compressed) {
             action_fail("sing_box", action, "Failed to backup current sing-box binary", current_version, latest_version);
         }
     }
-    if (cronet_path != "") {
-        cronet_touched = true;
+    // Removing the old package can remove its library even if the new archive
+    // has none. Preserve the old runtime's library independently of the asset.
+    if (cronet_path != "" || file_exists("/usr/lib/libcronet.so")) {
         if (file_exists("/usr/lib/libcronet.so")) {
             backup_cronet = "/usr/lib/libcronet.so.forkop-backup." + owner_pid();
             if (!move_file_to_backup("/usr/lib/libcronet.so", backup_cronet)) {
-                restore_sing_box_after_failed_extended_install(current_variant, backup_binary, backup_cronet, previous_marker, previous_version_state, archive_file, cronet_touched);
+                let restored = restore_sing_box_after_backup_failure(backup_binary, previous_marker);
                 remove_file(tmp_binary);
                 remove_file(tmp_cronet);
-                action_fail("sing_box", action, "Failed to backup current libcronet.so", current_version, latest_version);
+                action_fail("sing_box", action, "Failed to backup current libcronet.so" +
+                    (restored ? "" : "; previous runtime could not be restored"), current_version, latest_version);
             }
         }
+        cronet_touched = true;
     }
 
     for (let item in [

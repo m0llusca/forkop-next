@@ -76,3 +76,65 @@ IPK version, runtime capability manifest, adapter, update code, UI and ACL
 payloads match the reviewed source. APK metadata is checked by the build gate.
 No router or remote server was modified. Linux amd64 interoperability and
 schema/start checks do not establish live Aeza or every-architecture behavior.
+
+## Additional 1.1.4 review
+
+User requested another review after cf611a0d. Independent runtime review found
+no new concrete adapter/handshake defect. It confirmed an evidence boundary:
+the preflight policy tests use an admitted shell/curl fixture, while actual-core
+tests exercise the generated outbound in a minimal native configuration. These
+are separate checks, not a full production preflight deployment test.
+
+Independent update review found a missing-marker rollback variant. Upstream
+Extended installations can be identified by version without a Forkop variant
+marker. Exact runtime restore succeeded, but the service helper deleted the
+only managed init when the previous marker was empty. Tests-first eaea1797,
+Backend CI 40015874201: 221 tests, one expected assertion failure at the deleted
+init; missing-init recreation and failed-recreation controls passed. Artifact:
+e453cbc85e8c34355d074e34e76f907fee35577c8e37f9965157a5916f3e8149.
+
+Variant analysis searched all restore_sing_box_service_from_marker callers and
+all move_file_to_backup/cronet_touched transitions. Another pre-existing family
+sets the library-touched flag before a successful backup; rollback then deletes
+an intact library when no backup exists. Package preparation also removes the
+managed init before binary backup. Tests-first b37d3b2f inject backup failures
+through the actual install entry point, preserve real local files and forbid
+package removal/installation before backup completion. This first backup run
+(Backend CI 40016226481, 223 tests) stopped before injection because the isolated
+ucode fixture forward-referenced local functions. That is a fixture failure,
+not backup-bug RED. Corrected dependency order in tests-only 0f926919, removed
+the implementation-coupled assertion requiring a particular rollback helper,
+and retained all file-preservation and no-package-mutation assertions. Package
+restore attempts are now observed too; stable fixtures use stable metadata.
+Native backup-bug RED: 0f926919, release gate 40016728161, 223 tests in
+23.533 seconds, five failed assertions: compressed rollback deletes old library;
+both package forms mutate packages before safe backup; missing-marker init is
+deleted; failed binary backup restarts without init. All injections are reached.
+Artifact SHA256:
+43c009d19d629b8c98b88ce217f277f1d964c7776dbed6bcdd9cd19013a0af92.
+Only then implement local-only early recovery and complete package backups before
+removal/service replacement. The stable/tiny installer at the fourth touched-flag
+match is a false positive for destructive library recovery: its early failure
+already restores the binary directly and does not touch the intact library.
+
+An additional compressed-archive variant has no incoming libcronet, but package
+removal can still remove the previous runtime's library. Tests-only ab2921c9
+requires the existing library to be backed up independently of archive contents,
+before any package mutation. Native RED: release gate 40017263140, 224 tests
+in 23.631 seconds, six failed assertions. The extra variant reaches old-package
+removal without ever attempting the required old-library backup. Artifact:
+3f198695602aaffaf7dff4951a5907262ec30a83616d040199622c5e72fec85e.
+
+After this evidence, back up an existing compressed runtime's library regardless
+of incoming archive contents. A new local-only backup-failure helper restores
+the already moved executable and usable service without package operations;
+the intact failed-to-back-up library stays untouched. Complete both package
+backups before deleting a service or removing conflicting packages. The test
+harness mechanically extracts the new helper before installer callers. No
+file-preservation, mutation-boundary or authentication assertion is weakened.
+Fresh native GREEN and release packaging are pending.
+
+Independent local archive recheck verified all 54 official cached asset SHA256s
+and their extracted executable identities against the packaged manifest (30
+unique ELF digests). Both provisioning/checksum helper tests pass on Windows.
+No native core or router/VPS service was executed locally.

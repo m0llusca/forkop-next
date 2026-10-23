@@ -426,6 +426,7 @@ function action_success(component,action,message){die("unexpected install succes
             'disable_sing_box_service_config', 'prepare_sing_box_service_disabled',
             'stop_forkop_before_sing_box_change',
             'prepare_sing_box_package_service_install', 'restore_sing_box_service_from_marker',
+            'restore_sing_box_after_backup_failure',
             'sing_box_variant_is_package_managed', 'restore_sing_box_install_backup',
             'restore_sing_box_after_failed_extended_install',
             'restore_sing_box_after_failed_extended_package_install',
