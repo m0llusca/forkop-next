@@ -115,6 +115,82 @@ class NextProfiles(unittest.TestCase):
         self.assertTrue(self.call('rollback')['success'])
         self.assertEqual(self.config.read_text(), self.original)
 
+    def edit_on_first_sync(self, replacement):
+        import shlex
+        source = self.dir / 'external-copy'
+        source.write_text(replacement)
+        marker = self.dir / 'external-edit-done'
+        bindir = self.dir / 'sync-bin'
+        bindir.mkdir()
+        command = bindir / 'sync'
+        command.write_text('#!/bin/sh\nif [ ! -f ' + shlex.quote(str(marker)) + ' ]; then\n'
+                           'cp ' + shlex.quote(str(source)) + ' ' + shlex.quote(str(self.config)) + '\n'
+                           'touch ' + shlex.quote(str(marker)) + '\nfi\nexit 0\n')
+        command.chmod(0o700)
+        self.env['PATH'] = str(bindir) + ':' + self.env['PATH']
+
+    def replace_before_file_hash(self, target, replacement):
+        import shlex
+        import shutil
+        actual_hash = shutil.which('sha256sum')
+        source = self.dir / 'reviewed-copy'
+        source.write_text(replacement)
+        bindir = self.dir / 'hash-bin'
+        bindir.mkdir()
+        command = bindir / 'sha256sum'
+        command.write_text('#!/bin/sh\nif [ "$1" = ' + shlex.quote(str(target)) + ' ]; then\n'
+                           'cp ' + shlex.quote(str(source)) + ' ' + shlex.quote(str(target)) + '\nfi\n'
+                           'exec ' + shlex.quote(actual_hash) + ' "$@"\n')
+        command.chmod(0o700)
+        self.env['PATH'] = str(bindir) + ':' + self.env['PATH']
+
+    def test_profile_apply_checks_digest_of_bytes_to_be_applied(self):
+        import hashlib
+        self.assertTrue(self.call('profile_save', {'name': 'Home'})['success'])
+        profile = self.dir / 'next/profiles/Home.uci'
+        profile.write_text(self.original.replace('udp', 'dot'))
+        self.replace_before_file_hash(profile, self.original)
+        result = self.call('profile_apply', {'name': 'Home', 'expected_profile': hashlib.sha256(self.original.encode()).hexdigest()})
+        self.assertEqual(result.get('error'), 'profile_conflict')
+        self.assertEqual(self.config.read_text(), self.original)
+
+    def test_device_change_rejects_external_edit_after_snapshot_read(self):
+        replacement = self.original.replace('udp', 'doh')
+        self.edit_on_first_sync(replacement)
+        result = self.call('device_set', {'address': '192.0.2.10', 'section': 'direct'})
+        self.assertEqual(result.get('error'), 'conflict')
+        self.assertEqual(self.config.read_text(), replacement)
+
+    def test_native_apply_rejects_external_edit_after_candidate_read(self):
+        self.assertTrue(self.call('checkpoint')['success'])
+        self.config.write_text(self.original.replace('udp', 'dot'))
+        replacement = self.original.replace('udp', 'doh')
+        self.edit_on_first_sync(replacement)
+        result = self.call('native_apply')
+        self.assertEqual(result.get('error'), 'conflict')
+        self.assertEqual(self.config.read_text(), replacement)
+
+    def test_invalid_native_candidate_does_not_restore_over_external_edit(self):
+        self.assertTrue(self.call('checkpoint')['success'])
+        self.config.write_text(self.original.replace('udp', 'madeup'))
+        replacement = self.original.replace('udp', 'doh')
+        self.edit_on_first_sync(replacement)
+        result = self.call('native_apply')
+        self.assertEqual(result.get('error'), 'conflict')
+        self.assertEqual(self.config.read_text(), replacement)
+
+    def test_recovery_hashes_exact_backup_bytes_before_restore(self):
+        import hashlib
+        directory = self.dir / 'next'
+        directory.mkdir()
+        backup = directory / 'original.uci'
+        backup.write_text(self.original.replace('udp', 'dot'))
+        (directory / 'journal.json').write_text(json.dumps({'schema': 1, 'digest': hashlib.sha256(self.original.encode()).hexdigest()}))
+        self.replace_before_file_hash(backup, self.original)
+        result = self.call('startup_recover')
+        self.assertEqual(result.get('error'), 'invalid_recovery')
+        self.assertEqual(self.config.read_text(), self.original)
+
     def test_activation_failure_restores_original_and_records_error(self):
         self.call('profile_import', {'name': 'Travel', 'config': self.original.replace('udp', 'dot')})
         self.hook.write_text('#!/bin/sh\nexit 1\n')
@@ -206,6 +282,14 @@ class NextProfiles(unittest.TestCase):
         result=self.call('native_apply')
         self.assertFalse(result['success'])
         self.assertEqual(self.config.read_text(),self.original)
+
+    def test_native_reload_restores_missing_config_from_checkpoint(self):
+        self.assertTrue(self.call('checkpoint')['success'])
+        self.config.unlink()
+        result = self.call('native_apply')
+        self.assertEqual(result.get('error'), 'invalid_config')
+        self.assertTrue(result.get('data', {}).get('restored'))
+        self.assertEqual(self.config.read_text(), self.original)
 
     def test_native_reload_activation_failure_restores_last_good_config(self):
         self.assertTrue(self.call('checkpoint')['success'])

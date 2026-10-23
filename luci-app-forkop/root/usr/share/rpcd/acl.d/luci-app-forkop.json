@@ -3,9 +3,6 @@
     "description": "Grant UCI and RPC access to LuCI app Forkop",
     "read": {
       "file": {
-        "/var/run/forkop/section-cache/*": [
-          "read"
-        ],
         "/var/run/forkop/component-actions/*": [
           "read"
         ],
@@ -30,13 +27,13 @@
         "service": [
           "list"
         ]
-      },
-      "uci": [
-        "forkop"
-      ]
+      }
     },
     "write": {
       "file": {
+        "/var/run/forkop/section-cache/*": [
+          "read"
+        ],
         "/etc/init.d/forkop": [
           "exec"
         ],
@@ -53,9 +50,12 @@
           "write"
         ]
       },
-      "uci": [
-        "forkop"
-      ]
+      "uci": {
+        "forkop": [
+          "read",
+          "write"
+        ]
+      }
     }
   }
 }

@@ -64,13 +64,15 @@ export function renderCompatibilityPanel(
       } catch {
         result.textContent = 'Нет связи с роутером. Повторите проверку.';
       } finally {
-        b.disabled = false;
+        b.disabled = b === handshake && !outbound.value;
       }
     };
     root.append(b);
     return b;
   }
+  let comparisonGeneration = 0;
   const comparison = async (probe = false) => {
+    const generation = ++comparisonGeneration;
     const payload: Obj = { section: section.value };
     if (outbound.value) payload.outbound_tag = outbound.value;
     if (server.value.trim()) {
@@ -96,7 +98,14 @@ export function renderCompatibilityPanel(
     result.textContent = probe
       ? 'Проверяем соединение…'
       : 'Сопоставляем параметры…';
-    const response = await request('compatibility_check', payload);
+    let response: NextResponse;
+    try {
+      response = await request('compatibility_check', payload);
+    } catch (error) {
+      if (generation !== comparisonGeneration) return;
+      throw error;
+    }
+    if (generation !== comparisonGeneration) return;
     if (!response.success) {
       result.textContent = `Проверка не выполнена: ${response.error || 'неизвестная ошибка'}`;
       return;
@@ -162,6 +171,7 @@ export function renderCompatibilityPanel(
   const handshake = button('Проверить соединение', () => comparison(true));
   handshake.disabled = true;
   section.onchange = () => {
+    comparisonGeneration++;
     outbound.replaceChildren();
     handshake.disabled = true;
     result.textContent = 'Подключение изменено. Сопоставьте настройки заново.';

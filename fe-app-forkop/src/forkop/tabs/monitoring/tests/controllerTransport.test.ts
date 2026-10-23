@@ -1,4 +1,6 @@
+// @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+const nativeDocument = document;
 
 const mocks = vi.hoisted(() => ({
   config: vi.fn(),
@@ -8,6 +10,7 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock('../../../../helpers', async () => ({
   ...(await import('../../../../helpers/getClashApiUrl')),
+  ...(await import('../../../../helpers/svgEl')),
   onMount: async () => undefined,
 }));
 vi.mock('../../../methods', () => ({
@@ -55,6 +58,7 @@ describe('monitoring controller transport', () => {
     });
   });
   afterEach(() => {
+    nativeDocument.body.replaceChildren();
     vi.clearAllTimers();
     vi.useRealTimers();
     vi.unstubAllGlobals();
@@ -134,4 +138,74 @@ describe('monitoring controller transport', () => {
     expect(mocks.connections).toHaveBeenCalledTimes(1);
     expect(mocks.subscribe).not.toHaveBeenCalled();
   });
+
+  it.each(['success', 'failure'])(
+    'drops a pre-stop RPC %s after restart without overlapping requests',
+    async (outcome) => {
+      vi.stubGlobal('document', nativeDocument);
+      vi.stubGlobal(
+        'E',
+        (
+          tag: string,
+          attributes: Record<string, string>,
+          children: Node | string | (Node | string)[],
+        ) => {
+          const node = nativeDocument.createElement(tag);
+          for (const [key, value] of Object.entries(attributes))
+            node.setAttribute(key, value);
+          node.append(...(Array.isArray(children) ? children : [children]));
+          return node;
+        },
+      );
+      const container = nativeDocument.createElement('div');
+      container.id = 'monitoring-connections';
+      nativeDocument.body.append(container);
+      let resolveOld!: (value: unknown) => void;
+      let rejectOld!: (error: Error) => void;
+      const snapshot = (id: string, host: string) => ({
+        success: true,
+        data: {
+          connections: [
+            {
+              id,
+              metadata: {
+                host,
+                destinationPort: 443,
+                network: 'tcp',
+                sourceIP: '192.0.2.1',
+              },
+              download: 1,
+              upload: 2,
+              chains: ['direct'],
+              start: '2026-10-23T00:00:00Z',
+            },
+          ],
+        },
+      });
+      mocks.connections.mockReturnValueOnce(
+        new Promise((resolve, reject) => {
+          resolveOld = resolve;
+          rejectOld = reject;
+        }),
+      );
+      await mount({});
+      expect(mocks.connections).toHaveBeenCalledTimes(1);
+      mocks.onService?.({ service: { forkop: { running: false } } });
+      mocks.onService?.({ service: { forkop: { running: true } } });
+      await vi.advanceTimersByTimeAsync(3000);
+      expect(mocks.connections).toHaveBeenCalledTimes(1);
+      if (outcome === 'success')
+        resolveOld(snapshot('old', 'old-session.example'));
+      else rejectOld(new Error('old RPC failed'));
+      await vi.advanceTimersByTimeAsync(0);
+      expect(container.textContent).not.toContain('old-session.example');
+      expect(container.textContent).toContain('Loading connections');
+      mocks.connections.mockResolvedValue(
+        snapshot('new', 'new-session.example'),
+      );
+      await vi.advanceTimersByTimeAsync(1500);
+      expect(mocks.connections).toHaveBeenCalledTimes(2);
+      expect(container.textContent).toContain('new-session.example');
+    },
+  );
 });

@@ -192,16 +192,21 @@ export function renderDeviceProfileTools(request: Request): HTMLElement {
   const config = field('textarea', 'Конфигурация профиля');
   config.rows = 5;
   config.autocomplete = 'off';
+  let fileReadGeneration = 0;
   file.addEventListener('change', async () => {
+    const generation = ++fileReadGeneration;
     const selected = file.files?.[0];
     if (!selected) return;
     try {
-      config.value = await selected.text();
+      const text = await selected.text();
+      if (generation !== fileReadGeneration) return;
+      config.value = text;
       if (!name.value.trim())
         name.value = selected.name.replace(/\.[^.]+$/, '');
       profileResult.textContent =
         'Файл загружен. Проверьте конфигурацию и импортируйте профиль.';
     } catch {
+      if (generation !== fileReadGeneration) return;
       profileResult.textContent = 'file_read_failed';
     }
   });

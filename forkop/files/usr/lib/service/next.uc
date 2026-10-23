@@ -50,6 +50,10 @@ function digest(path) {
     let value=p.read(128),status=p.close(),m=match(value||'',/^([a-f0-9]{64}) /);
     return status==0 && m ? m[1] : '';
 }
+function bytes_digest(text) {
+    if(type(text)!='string' || !mkdir(WORK) || !atomic(WORK+'/digest',text))return '';
+    return digest(WORK+'/digest');
+}
 function valid_name(name) {return type(name)=='string' && length(name)>0 && length(name)<=64 && name!='.' && name!='..' && index(name,"/")<0 && index(name,"\\")<0 && !match(name,/[\r\n\t]/);}
 function profile(name) {return DIR+'/profiles/'+name+'.uci';}
 function parsed(text) {
@@ -117,7 +121,7 @@ function recovery(passive) {
     if(saved==null) return ok({restored:false});
     let state; try{state=json(saved);}catch(e){return fail('invalid_recovery');}
     let original=read(DIR+'/original.uci');
-    if(state.schema!=1 || original==null || digest(DIR+'/original.uci')!=state.digest) return fail('invalid_recovery');
+    if(state.schema!=1 || original==null || bytes_digest(original)!=state.digest) return fail('invalid_recovery');
     if(!atomic(CONFIG,original)) return fail('restore_write_failed');
     if(!passive && !activate()) return fail('restore_activation_failed');
     fs.unlink(DIR+'/journal.json'); system('sync');
@@ -168,6 +172,9 @@ function policy(action,payload) {
         for(let row in all) if(row.next_kind=='temporary') push(items,{id:row['.name'],domain:list_value(row.domain_suffix)[0],section:row.next_target,expires:int(row.next_expires)});
         return ok({items});
     }
+    let base_digest=digest(data.path+'/forkop');
+    if(base_digest=='')return fail('snapshot_failed');
+    if(payload.expected && payload.expected!=base_digest)return fail('conflict');
     if(action=='smart_detect_configure') {
         if(type(payload.enabled)!='bool')return fail('invalid_request');
         if(payload.enabled) {
@@ -225,7 +232,7 @@ function policy(action,payload) {
         c.reorder('forkop',id,0);
     }
     if(!c.commit('forkop'))return fail('config_write_failed');
-    return apply(read(data.path+'/forkop'),payload.expected);
+    return apply(read(data.path+'/forkop'),base_digest);
 }
 function handle(action,payload) {
     if(action=='recover' || action=='startup_recover')return recovery(action=='startup_recover');
@@ -235,11 +242,20 @@ function handle(action,payload) {
     if(action=='native_apply') {
         let current=read(CONFIG),previous=read(DIR+'/applied.uci');
         if(previous==null)return fail('no_checkpoint');
-        if(current==previous)return ok({unchanged:true});
-        if(!validate(current)) {
+        if(current==null) {
+            if(payload.expected || fs.lstat(CONFIG)!=null)return fail('conflict');
             let restored=atomic(CONFIG,previous);return {success:false,error:'invalid_config',data:{restored}};
         }
-        return apply(current,payload.expected,previous);
+        let current_digest=bytes_digest(current);
+        if(current_digest=='')return fail('snapshot_failed');
+        if((payload.expected && payload.expected!=current_digest) || digest(CONFIG)!=current_digest)return fail('conflict');
+        if(current==previous)return ok({unchanged:true});
+        let valid=validate(current);
+        if(digest(CONFIG)!=current_digest)return fail('conflict');
+        if(!valid) {
+            let restored=atomic(CONFIG,previous);return {success:false,error:'invalid_config',data:{restored}};
+        }
+        return apply(current,current_digest,previous);
     }
     if(action=='status') {
         let version='unknown',pipe=fs.popen('sing-box version 2>/dev/null','r');
@@ -260,7 +276,7 @@ function handle(action,payload) {
         if(text==null)return fail('not_found');
         if(action=='profile_export')return ok({name:payload.name,config:text});
         if(action=='profile_apply') {
-            if(payload.expected_profile && payload.expected_profile!=digest(path))return fail('profile_conflict');
+            if(payload.expected_profile && payload.expected_profile!=bytes_digest(text))return fail('profile_conflict');
             return apply(text,payload.expected);
         }
         if(action=='profile_diff') {

@@ -1363,6 +1363,7 @@ async function pollConnectionsSnapshot() {
   }
 
   const mountId = monitoringMountId;
+  const updatesId = connectionsUpdatesId;
   pollingConnections = true;
 
   try {
@@ -1371,6 +1372,7 @@ async function pollConnectionsSnapshot() {
     if (
       !monitoringMounted ||
       mountId !== monitoringMountId ||
+      updatesId !== connectionsUpdatesId ||
       serviceAvailability !== 'running'
     ) {
       return;
@@ -1388,6 +1390,7 @@ async function pollConnectionsSnapshot() {
     if (
       !monitoringMounted ||
       mountId !== monitoringMountId ||
+      updatesId !== connectionsUpdatesId ||
       serviceAvailability !== 'running'
     ) {
       return;

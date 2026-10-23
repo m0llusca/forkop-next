@@ -79,12 +79,14 @@ class SocketManager {
     if (!this.errorListeners.has(url)) this.errorListeners.set(url, new Set());
 
     ws.addEventListener('open', () => {
+      if (this.sockets.get(url) !== ws) return;
       this.connected.set(url, true);
       this.reconnectAttempts.delete(url);
       logger.info('[SOCKET]', 'Connected to', socketLogUrl(url));
     });
 
     ws.addEventListener('message', (event) => {
+      if (this.sockets.get(url) !== ws) return;
       const handlers = this.listeners.get(url);
       if (handlers) {
         for (const handler of handlers) {
@@ -111,6 +113,7 @@ class SocketManager {
     });
 
     ws.addEventListener('error', (err) => {
+      if (this.sockets.get(url) !== ws) return;
       logger.error('[SOCKET]', `Socket error for ${socketLogUrl(url)}:`, err);
       this.triggerError(url, err);
     });

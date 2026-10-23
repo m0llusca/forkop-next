@@ -72,3 +72,17 @@ Unrestricted `/usr/bin/forkop` and `/etc/init.d/forkop` exec permissions belong 
 the write ACL only, because those entrypoints can mutate state. Consequently the
 existing CLI-backed dynamic pages require a write-capable LuCI session, including
 for status reads. The read ACL does not provide a separate read-only CLI proxy.
+
+The read ACL also excludes the credential-bearing `forkop` UCI package and raw
+section-cache files. The write ACL explicitly grants both UCI read and write
+functions using table notation, and retains section-cache reads. This prevents
+a read-only app account obtaining the controller secret or copyable proxy links.
+Permissions from other installed ACL groups remain outside this app's control.
+
+Configuration mutations hash their exact input snapshot. Device/preset/expiry
+operations supply the base snapshot digest internally even when the UI did not
+send `expected`. Native reload rechecks this digest before restoring an invalid
+candidate or applying a valid one. Profile and recovery checks hash the exact
+in-memory bytes they will use, rather than rereading the path for the hash.
+These checks detect concurrent edits at the checked boundaries; external writers
+must still respect the operation lock for complete serialization.

@@ -5222,11 +5222,13 @@ var SocketManager = class _SocketManager {
     if (!this.listeners.has(url)) this.listeners.set(url, /* @__PURE__ */ new Set());
     if (!this.errorListeners.has(url)) this.errorListeners.set(url, /* @__PURE__ */ new Set());
     ws.addEventListener("open", () => {
+      if (this.sockets.get(url) !== ws) return;
       this.connected.set(url, true);
       this.reconnectAttempts.delete(url);
       logger.info("[SOCKET]", "Connected to", socketLogUrl(url));
     });
     ws.addEventListener("message", (event) => {
+      if (this.sockets.get(url) !== ws) return;
       const handlers = this.listeners.get(url);
       if (handlers) {
         for (const handler of handlers) {
@@ -5251,6 +5253,7 @@ var SocketManager = class _SocketManager {
       this.scheduleReconnect(url);
     });
     ws.addEventListener("error", (err) => {
+      if (this.sockets.get(url) !== ws) return;
       logger.error("[SOCKET]", `Socket error for ${socketLogUrl(url)}:`, err);
       this.triggerError(url, err);
     });
@@ -12075,10 +12078,11 @@ async function pollConnectionsSnapshot() {
     return;
   }
   const mountId = monitoringMountId;
+  const updatesId = connectionsUpdatesId;
   pollingConnections = true;
   try {
     const response = await ForkopShellMethods.getClashApiConnections();
-    if (!monitoringMounted || mountId !== monitoringMountId || serviceAvailability !== "running") {
+    if (!monitoringMounted || mountId !== monitoringMountId || updatesId !== connectionsUpdatesId || serviceAvailability !== "running") {
       return;
     }
     if (!response.success) {
@@ -12089,7 +12093,7 @@ async function pollConnectionsSnapshot() {
     }
     applyConnectionsPayload(normalizeConnectionsPayload(response.data));
   } catch (error) {
-    if (!monitoringMounted || mountId !== monitoringMountId || serviceAvailability !== "running") {
+    if (!monitoringMounted || mountId !== monitoringMountId || updatesId !== connectionsUpdatesId || serviceAvailability !== "running") {
       return;
     }
     logger.error("[MONITORING]", "connections polling failed", error);
@@ -14473,15 +14477,20 @@ function renderDeviceProfileTools(request) {
   const config = field("textarea", "\u041A\u043E\u043D\u0444\u0438\u0433\u0443\u0440\u0430\u0446\u0438\u044F \u043F\u0440\u043E\u0444\u0438\u043B\u044F");
   config.rows = 5;
   config.autocomplete = "off";
+  let fileReadGeneration = 0;
   file.addEventListener("change", async () => {
+    const generation = ++fileReadGeneration;
     const selected = file.files?.[0];
     if (!selected) return;
     try {
-      config.value = await selected.text();
+      const text = await selected.text();
+      if (generation !== fileReadGeneration) return;
+      config.value = text;
       if (!name.value.trim())
         name.value = selected.name.replace(/\.[^.]+$/, "");
       profileResult.textContent = "\u0424\u0430\u0439\u043B \u0437\u0430\u0433\u0440\u0443\u0436\u0435\u043D. \u041F\u0440\u043E\u0432\u0435\u0440\u044C\u0442\u0435 \u043A\u043E\u043D\u0444\u0438\u0433\u0443\u0440\u0430\u0446\u0438\u044E \u0438 \u0438\u043C\u043F\u043E\u0440\u0442\u0438\u0440\u0443\u0439\u0442\u0435 \u043F\u0440\u043E\u0444\u0438\u043B\u044C.";
     } catch {
+      if (generation !== fileReadGeneration) return;
       profileResult.textContent = "file_read_failed";
     }
   });
@@ -14596,13 +14605,15 @@ function renderCompatibilityPanel(request) {
       } catch {
         result.textContent = "\u041D\u0435\u0442 \u0441\u0432\u044F\u0437\u0438 \u0441 \u0440\u043E\u0443\u0442\u0435\u0440\u043E\u043C. \u041F\u043E\u0432\u0442\u043E\u0440\u0438\u0442\u0435 \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0443.";
       } finally {
-        b.disabled = false;
+        b.disabled = b === handshake && !outbound.value;
       }
     };
     root.append(b);
     return b;
   }
+  let comparisonGeneration = 0;
   const comparison = async (probe = false) => {
+    const generation = ++comparisonGeneration;
     const payload = { section: section.value };
     if (outbound.value) payload.outbound_tag = outbound.value;
     if (server.value.trim()) {
@@ -14625,7 +14636,14 @@ function renderCompatibilityPanel(request) {
       payload.domain = domain.value.trim();
     }
     result.textContent = probe ? "\u041F\u0440\u043E\u0432\u0435\u0440\u044F\u0435\u043C \u0441\u043E\u0435\u0434\u0438\u043D\u0435\u043D\u0438\u0435\u2026" : "\u0421\u043E\u043F\u043E\u0441\u0442\u0430\u0432\u043B\u044F\u0435\u043C \u043F\u0430\u0440\u0430\u043C\u0435\u0442\u0440\u044B\u2026";
-    const response = await request("compatibility_check", payload);
+    let response;
+    try {
+      response = await request("compatibility_check", payload);
+    } catch (error) {
+      if (generation !== comparisonGeneration) return;
+      throw error;
+    }
+    if (generation !== comparisonGeneration) return;
     if (!response.success) {
       result.textContent = `\u041F\u0440\u043E\u0432\u0435\u0440\u043A\u0430 \u043D\u0435 \u0432\u044B\u043F\u043E\u043B\u043D\u0435\u043D\u0430: ${response.error || "\u043D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043D\u0430\u044F \u043E\u0448\u0438\u0431\u043A\u0430"}`;
       return;
@@ -14688,6 +14706,7 @@ function renderCompatibilityPanel(request) {
   const handshake = button("\u041F\u0440\u043E\u0432\u0435\u0440\u0438\u0442\u044C \u0441\u043E\u0435\u0434\u0438\u043D\u0435\u043D\u0438\u0435", () => comparison(true));
   handshake.disabled = true;
   section.onchange = () => {
+    comparisonGeneration++;
     outbound.replaceChildren();
     handshake.disabled = true;
     result.textContent = "\u041F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435 \u0438\u0437\u043C\u0435\u043D\u0435\u043D\u043E. \u0421\u043E\u043F\u043E\u0441\u0442\u0430\u0432\u044C\u0442\u0435 \u043D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438 \u0437\u0430\u043D\u043E\u0432\u043E.";
