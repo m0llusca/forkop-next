@@ -30,6 +30,15 @@ fail() {
   exit 1
 }
 
+process_running() {
+  local pid="$1" state
+  kill -0 "$pid" 2>/dev/null || return 1
+  # SIGKILL completion can precede adoption/reaping by PID 1. Zombies cannot
+  # execute or retain their children; kill -0 alone misclassifies them as live.
+  state="$(awk '/^State:/ { print $2; exit }' "/proc/$pid/status" 2>/dev/null || true)"
+  [ -n "$state" ] && [ "$state" != Z ] && [ "$state" != X ]
+}
+
 [ -r "$INSTALLER" ] || fail "install.sh is missing"
 
 grep -Fq 'trap cleanup EXIT' "$INSTALLER" ||
@@ -84,7 +93,7 @@ if run_with_deadline 1 sh -c '
   fail "installer deadline watchdog must fail a stubborn process tree"
 fi
 [ -s "$deadline_child_pid" ] || fail "deadline process-tree fixture did not record its child"
-if kill -0 "$(cat "$deadline_child_pid")" 2>/dev/null; then
+if process_running "$(cat "$deadline_child_pid")"; then
   fail "installer deadline watchdog left a descendant running"
 fi
 grep -Fq 'curl --connect-timeout "$CONNECT_TIMEOUT_SECONDS" --max-time "$METADATA_TIMEOUT_SECONDS"' "$INSTALLER" ||
@@ -324,12 +333,12 @@ if [ -e "$WORK_DIR/start.retry" ] || [ -e "$WORK_DIR/start-retry.pid" ]; then
 fi
 wait "$RETRY_PID" 2>/dev/null || true
 RETRY_PID=""
-if kill -0 "$ORPHAN_PROBE_PID" 2>/dev/null; then
+if process_running "$ORPHAN_PROBE_PID"; then
   fail "installer cleanup left an orphaned init.d probe running"
 fi
 ORPHAN_PROBE_PID=""
 while IFS= read -r pid; do
-  if kill -0 "$pid" 2>/dev/null; then
+  if process_running "$pid"; then
     fail "installer cleanup left a timed-out service process running: $pid"
   fi
 done < "$HANG_PID_LOG"

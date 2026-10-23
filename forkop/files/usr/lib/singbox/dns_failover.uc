@@ -167,7 +167,7 @@ function commit_state(path) {
 }
 
 function now_seconds() {
-    return int(clock()[0]);
+    return int(require("core.scheduler").now());
 }
 
 function choose_index(kind, state, current_index, timeout_seconds, recovery) {

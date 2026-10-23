@@ -432,7 +432,7 @@ function restore_selector_state(snapshot) {
     let pairs = selector_restore_pairs(snapshot, clash_api_json("get_proxies"));
 
     for (let pair in pairs)
-        module_success(DIAGNOSTICS_UC, [ "clash-api", "set_group_proxy", pair.group, pair.proxy, "" ]);
+        module_success(DIAGNOSTICS_UC, [ "clash-api", "set_group_proxy", pair.group, pair.proxy, "restore" ]);
 }
 
 function module_background(module_path, args) {
@@ -670,6 +670,14 @@ function prepare_subscription_caches(mode) {
 
 function start_main() {
     let status;
+    let next_module = LIB_DIR + "/service/next.uc";
+    if (fs.stat(next_module) != null) {
+        let restored;
+        try { restored = json(module_output(next_module, [ "dispatch", "startup_recover", "{}" ])); }
+        catch (e) { restored = null; }
+        if (type(restored) != "object" || restored.success !== true)
+            return 1;
+    }
 
     log_message("Starting Forkop", "info");
 
@@ -791,6 +799,8 @@ function start_impl() {
     }
 
     module_background(DIAGNOSTICS_UC, [ "get-system-info" ]);
+    if (fs.stat(LIB_DIR + "/service/next.uc") != null)
+        module_output(LIB_DIR + "/service/next.uc", [ "dispatch", "checkpoint", "{}" ]);
     return 0;
 }
 
@@ -1310,6 +1320,16 @@ function reload(reason) {
 }
 
 function reload_tracked(reason) {
+    let next_module = LIB_DIR + "/service/next.uc";
+    if (fs.stat(next_module) != null) {
+        let result;
+        try { result = json(module_output(next_module, [ "dispatch", "native_apply", "{}" ])); }
+        catch (e) { result = null; }
+        if (type(result) != "object" || result.success !== true)
+            return 1;
+        if (!object_or_empty(result.data).unchanged)
+            return 0;
+    }
     if (as_string(getenv("FORKOP_UI_ACTION_TRACKED") || "0") == "1")
         return reload(reason);
 

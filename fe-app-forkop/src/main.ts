@@ -38,3 +38,9 @@ export {
   FORKOP_ACTION_PROVIDERS_AVAILABILITY_EVENT,
   FORKOP_UCI_PACKAGE,
 } from './constants';
+
+export { renderNextPanel } from './forkop/next/render';
+
+export { registerConfigurationReload } from './forkop/next/configReload';
+
+export { getDashboardSections } from './forkop/methods/custom/getDashboardSections';

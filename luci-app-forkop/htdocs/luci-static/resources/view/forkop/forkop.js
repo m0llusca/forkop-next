@@ -5,6 +5,7 @@
 "require uci";
 "require ui";
 "require view.forkop.main as main";
+"require view.forkop.next as next";
 
 // Global settings
 "require view.forkop.settings as settings";
@@ -100,6 +101,7 @@ function configureGridSection(sectionRef, type, title, addTitle) {
 const EntryPoint = {
   async render() {
     main.injectGlobalStyles();
+    main.registerConfigurationReload();
     const uiCapabilities = {
       loaded: false,
       singBoxExtended: false,
@@ -382,6 +384,18 @@ const EntryPoint = {
           throw error;
         });
     };
+
+    const nextSection = forkopMap.section(
+      form.TypedSection,
+      "next",
+      "Обзор и управление",
+    );
+    nextSection.anonymous = true;
+    nextSection.addremove = false;
+    nextSection.cfgsections = function () {
+      return ["next"];
+    };
+    next.createNextContent(nextSection);
 
     const rulesSection = forkopMap.section(
       form.GridSection,

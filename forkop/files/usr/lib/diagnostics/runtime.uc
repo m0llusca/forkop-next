@@ -1627,6 +1627,54 @@ function latency_test_url() {
     return value == "" ? DEFAULT_LATENCY_TEST_URL : value;
 }
 
+// Keep each response in its own bounded file: parallel response bodies may be
+// fragmented, so concatenating JSON on curl's stdout is not a framing protocol.
+function parallel_latency_checks(proxy_tags, proxy_types, base_url, auth, test_url, timeout, progress_path, total, previous) {
+    let count = int(previous.count || 0), failed = int(previous.failed || 0);
+    let directory = trim(command_output_from_args([ "mktemp", "-d", "/tmp/forkop-latency.XXXXXX" ]));
+    if (directory == "") return { count: count + length(proxy_tags), failed: failed + length(proxy_tags) };
+    let timeout_ms = arg_number(timeout || "5000");
+    if (timeout_ms < 100) timeout_ms = 100;
+    if (timeout_ms > 60000) timeout_ms = 60000;
+    let max_time = sprintf("%.3f", timeout_ms / 1000.0 + 0.1);
+    for (let offset = 0; offset < length(proxy_tags); offset += 32) {
+        let args = [ "curl", "--parallel", "--parallel-immediate", "--parallel-max", "4" ];
+        let paths = {}, completed = {};
+        for (let i = offset; i < length(proxy_tags) && i < offset + 32; i++) {
+            if (i != offset) push(args, "--next");
+            let path = directory + "/" + i + ".json";
+            paths[path] = true;
+            push(args, "--silent", "--fail", "--max-time", max_time, "--connect-timeout", max_time,
+                "--max-filesize", "65536", "--output", path,
+                "--write-out", "%{filename_effective}\t%{exitcode}\n", "--get",
+                clash_latency_endpoint(base_url, proxy_tags[i], proxy_types[proxy_tags[i]]));
+            for (let item in auth) push(args, item);
+            push(args, "--data-urlencode", "url=" + test_url, "--data-urlencode", "timeout=" + timeout_ms);
+        }
+        let pipe = fs.popen(command_from_args(args), "r");
+        if (pipe) {
+            let line;
+            while ((line = pipe.read("line")) != null) {
+                let fields = split(trim(line), "\t"), path = fields[0];
+                if (!paths[path] || completed[path]) continue;
+                completed[path] = true;
+                let value = read_json_file(path);
+                if (fields[1] != "0" || type(value) != "object" ||
+                    (type(value.delay) != "int" && type(value.delay) != "double") || value.delay < 0) failed++;
+                count++;
+                if (progress_path != "") module_success(SERVICE_UI_UC, [ "latency-progress-state", progress_path, count, total, failed ]);
+            }
+            pipe.close();
+        }
+        for (let path in keys(paths)) {
+            if (!completed[path]) { count++; failed++; }
+            fs.unlink(path);
+        }
+    }
+    fs.rmdir(directory);
+    return { count, failed };
+}
+
 function clash_api(action, arg1, arg2, arg3) {
     let base_url = clash_api_url();
     let test_url = latency_test_url();
@@ -1690,19 +1738,15 @@ function clash_api(action, arg1, arg2, arg3) {
             if (lc(as_string(proxy_types[proxy_tag])) == "urltest")
                 push(ordered_proxy_tags, proxy_tag);
 
-        for (let proxy_tag in ordered_proxy_tags) {
-            let args = [ "curl", "-G", "-s", clash_latency_endpoint(base_url, proxy_tag, proxy_types[proxy_tag]) ];
-            for (let item in auth) push(args, item);
-            push(args, "--data-urlencode");
-            push(args, "url=" + test_url);
-            push(args, "--data-urlencode");
-            push(args, "timeout=" + as_string(arg2 || "5000"));
-            if (status_capture([ "stdin-json" ], command_output(command_from_args(args))).status != 0)
-                failed++;
-            count++;
-            if (progress_path != "")
-                module_success(SERVICE_UI_UC, [ "latency-progress-state", progress_path, count, total, failed ]);
-        }
+        // Finish ordinary nodes first so groups do not race their own members.
+        let ordinary = [], groups = [];
+        for (let proxy_tag in ordered_proxy_tags)
+            if (lc(as_string(proxy_types[proxy_tag])) == "urltest") push(groups, proxy_tag);
+            else push(ordinary, proxy_tag);
+        let summary = parallel_latency_checks(ordinary, proxy_types, base_url, auth, test_url, arg2, progress_path, total, { count, failed });
+        summary = parallel_latency_checks(groups, proxy_types, base_url, auth, test_url, arg2, progress_path, total, summary);
+        count = summary.count; failed = summary.failed;
+        if (progress_path != "") module_success(SERVICE_UI_UC, [ "latency-progress-state", progress_path, count, total, failed ]);
         let result = status_capture([ "clash-proxy-latencies-result", count, failed ], null);
         if (result.output != "")
             print(result.output);
@@ -1730,6 +1774,13 @@ function clash_api(action, arg1, arg2, arg3) {
         push(args, "--data-raw");
         push(args, payload);
         let result = status_capture([ "clash-set-group-proxy-result", arg1, arg2 ], command_output(command_from_args(args)));
+        if (result.status == 0 && as_string(arg3) != "automatic" && as_string(arg3) != "restore") {
+            let current;
+            try { current = json(fs.readfile(option(settings(), "config_path", "/etc/sing-box/config.json"))); }
+            catch (e) { current = null; }
+            if (type(current) == "object")
+                require("service.selection").remember(arg1, arg2, current, "manual");
+        }
         if (result.output != "")
             print(result.output);
         return result.status;

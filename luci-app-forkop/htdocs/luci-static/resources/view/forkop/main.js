@@ -856,16 +856,25 @@ function getProxyUrlName(url) {
   }
 }
 
+// src/forkop/next/styles.ts
+var nextStyles = `
+.fkp-next{--next-bg:#f6f7f8;--next-fg:#17252d;--next-muted:#455863;--next-line:#ced7dc;--next-accent:#14635e;--next-field:#fff;color:var(--next-fg);background:var(--next-bg);padding:24px;border-radius:12px;font-family:inherit;line-height:1.5;accent-color:var(--next-accent);color-scheme:light}
+.fkp-next[data-theme=dark]{--next-bg:#16232b;--next-fg:#eef4f6;--next-muted:#b8c8d0;--next-line:#455963;--next-accent:#8bd6c8;--next-field:#21333e;color-scheme:dark}
+@media(prefers-color-scheme:dark){.fkp-next:not([data-theme=light]){--next-bg:#16232b;--next-fg:#eef4f6;--next-muted:#b8c8d0;--next-line:#455963;--next-accent:#8bd6c8;--next-field:#21333e;color-scheme:dark}}
+.fkp-next input::placeholder,.fkp-next textarea::placeholder{color:var(--next-muted);opacity:1}.fkp-next .fkp-next-check{flex-direction:row;align-items:center}.fkp-next input[type=checkbox]{width:20px;min-height:20px;margin:0 6px;flex-shrink:0}.fkp-next *{box-sizing:border-box}.fkp-next ::selection{background:var(--next-accent);color:var(--next-bg)}
+.fkp-next header{display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin-bottom:20px}.fkp-next header>div{flex:1;min-width:200px}.fkp-next h2{font-size:26px;line-height:1.2;margin:0 0 8px;font-weight:650}.fkp-next h3{font-size:19px;line-height:1.3;margin:0 0 8px;font-weight:650}.fkp-next p{margin:0 0 12px;max-width:70ch}.fkp-next header p,.fkp-next-help{color:var(--next-muted)}
+.fkp-next-compatibility{grid-column:1/-1}.fkp-next-compatibility label{max-width:70ch}.fkp-next-tools{grid-column:1/-1;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:32px}.fkp-next-content{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:32px}.fkp-next-panel{min-width:0;border-top:1px solid var(--next-line);padding-top:24px}.fkp-next-panel>h3:not(:first-child){margin-top:28px}.fkp-next-panel label,.fkp-next header label{display:flex;flex-direction:column;gap:6px;margin:12px 0;color:var(--next-muted);font-size:14px;font-weight:550}.fkp-next input,.fkp-next select,.fkp-next textarea{border:1px solid var(--next-line);border-radius:6px;background:var(--next-field);color:var(--next-fg);min-height:42px;padding:9px 10px;width:100%;max-width:100%;font:inherit;caret-color:var(--next-accent)}
+.fkp-next button{border:1px solid var(--next-line);border-radius:6px;background:var(--next-field);color:var(--next-fg);min-height:42px;padding:8px 12px;font:inherit;font-weight:550;margin:4px 8px 4px 0;white-space:normal;text-align:left;cursor:pointer;transition:background-color .15s ease-out}.fkp-next button:hover{background:var(--next-line)}.fkp-next button:disabled{opacity:.55;cursor:default}.fkp-next :focus-visible{outline:2px solid var(--next-accent);outline-offset:3px}.fkp-next-summary{font-variant-numeric:tabular-nums}.fkp-next-summary>span{display:block;margin-bottom:6px}.fkp-next-summary:empty{display:none}.fkp-next-status{font-variant-numeric:tabular-nums;color:var(--next-accent);padding:12px 0;border-top:1px solid var(--next-line)}.fkp-next-notice:empty{display:none}.fkp-next-notice{font-weight:600}.fkp-next-result{white-space:pre-wrap;overflow-wrap:anywhere;max-height:320px;overflow:auto;font-size:14px;font-variant-numeric:tabular-nums;margin-top:12px}.fkp-next-row{padding:12px 0;border-bottom:1px solid var(--next-line);overflow-wrap:anywhere}.fkp-next-row>span{display:block}.fkp-next output{display:block;white-space:pre-wrap;overflow-wrap:anywhere;margin:8px 0}.fkp-next[data-mode=simple] pre.fkp-next-result{max-height:130px}.fkp-next [data-detail]{display:none}.fkp-next[data-mode=detailed] [data-detail]{display:block}
+@media(max-width:720px){.fkp-next-tools{grid-template-columns:minmax(0,1fr);gap:24px}.fkp-next{padding:16px;border-radius:8px}.fkp-next-content{grid-template-columns:minmax(0,1fr);gap:24px}.fkp-next header{gap:8px}.fkp-next header>div{flex-basis:100%}.fkp-next header label{flex:1;margin:0}.fkp-next h2{font-size:24px}.fkp-next button{max-width:100%}.fkp-next input,.fkp-next select,.fkp-next textarea{font-size:16px}}
+@media(prefers-reduced-motion:reduce){.fkp-next button{transition:none}}
+`;
+
 // src/forkop/tabs/dashboard/partials/renderFlagEmojis.ts
 var FLAG_EMOJI_PATTERN = /([\u{1f1e6}-\u{1f1ff}]{2}|\u{1f3f4}[\u{e0061}-\u{e007a}]+\u{e007f})/gu;
 var EXACT_FLAG_EMOJI_PATTERN = /^([\u{1f1e6}-\u{1f1ff}]{2}|\u{1f3f4}[\u{e0061}-\u{e007a}]+\u{e007f})$/u;
 function renderFlagEmojis(value) {
   return value.split(FLAG_EMOJI_PATTERN).filter(Boolean).map(
-    (part) => EXACT_FLAG_EMOJI_PATTERN.test(part) ? E(
-      "span",
-      { class: "fkp_dashboard-page__flag-emoji" },
-      part
-    ) : part
+    (part) => EXACT_FLAG_EMOJI_PATTERN.test(part) ? E("span", { class: "fkp_dashboard-page__flag-emoji" }, part) : part
   );
 }
 
@@ -1019,13 +1028,14 @@ var COMMAND_TIMEOUT = 1e4;
 async function executeShellCommand({
   command,
   args,
-  timeout = COMMAND_TIMEOUT
+  timeout = COMMAND_TIMEOUT,
+  operationName
 }) {
   try {
     return await withTimeout(
       fs.exec(command, args),
       timeout,
-      [command, ...args].join(" ")
+      operationName || [command, ...args].join(" ")
     );
   } catch (err) {
     const error = err;
@@ -1101,12 +1111,12 @@ function preserveScrollForPage(renderFn) {
 // src/helpers/svgEl.ts
 function svgEl(tag, attrs = {}, children = []) {
   const NS = "http://www.w3.org/2000/svg";
-  const el = document.createElementNS(NS, tag);
+  const el2 = document.createElementNS(NS, tag);
   for (const [k, v] of Object.entries(attrs)) {
-    if (v != null) el.setAttribute(k, String(v));
+    if (v != null) el2.setAttribute(k, String(v));
   }
-  (Array.isArray(children) ? children : [children]).filter(Boolean).forEach((ch) => el.appendChild(ch));
-  return el;
+  (Array.isArray(children) ? children : [children]).filter(Boolean).forEach((ch) => el2.appendChild(ch));
+  return el2;
 }
 
 // src/helpers/insertIf.ts
@@ -2067,8 +2077,23 @@ function renderDefaultState({
           ),
           E(
             "div",
-            { class: getLatencyClass() },
-            outbound.latency ? `${outbound.latency}ms` : "N/A"
+            {
+              class: getLatencyClass(),
+              title: outbound.latencyTestedAt ? new Date(outbound.latencyTestedAt).toLocaleString() : _("Not measured")
+            },
+            [
+              E("span", {}, outbound.latency ? `${outbound.latency}ms` : "N/A"),
+              ...outbound.latencyTestedAt ? [
+                E(
+                  "time",
+                  {
+                    dateTime: outbound.latencyTestedAt,
+                    style: "display:block;font-size:11px;font-weight:normal"
+                  },
+                  new Date(outbound.latencyTestedAt).toLocaleString()
+                )
+              ] : []
+            ]
           )
         ])
       ]
@@ -2172,14 +2197,14 @@ function renderLoadingState2() {
     ""
   );
 }
-function renderDefaultState2({ title, items }) {
+function renderDefaultState2({ title, items: items2 }) {
   return E("div", { class: "fkp_dashboard-page__widgets-section__item" }, [
     E(
       "b",
       { class: "fkp_dashboard-page__widgets-section__item__title" },
       title
     ),
-    ...items.map(
+    ...items2.map(
       (item) => E(
         "div",
         {
@@ -2349,6 +2374,19 @@ function copyToClipboard(text) {
 // src/forkop/methods/custom/getConfigSections.ts
 async function getConfigSections() {
   return uci.load(FORKOP_UCI_PACKAGE).then(() => uci.sections(FORKOP_UCI_PACKAGE));
+}
+
+// src/forkop/next/latency.ts
+function latestLatency(history = []) {
+  const newest = history.reduce(
+    (best, item) => !best || Number.isFinite(Date.parse(item.time)) && (!Number.isFinite(Date.parse(best.time)) || Date.parse(item.time) > Date.parse(best.time)) ? item : best,
+    void 0
+  );
+  if (!newest) return { latency: 0 };
+  return {
+    latency: Number.isFinite(newest.delay) && newest.delay > 0 ? newest.delay : 0,
+    ...Number.isFinite(Date.parse(newest.time)) ? { latencyTestedAt: newest.time } : {}
+  };
 }
 
 // src/forkop/runtimeTags.ts
@@ -3602,7 +3640,7 @@ function buildUrlTestInfo({
             outboundMetadata,
             cachedProxyLinks.has(childCode)
           ),
-          latency: childEntry?.value?.history?.[0]?.delay || 0,
+          ...latestLatency(childEntry?.value?.history),
           type: childEntry?.value?.type || "",
           selected: selectedCode === childCode,
           link,
@@ -3679,7 +3717,7 @@ function buildPriorityInfo({
           outboundMetadata,
           cachedProxyLinks.has(childCode)
         ),
-        latency: childEntry?.value?.history?.[0]?.delay || 0,
+        ...latestLatency(childEntry?.value?.history),
         type: childEntry?.value?.type || "",
         selected: selectedCode === childCode,
         link,
@@ -3774,7 +3812,7 @@ function buildProxyGroupOutbounds(section, proxies, outboundMetadata, urltestGro
       {
         code,
         displayName,
-        latency: item?.value.history?.[0]?.delay || 0,
+        ...latestLatency(item?.value.history),
         type: priorityConfig ? "Priority" : item?.value.type || "URLTest",
         selected: selector?.value?.now === code,
         link,
@@ -3984,7 +4022,7 @@ async function getDashboardSections(options = {}) {
             {
               code: outbound?.code || sectionName,
               displayName: section.interface || outbound?.value?.name || "",
-              latency: outbound?.value?.history?.[0]?.delay || 0,
+              ...latestLatency(outbound?.value?.history),
               type: outbound?.value?.type || "",
               selected: true,
               canCopyLink: false,
@@ -4006,7 +4044,7 @@ async function getDashboardSections(options = {}) {
             {
               code: outbound?.code || sectionName,
               displayName: getJsonOutboundDisplayName(section) || outbound?.value?.name || "",
-              latency: outbound?.value?.history?.[0]?.delay || 0,
+              ...latestLatency(outbound?.value?.history),
               type: outbound?.value?.type || "",
               selected: true,
               canCopyLink: false
@@ -4137,10 +4175,10 @@ var TabService = class _TabService {
     const tabs = Array.from(
       document.querySelectorAll(".cbi-tab, .cbi-tab-disabled")
     );
-    return tabs.map((el) => ({
-      el,
-      id: el.dataset.tab || "",
-      active: el.classList.contains("cbi-tab") && !el.classList.contains("cbi-tab-disabled")
+    return tabs.map((el2) => ({
+      el: el2,
+      id: el2.dataset.tab || "",
+      active: el2.classList.contains("cbi-tab") && !el2.classList.contains("cbi-tab-disabled")
     }));
   }
   getActiveTabId() {
@@ -5124,12 +5162,15 @@ function coreService(options = {}) {
 }
 
 // src/forkop/services/socket.service.ts
+var socketLogUrl = (url) => url.replace(/([?&]token=)[^&]*/gi, "$1[redacted]");
 var SocketManager = class _SocketManager {
   constructor() {
     this.sockets = /* @__PURE__ */ new Map();
     this.listeners = /* @__PURE__ */ new Map();
     this.connected = /* @__PURE__ */ new Map();
     this.errorListeners = /* @__PURE__ */ new Map();
+    this.reconnectAttempts = /* @__PURE__ */ new Map();
+    this.reconnectTimers = /* @__PURE__ */ new Map();
   }
   static getInstance() {
     if (!_SocketManager.instance) {
@@ -5138,7 +5179,15 @@ var SocketManager = class _SocketManager {
     return _SocketManager.instance;
   }
   resetAll() {
-    for (const [url, ws] of this.sockets.entries()) {
+    const sockets = [...this.sockets.entries()];
+    for (const timer of this.reconnectTimers.values()) clearTimeout(timer);
+    this.sockets.clear();
+    this.listeners.clear();
+    this.errorListeners.clear();
+    this.connected.clear();
+    this.reconnectAttempts.clear();
+    this.reconnectTimers.clear();
+    for (const [url, ws] of sockets) {
       try {
         if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
           ws.close();
@@ -5146,15 +5195,11 @@ var SocketManager = class _SocketManager {
       } catch (err) {
         logger.error(
           "[SOCKET]",
-          `resetAll: failed to close socket ${url}`,
+          `resetAll: failed to close socket ${socketLogUrl(url)}`,
           err
         );
       }
     }
-    this.sockets.clear();
-    this.listeners.clear();
-    this.errorListeners.clear();
-    this.connected.clear();
     logger.info("[SOCKET]", "All connections and state have been reset.");
   }
   connect(url) {
@@ -5165,10 +5210,11 @@ var SocketManager = class _SocketManager {
     } catch (err) {
       logger.error(
         "[SOCKET]",
-        `failed to construct WebSocket for ${url}:`,
+        `failed to construct WebSocket for ${socketLogUrl(url)}:`,
         err
       );
       this.triggerError(url, err instanceof Event ? err : String(err));
+      this.scheduleReconnect(url);
       return;
     }
     this.sockets.set(url, ws);
@@ -5177,7 +5223,8 @@ var SocketManager = class _SocketManager {
     if (!this.errorListeners.has(url)) this.errorListeners.set(url, /* @__PURE__ */ new Set());
     ws.addEventListener("open", () => {
       this.connected.set(url, true);
-      logger.info("[SOCKET]", "Connected to", url);
+      this.reconnectAttempts.delete(url);
+      logger.info("[SOCKET]", "Connected to", socketLogUrl(url));
     });
     ws.addEventListener("message", (event) => {
       const handlers = this.listeners.get(url);
@@ -5186,18 +5233,25 @@ var SocketManager = class _SocketManager {
           try {
             handler(event.data);
           } catch (err) {
-            logger.error("[SOCKET]", `Handler error for ${url}:`, err);
+            logger.error(
+              "[SOCKET]",
+              `Handler error for ${socketLogUrl(url)}:`,
+              err
+            );
           }
         }
       }
     });
     ws.addEventListener("close", () => {
+      if (this.sockets.get(url) !== ws) return;
+      this.sockets.delete(url);
       this.connected.set(url, false);
-      logger.warn("[SOCKET]", `Disconnected: ${url}`);
+      logger.warn("[SOCKET]", `Disconnected: ${socketLogUrl(url)}`);
       this.triggerError(url, "Connection closed");
+      this.scheduleReconnect(url);
     });
     ws.addEventListener("error", (err) => {
-      logger.error("[SOCKET]", `Socket error for ${url}:`, err);
+      logger.error("[SOCKET]", `Socket error for ${socketLogUrl(url)}:`, err);
       this.triggerError(url, err);
     });
   }
@@ -5208,18 +5262,21 @@ var SocketManager = class _SocketManager {
     if (onError) {
       this.errorListeners.get(url)?.add(onError);
     }
-    if (!this.sockets.has(url)) {
-      this.connect(url);
-    }
     if (!this.listeners.has(url)) {
       this.listeners.set(url, /* @__PURE__ */ new Set());
     }
     this.listeners.get(url)?.add(listener);
+    if (!this.sockets.has(url)) {
+      this.connect(url);
+    }
   }
   unsubscribe(url, listener, onError) {
     this.listeners.get(url)?.delete(listener);
     if (onError) {
       this.errorListeners.get(url)?.delete(onError);
+    }
+    if (this.listeners.get(url)?.size === 0) {
+      this.disconnect(url);
     }
   }
   // eslint-disable-next-line
@@ -5228,22 +5285,29 @@ var SocketManager = class _SocketManager {
     if (ws && this.connected.get(url)) {
       ws.send(typeof data === "string" ? data : JSON.stringify(data));
     } else {
-      logger.warn("[SOCKET]", `Cannot send: not connected to ${url}`);
+      logger.warn(
+        "[SOCKET]",
+        `Cannot send: not connected to ${socketLogUrl(url)}`
+      );
       this.triggerError(url, "Not connected");
     }
   }
   disconnect(url) {
     const ws = this.sockets.get(url);
-    if (ws) {
-      ws.close();
-      this.sockets.delete(url);
-      this.listeners.delete(url);
-      this.errorListeners.delete(url);
-      this.connected.delete(url);
-    }
+    this.clearReconnect(url);
+    this.sockets.delete(url);
+    this.listeners.delete(url);
+    this.errorListeners.delete(url);
+    this.connected.delete(url);
+    if (ws) ws.close();
   }
   disconnectAll() {
-    for (const url of this.sockets.keys()) {
+    const urls = /* @__PURE__ */ new Set([
+      ...this.sockets.keys(),
+      ...this.listeners.keys(),
+      ...this.reconnectTimers.keys()
+    ]);
+    for (const url of urls) {
       this.disconnect(url);
     }
   }
@@ -5254,10 +5318,36 @@ var SocketManager = class _SocketManager {
         try {
           cb(err);
         } catch (e) {
-          logger.error("[SOCKET]", `Error handler threw for ${url}:`, e);
+          logger.error(
+            "[SOCKET]",
+            `Error handler threw for ${socketLogUrl(url)}:`,
+            e
+          );
         }
       }
     }
+  }
+  scheduleReconnect(url) {
+    if (this.reconnectTimers.has(url) || (this.listeners.get(url)?.size || 0) === 0) {
+      return;
+    }
+    const attempt = this.reconnectAttempts.get(url) || 0;
+    const delays = [1e3, 2e3, 5e3];
+    const delay = delays[Math.min(attempt, delays.length - 1)];
+    this.reconnectAttempts.set(url, attempt + 1);
+    this.reconnectTimers.set(
+      url,
+      setTimeout(() => {
+        this.reconnectTimers.delete(url);
+        if ((this.listeners.get(url)?.size || 0) > 0) this.connect(url);
+      }, delay)
+    );
+  }
+  clearReconnect(url) {
+    const timer = this.reconnectTimers.get(url);
+    if (timer) clearTimeout(timer);
+    this.reconnectTimers.delete(url);
+    this.reconnectAttempts.delete(url);
   }
 };
 var socket = SocketManager.getInstance();
@@ -7804,7 +7894,7 @@ function getPublicHostItem(item, wanIp) {
 }
 function getServerItems(item, wanIp) {
   const prefix = serverPrefix(item);
-  const items = [
+  const items2 = [
     {
       state: item.runtime_ok ? "success" : "error",
       key: `${prefix} ${_("Generated inbound")}`,
@@ -7812,7 +7902,7 @@ function getServerItems(item, wanIp) {
     }
   ];
   if (item.protocol === "tailscale") {
-    items.push(
+    items2.push(
       {
         state: "success",
         key: `${prefix} ${_("Tailscale endpoint")}`,
@@ -7824,17 +7914,17 @@ function getServerItems(item, wanIp) {
         value: item.routing_mode
       }
     );
-    return items;
+    return items2;
   }
   if (item.protocol === "json_inbound") {
-    items.push({
+    items2.push({
       state: item.routes_configured ? "success" : "warning",
       key: `${prefix} ${_("Routing rules")}`,
       value: item.routing_mode
     });
-    return items;
+    return items2;
   }
-  items.push(
+  items2.push(
     {
       state: item.listening === 1 && item.port_conflict !== 1 ? "success" : "error",
       key: `${prefix} ${_("Listening port")}`,
@@ -7853,7 +7943,7 @@ function getServerItems(item, wanIp) {
     },
     getPublicHostItem(item, wanIp)
   );
-  return items;
+  return items2;
 }
 async function runInboundsCheck() {
   const { order, title, code } = DIAGNOSTICS_CHECKS_MAP.INBOUNDS;
@@ -7889,7 +7979,7 @@ async function runInboundsCheck() {
     });
     return;
   }
-  const items = [
+  const items2 = [
     {
       state: data.wan_public ? "success" : "warning",
       key: _("WAN public IP"),
@@ -7897,10 +7987,10 @@ async function runInboundsCheck() {
     }
   ];
   data.items.forEach((item) => {
-    items.push(...getServerItems(item, data.wan_ip));
+    items2.push(...getServerItems(item, data.wan_ip));
   });
-  const allGood = items.every((item) => item.state === "success");
-  const atLeastOneGood = items.some((item) => item.state !== "error");
+  const allGood = items2.every((item) => item.state === "success");
+  const atLeastOneGood = items2.some((item) => item.state !== "error");
   const { state, description } = getMeta({ atLeastOneGood, allGood });
   updateCheckStore({
     order,
@@ -7908,7 +7998,7 @@ async function runInboundsCheck() {
     title,
     description,
     state,
-    items
+    items: items2
   });
   if (!atLeastOneGood) {
     throw new Error("Inbounds checks failed");
@@ -8060,14 +8150,14 @@ async function runFakeIPCheck() {
 }
 
 // src/forkop/tabs/diagnostic/checks/getCheckItemsMeta.ts
-function getCheckItemsMeta(items) {
-  if (items.some((item) => item.state === "error")) {
+function getCheckItemsMeta(items2) {
+  if (items2.some((item) => item.state === "error")) {
     return {
       state: "error",
       description: _("Checks failed")
     };
   }
-  if (items.some((item) => item.state === "warning")) {
+  if (items2.some((item) => item.state === "warning")) {
     return {
       state: "warning",
       description: _("Issues detected")
@@ -8115,7 +8205,7 @@ async function runZapretCheck() {
   const forkopRuntimeReady = !hasZapretRules || runningProcesses === expectedProcesses && supervisorProcesses === expectedProcesses;
   const unexpectedRuntime = !hasZapretRules && (runningProcesses > 0 || supervisorProcesses > 0);
   const outboundsConfigured = Boolean(data.outbounds_configured);
-  const items = [
+  const items2 = [
     {
       state: providerAvailable ? "success" : hasZapretRules ? "error" : "warning",
       key: providerAvailable ? _("Zapret provider binary is available") : _("Zapret provider binary is not available"),
@@ -8152,14 +8242,14 @@ async function runZapretCheck() {
       value: ""
     }
   ];
-  const { state, description } = getCheckItemsMeta(items);
+  const { state, description } = getCheckItemsMeta(items2);
   updateCheckStore({
     order,
     code,
     title,
     description,
     state,
-    items
+    items: items2
   });
 }
 
@@ -8201,7 +8291,7 @@ async function runZapret2Check() {
   const standaloneServiceRunning = Boolean(data.standalone_service_running);
   const standaloneConflict = hasZapret2Rules && standaloneServiceRunning;
   const standaloneAutostartRisk = hasZapret2Rules && standaloneServiceEnabled && !standaloneServiceRunning;
-  const items = [
+  const items2 = [
     {
       state: providerAvailable ? "success" : hasZapret2Rules ? "error" : "warning",
       key: providerAvailable ? _("Zapret2 provider binary is available") : _("Zapret2 provider binary is not available"),
@@ -8238,14 +8328,14 @@ async function runZapret2Check() {
       value: ""
     }
   ];
-  const { state, description } = getCheckItemsMeta(items);
+  const { state, description } = getCheckItemsMeta(items2);
   updateCheckStore({
     order,
     code,
     title,
     description,
     state,
-    items
+    items: items2
   });
 }
 
@@ -8288,7 +8378,7 @@ async function runByedpiCheck() {
   const standaloneServiceRunning = Boolean(data.standalone_service_running);
   const standaloneConflict = hasByedpiRules && standaloneServiceRunning;
   const standaloneAutostartRisk = hasByedpiRules && standaloneServiceEnabled && !standaloneServiceRunning;
-  const items = [
+  const items2 = [
     {
       state: providerAvailable ? "success" : hasByedpiRules ? "error" : "warning",
       key: providerAvailable ? _("ByeDPI provider binary is available") : _("ByeDPI provider binary is not available"),
@@ -8320,14 +8410,14 @@ async function runByedpiCheck() {
       value: ""
     }
   ];
-  const { state, description } = getCheckItemsMeta(items);
+  const { state, description } = getCheckItemsMeta(items2);
   updateCheckStore({
     order,
     code,
     title,
     description,
     state,
-    items
+    items: items2
   });
 }
 
@@ -8915,11 +9005,11 @@ function renderAvailableActions({
 }
 
 // src/forkop/tabs/diagnostic/partials/renderCheckSection.ts
-function renderCheckSummary(items) {
-  if (!items.length) {
+function renderCheckSummary(items2) {
+  if (!items2.length) {
     return E("div", {}, "");
   }
-  const renderedItems = items.map((item) => {
+  const renderedItems = items2.map((item) => {
     function getIcon() {
       const iconWrap = E("span", {
         class: "fkp_diagnostic_alert__summary__item__icon"
@@ -9088,14 +9178,14 @@ function renderRunAction({
 }
 
 // src/forkop/tabs/diagnostic/partials/renderSystemInfo.ts
-function renderSystemInfo({ items }) {
+function renderSystemInfo({ items: items2 }) {
   return E("div", { class: "fkp_diagnostic-page__right-bar__system-info" }, [
     E(
       "b",
       { class: "fkp_diagnostic-page__right-bar__system-info__title" },
       _("System information")
     ),
-    ...items.map((item) => {
+    ...items2.map((item) => {
       const tagClass = [
         "fkp_diagnostic-page__right-bar__system-info__row__tag",
         ...insertIf(item.tag?.kind === "neutral", [
@@ -9202,7 +9292,7 @@ async function runSectionsCheck() {
     });
     throw new Error("Rule outbounds checks failed");
   }
-  const items = [];
+  const items2 = [];
   for (const section of sections.data) {
     async function getLatency() {
       if (section.withTagSelect) {
@@ -9275,14 +9365,14 @@ async function runSectionsCheck() {
       };
     }
     const { latency, state: state2 } = await getLatency();
-    items.push({
+    items2.push({
       state: state2,
       key: section.displayName,
       value: latency
     });
   }
-  const allGood = items.every((item) => item.state === "success");
-  const atLeastOneGood = items.some((item) => item.state !== "error");
+  const allGood = items2.every((item) => item.state === "success");
+  const atLeastOneGood = items2.some((item) => item.state !== "error");
   const { state, description } = getMeta({ atLeastOneGood, allGood });
   updateCheckStore({
     order,
@@ -9290,7 +9380,7 @@ async function runSectionsCheck() {
     title,
     description,
     state,
-    items
+    items: items2
   });
   if (!atLeastOneGood) {
     throw new Error("Rule outbounds checks failed");
@@ -10298,7 +10388,7 @@ function renderDiagnosticSystemInfoWidget() {
   logger.debug("[DIAGNOSTIC]", "renderDiagnosticSystemInfoWidget");
   const diagnosticsSystemInfo = store.get().diagnosticsSystemInfo;
   const container = document.getElementById("fkp_diagnostic-page-system-info");
-  const items = [
+  const items2 = [
     {
       key: "Forkop",
       value: normalizeCompiledVersion(diagnosticsSystemInfo.forkop_version)
@@ -10313,24 +10403,24 @@ function renderDiagnosticSystemInfoWidget() {
     }
   ];
   if (diagnosticsSystemInfo.zapret_installed) {
-    items.push({
+    items2.push({
       key: "Zapret",
       value: diagnosticsSystemInfo.zapret_version
     });
   }
   if (diagnosticsSystemInfo.zapret2_installed) {
-    items.push({
+    items2.push({
       key: "Zapret2",
       value: diagnosticsSystemInfo.zapret2_version
     });
   }
   if (diagnosticsSystemInfo.byedpi_installed) {
-    items.push({
+    items2.push({
       key: "ByeDPI",
       value: diagnosticsSystemInfo.byedpi_version
     });
   }
-  items.push(
+  items2.push(
     {
       key: "OS",
       value: diagnosticsSystemInfo.openwrt_version
@@ -10341,7 +10431,7 @@ function renderDiagnosticSystemInfoWidget() {
     }
   );
   const renderedSystemInfo = renderSystemInfo({
-    items
+    items: items2
   });
   return preserveScrollForPage(() => {
     container.replaceChildren(renderedSystemInfo);
@@ -11297,10 +11387,10 @@ function getKnownSourceIps() {
   });
 }
 function renderDeviceFilterOptions() {
-  const select = document.getElementById(
+  const select2 = document.getElementById(
     "monitoring-device-filter"
   );
-  if (!select) {
+  if (!select2) {
     return;
   }
   const sourceIps = getKnownSourceIps();
@@ -11312,7 +11402,7 @@ function renderDeviceFilterOptions() {
     ...sourceIps.map((ip) => `${ip}:${getDeviceFilterLabel(ip)}`)
   ].join("|");
   if (signature === lastDeviceFilterSignature) {
-    select.value = selectedDeviceFilter;
+    select2.value = selectedDeviceFilter;
     return;
   }
   lastDeviceFilterSignature = signature;
@@ -11322,8 +11412,8 @@ function renderDeviceFilterOptions() {
       (ip) => E("option", { value: ip }, getDeviceFilterLabel(ip))
     )
   ];
-  select.replaceChildren(...options);
-  select.value = selectedDeviceFilter;
+  select2.replaceChildren(...options);
+  select2.value = selectedDeviceFilter;
 }
 function setButtonActive(button, active) {
   if (!button) {
@@ -11388,14 +11478,14 @@ function renderControls() {
     searchIcon.replaceChildren(renderSearchIcon24());
   }
   renderDeviceFilterOptions();
-  const select = document.getElementById(
+  const select2 = document.getElementById(
     "monitoring-device-filter"
   );
   const searchInput = document.getElementById(
     "monitoring-search"
   );
-  if (select) {
-    select.disabled = serviceAvailability === "stopped";
+  if (select2) {
+    select2.disabled = serviceAvailability === "stopped";
   }
   if (searchInput) {
     searchInput.disabled = serviceAvailability === "stopped";
@@ -11815,7 +11905,7 @@ async function closeAllConnections() {
 function bindControls() {
   const activeButton = document.getElementById("monitoring-tab-active");
   const closedButton = document.getElementById("monitoring-tab-closed");
-  const select = document.getElementById(
+  const select2 = document.getElementById(
     "monitoring-device-filter"
   );
   const searchInput = document.getElementById(
@@ -11843,9 +11933,9 @@ function bindControls() {
       pauseToggleButton.blur();
     };
   }
-  if (select) {
-    select.onchange = () => {
-      selectedDeviceFilter = select.value || ALL_FILTER_VALUE;
+  if (select2) {
+    select2.onchange = () => {
+      selectedDeviceFilter = select2.value || ALL_FILTER_VALUE;
       renderConnections();
     };
   }
@@ -13943,7 +14033,7 @@ var UpdatesTab = {
 };
 
 // src/styles.ts
-var GlobalStyles = `
+var GlobalStyles = `${nextStyles}
 ${DashboardTab.styles}
 ${DiagnosticTab.styles}
 ${MonitoringTab.styles}
@@ -14118,6 +14208,1007 @@ function injectGlobalStyles() {
   );
 }
 
+// src/forkop/next/tools.ts
+function renderDeviceProfileTools(request) {
+  const root = document.createElement("section");
+  root.className = "fkp-next-panel";
+  const heading = (text) => {
+    const h = document.createElement("h3");
+    h.textContent = text;
+    root.append(h);
+  };
+  const note = (text) => {
+    const p = document.createElement("p");
+    p.textContent = text;
+    root.append(p);
+  };
+  const field = (tag, name2) => {
+    const label = document.createElement("label");
+    label.textContent = name2;
+    const input2 = document.createElement(tag);
+    input2.setAttribute("aria-label", name2);
+    label.append(input2);
+    root.append(label);
+    return input2;
+  };
+  const result = (name2) => {
+    const output = document.createElement("output");
+    output.setAttribute("aria-label", name2);
+    output.setAttribute("aria-live", "polite");
+    root.append(output);
+    return output;
+  };
+  const options = (select2, items2) => {
+    const previous = select2.value;
+    select2.replaceChildren();
+    for (const item of [{ value: "", label: "\u0412\u044B\u0431\u0435\u0440\u0438\u0442\u0435\u2026" }, ...items2]) {
+      const option = document.createElement("option");
+      option.value = item.value;
+      option.textContent = item.label;
+      select2.append(option);
+    }
+    if (items2.some((item) => item.value === previous)) select2.value = previous;
+  };
+  const call = async (action, payload) => {
+    const response = await request(action, payload);
+    if (!response.success) throw new Error(response.error || "request_failed");
+    return response.data;
+  };
+  const button = (text, output, task) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = text;
+    b.addEventListener("click", async () => {
+      b.disabled = true;
+      output.textContent = "\u0417\u0430\u0433\u0440\u0443\u0437\u043A\u0430\u2026";
+      output.setAttribute("aria-busy", "true");
+      try {
+        await task();
+      } catch (error) {
+        output.textContent = error instanceof Error ? error.message : "request_failed";
+      } finally {
+        b.disabled = false;
+        output.setAttribute("aria-busy", "false");
+      }
+    });
+    root.append(b);
+    return b;
+  };
+  heading("\u0423\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430");
+  const devices = document.createElement("ul");
+  root.append(devices);
+  const device = field("input", "\u0410\u0434\u0440\u0435\u0441 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430");
+  const route = field("select", "\u041C\u0430\u0440\u0448\u0440\u0443\u0442 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430");
+  options(route, []);
+  const deviceResult = result("\u0420\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430");
+  const loadDevices = async () => {
+    const data = await call("devices", {});
+    devices.replaceChildren();
+    for (const item of data.items) {
+      const li = document.createElement("li");
+      li.textContent = `${item.address} \u2192 ${item.section}`;
+      devices.append(li);
+    }
+    if (!data.items.length)
+      devices.textContent = "\u041C\u0430\u0440\u0448\u0440\u0443\u0442\u044B \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432 \u043F\u043E\u043A\u0430 \u043D\u0435 \u0437\u0430\u0434\u0430\u043D\u044B.";
+  };
+  button("\u0421\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u044C \u043C\u0430\u0440\u0448\u0440\u0443\u0442 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430", deviceResult, async () => {
+    if (!device.value.trim() || !route.value)
+      throw new Error("\u0422\u0440\u0435\u0431\u0443\u044E\u0442\u0441\u044F \u0430\u0434\u0440\u0435\u0441 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430 \u0438 \u043C\u0430\u0440\u0448\u0440\u0443\u0442");
+    await call("device_set", {
+      address: device.value.trim(),
+      section: route.value
+    });
+    deviceResult.textContent = "\u041C\u0430\u0440\u0448\u0440\u0443\u0442 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430 \u0441\u043E\u0445\u0440\u0430\u043D\u0451\u043D.";
+    try {
+      await loadDevices();
+    } catch {
+      deviceResult.textContent += " \u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u043E\u0431\u043D\u043E\u0432\u0438\u0442\u044C \u0441\u043F\u0438\u0441\u043E\u043A \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432.";
+    }
+  });
+  button("\u041E\u0431\u043D\u043E\u0432\u0438\u0442\u044C \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430", deviceResult, async () => {
+    await loadDevices();
+    deviceResult.textContent = "\u0421\u043F\u0438\u0441\u043E\u043A \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432 \u043E\u0431\u043D\u043E\u0432\u043B\u0451\u043D.";
+  });
+  heading("\u0418\u0433\u0440\u043E\u0432\u044B\u0435 \u043F\u0440\u0435\u0441\u0435\u0442\u044B");
+  note(
+    "\u041F\u0440\u0435\u0441\u0435\u0442\u044B \u043D\u0430\u043F\u0440\u0430\u0432\u043B\u044F\u044E\u0442 \u0434\u043E\u043C\u0435\u043D\u044B \u043C\u0430\u0433\u0430\u0437\u0438\u043D\u043E\u0432 \u0438 \u0437\u0430\u0433\u0440\u0443\u0437\u043E\u043A. \u0418\u0433\u0440\u043E\u0432\u044B\u0435 \u0441\u0435\u0441\u0441\u0438\u0438 \u0441\u043E\u0445\u0440\u0430\u043D\u044F\u044E\u0442 \u0442\u0435\u043A\u0443\u0449\u0443\u044E \u043C\u0430\u0440\u0448\u0440\u0443\u0442\u0438\u0437\u0430\u0446\u0438\u044E."
+  );
+  const gamingDevice = field("input", "\u0418\u0433\u0440\u043E\u0432\u043E\u0435 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u043E");
+  const preset = field("select", "\u0418\u0433\u0440\u043E\u0432\u043E\u0439 \u043F\u0440\u0435\u0441\u0435\u0442");
+  options(preset, [
+    { value: "steam", label: "Steam" },
+    { value: "playstation", label: "PlayStation" },
+    { value: "xbox", label: "Xbox" }
+  ]);
+  const gamingRoute = field("select", "\u0418\u0433\u0440\u043E\u0432\u043E\u0439 \u043C\u0430\u0440\u0448\u0440\u0443\u0442");
+  options(gamingRoute, []);
+  const gamingResult = result("\u0420\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442 \u0438\u0433\u0440\u043E\u0432\u043E\u0433\u043E \u043F\u0440\u0435\u0441\u0435\u0442\u0430");
+  button("\u041F\u0440\u0438\u043C\u0435\u043D\u0438\u0442\u044C \u0438\u0433\u0440\u043E\u0432\u043E\u0439 \u043F\u0440\u0435\u0441\u0435\u0442", gamingResult, async () => {
+    if (!preset.value || !gamingRoute.value)
+      throw new Error("\u0422\u0440\u0435\u0431\u0443\u044E\u0442\u0441\u044F \u0438\u0433\u0440\u043E\u0432\u043E\u0439 \u043F\u0440\u0435\u0441\u0435\u0442 \u0438 \u043C\u0430\u0440\u0448\u0440\u0443\u0442");
+    const payload = {
+      preset: preset.value,
+      section: gamingRoute.value
+    };
+    if (gamingDevice.value.trim()) payload.device = gamingDevice.value.trim();
+    await call("gaming_apply", payload);
+    gamingResult.textContent = "\u0418\u0433\u0440\u043E\u0432\u043E\u0439 \u043F\u0440\u0435\u0441\u0435\u0442 \u043F\u0440\u0438\u043C\u0435\u043D\u0451\u043D.";
+  });
+  heading("\u0418\u043C\u043F\u043E\u0440\u0442 \u0438 \u044D\u043A\u0441\u043F\u043E\u0440\u0442 \u043F\u0440\u043E\u0444\u0438\u043B\u0435\u0439");
+  note(
+    "\u042D\u043A\u0441\u043F\u043E\u0440\u0442 \u0441\u043E\u0434\u0435\u0440\u0436\u0438\u0442 \u043F\u0430\u0440\u043E\u043B\u0438 \u0438 \u043A\u043B\u044E\u0447\u0438. \u0425\u0440\u0430\u043D\u0438\u0442\u0435 \u0444\u0430\u0439\u043B \u0432 \u0437\u0430\u0449\u0438\u0449\u0451\u043D\u043D\u043E\u043C \u043C\u0435\u0441\u0442\u0435. \u0418\u043C\u043F\u043E\u0440\u0442 \u0441\u043E\u0445\u0440\u0430\u043D\u044F\u0435\u0442 \u043F\u0440\u043E\u0444\u0438\u043B\u044C \u0431\u0435\u0437 \u0430\u043A\u0442\u0438\u0432\u0430\u0446\u0438\u0438."
+  );
+  const exportName = field("select", "\u041F\u0440\u043E\u0444\u0438\u043B\u044C \u0434\u043B\u044F \u044D\u043A\u0441\u043F\u043E\u0440\u0442\u0430");
+  options(exportName, []);
+  const profileResult = result("\u0420\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442 \u043F\u0440\u043E\u0444\u0438\u043B\u044F");
+  const loadProfiles = async () => {
+    const data = await call("profile_list", {});
+    options(
+      exportName,
+      data.items.map((item) => ({ value: item.name, label: item.name }))
+    );
+  };
+  button("\u0421\u043A\u0430\u0447\u0430\u0442\u044C \u043F\u0440\u043E\u0444\u0438\u043B\u044C", profileResult, async () => {
+    if (!exportName.value) throw new Error("\u0422\u0440\u0435\u0431\u0443\u0435\u0442\u0441\u044F \u043F\u0440\u043E\u0444\u0438\u043B\u044C \u0434\u043B\u044F \u044D\u043A\u0441\u043F\u043E\u0440\u0442\u0430");
+    const data = await call("profile_export", { name: exportName.value });
+    if (typeof data.config !== "string") throw new Error("invalid_response");
+    const url = URL.createObjectURL(
+      new Blob([data.config], { type: "text/plain;charset=utf-8" })
+    );
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `${data.name.replace(/[^a-zA-Z0-9_.-]/g, "_")}.uci`;
+    anchor.hidden = true;
+    root.append(anchor);
+    try {
+      anchor.click();
+      profileResult.textContent = "\u0421\u043A\u0430\u0447\u0438\u0432\u0430\u043D\u0438\u0435 \u043F\u0440\u043E\u0444\u0438\u043B\u044F \u043D\u0430\u0447\u0430\u0442\u043E.";
+    } finally {
+      anchor.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 0);
+    }
+  });
+  const name = field("input", "\u041D\u0430\u0437\u0432\u0430\u043D\u0438\u0435 \u0438\u043C\u043F\u043E\u0440\u0442\u0438\u0440\u0443\u0435\u043C\u043E\u0433\u043E \u043F\u0440\u043E\u0444\u0438\u043B\u044F");
+  const file = field("input", "\u0424\u0430\u0439\u043B \u043F\u0440\u043E\u0444\u0438\u043B\u044F");
+  file.type = "file";
+  file.accept = ".uci,.conf,.txt";
+  const config = field("textarea", "\u041A\u043E\u043D\u0444\u0438\u0433\u0443\u0440\u0430\u0446\u0438\u044F \u043F\u0440\u043E\u0444\u0438\u043B\u044F");
+  config.rows = 5;
+  config.autocomplete = "off";
+  file.addEventListener("change", async () => {
+    const selected = file.files?.[0];
+    if (!selected) return;
+    try {
+      config.value = await selected.text();
+      if (!name.value.trim())
+        name.value = selected.name.replace(/\.[^.]+$/, "");
+      profileResult.textContent = "\u0424\u0430\u0439\u043B \u0437\u0430\u0433\u0440\u0443\u0436\u0435\u043D. \u041F\u0440\u043E\u0432\u0435\u0440\u044C\u0442\u0435 \u043A\u043E\u043D\u0444\u0438\u0433\u0443\u0440\u0430\u0446\u0438\u044E \u0438 \u0438\u043C\u043F\u043E\u0440\u0442\u0438\u0440\u0443\u0439\u0442\u0435 \u043F\u0440\u043E\u0444\u0438\u043B\u044C.";
+    } catch {
+      profileResult.textContent = "file_read_failed";
+    }
+  });
+  button("\u0418\u043C\u043F\u043E\u0440\u0442\u0438\u0440\u043E\u0432\u0430\u0442\u044C \u043F\u0440\u043E\u0444\u0438\u043B\u044C", profileResult, async () => {
+    if (!name.value.trim() || !config.value.trim())
+      throw new Error("\u0422\u0440\u0435\u0431\u0443\u044E\u0442\u0441\u044F \u043D\u0430\u0437\u0432\u0430\u043D\u0438\u0435 \u043F\u0440\u043E\u0444\u0438\u043B\u044F \u0438 \u043A\u043E\u043D\u0444\u0438\u0433\u0443\u0440\u0430\u0446\u0438\u044F");
+    await call("profile_import", {
+      name: name.value.trim(),
+      config: config.value
+    });
+    config.value = "";
+    file.value = "";
+    profileResult.textContent = "\u041F\u0440\u043E\u0444\u0438\u043B\u044C \u0438\u043C\u043F\u043E\u0440\u0442\u0438\u0440\u043E\u0432\u0430\u043D \u0431\u0435\u0437 \u0430\u043A\u0442\u0438\u0432\u0430\u0446\u0438\u0438.";
+    root.dispatchEvent(
+      new CustomEvent("forkop:profiles-changed", { bubbles: true })
+    );
+    try {
+      await loadProfiles();
+    } catch {
+      profileResult.textContent += " \u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u043E\u0431\u043D\u043E\u0432\u0438\u0442\u044C \u0441\u043F\u0438\u0441\u043E\u043A \u043F\u0440\u043E\u0444\u0438\u043B\u0435\u0439.";
+    }
+  });
+  button("\u041E\u0431\u043D\u043E\u0432\u0438\u0442\u044C \u043F\u0440\u043E\u0444\u0438\u043B\u0438", profileResult, async () => {
+    await loadProfiles();
+    profileResult.textContent = "\u0421\u043F\u0438\u0441\u043E\u043A \u043F\u0440\u043E\u0444\u0438\u043B\u0435\u0439 \u043E\u0431\u043D\u043E\u0432\u043B\u0451\u043D.";
+  });
+  deviceResult.textContent = "\u0417\u0430\u0433\u0440\u0443\u0437\u043A\u0430 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u2026";
+  void loadDevices().then(() => {
+    deviceResult.textContent = "";
+  }).catch((error) => {
+    deviceResult.textContent = error instanceof Error ? error.message : "device_read_failed";
+  });
+  profileResult.textContent = "\u0417\u0430\u0433\u0440\u0443\u0437\u043A\u0430 \u043F\u0440\u043E\u0444\u0438\u043B\u0435\u0439\u2026";
+  void loadProfiles().then(() => {
+    profileResult.textContent = "";
+  }).catch((error) => {
+    profileResult.textContent = error instanceof Error ? error.message : "profile_read_failed";
+  });
+  void call("status", {}).then((raw) => {
+    const data = raw;
+    const items2 = data.sections.map((section) => ({
+      value: section.name,
+      label: section.label || section.name
+    }));
+    options(route, [
+      { value: "direct", label: "\u041D\u0430\u043F\u0440\u044F\u043C\u0443\u044E" },
+      ...items2.filter((item) => item.value !== "direct")
+    ]);
+    options(gamingRoute, items2);
+  }).catch(() => {
+    gamingResult.textContent = "\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0437\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044C \u043C\u0430\u0440\u0448\u0440\u0443\u0442\u044B. \u041E\u0431\u043D\u043E\u0432\u0438\u0442\u0435 \u043F\u0430\u043D\u0435\u043B\u044C \u0434\u043B\u044F \u043F\u043E\u0432\u0442\u043E\u0440\u043D\u043E\u0439 \u043F\u043E\u043F\u044B\u0442\u043A\u0438.";
+  });
+  return root;
+}
+
+// src/forkop/next/compatibility.ts
+var object = (v) => v && typeof v === "object" ? v : {};
+function renderCompatibilityPanel(request) {
+  const root = document.createElement("section");
+  root.className = "fkp-next-panel";
+  const text = (tag, value) => {
+    const e = document.createElement(tag);
+    e.textContent = value;
+    return e;
+  };
+  root.append(
+    text("h3", "\u0421\u043E\u0432\u043C\u0435\u0441\u0442\u0438\u043C\u043E\u0441\u0442\u044C \u0441 3x-ui \u0438 Xray"),
+    text(
+      "p",
+      "\u0421\u043E\u043F\u043E\u0441\u0442\u0430\u0432\u044C\u0442\u0435 \u0442\u0440\u0430\u043D\u0441\u043F\u043E\u0440\u0442, flow, \u0448\u0438\u0444\u0440\u043E\u0432\u0430\u043D\u0438\u0435 \u0438 TLS, \u0437\u0430\u0442\u0435\u043C \u043F\u0440\u043E\u0432\u0435\u0440\u044C\u0442\u0435 \u0440\u0435\u0430\u043B\u044C\u043D\u043E\u0435 \u0441\u043E\u0435\u0434\u0438\u043D\u0435\u043D\u0438\u0435. \u0412\u0435\u0440\u0441\u0438\u0438 \u0441\u0430\u043C\u0438 \u043F\u043E \u0441\u0435\u0431\u0435 \u043D\u0435 \u043F\u043E\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0430\u044E\u0442 \u0441\u043E\u0432\u043C\u0435\u0441\u0442\u0438\u043C\u043E\u0441\u0442\u044C."
+    )
+  );
+  const sectionLabel = text("label", "\u041F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435");
+  const section = document.createElement("select");
+  sectionLabel.append(section);
+  const outboundLabel = text("label", "\u0421\u0435\u0440\u0432\u0435\u0440 \u0434\u043B\u044F \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0438");
+  const outbound = document.createElement("select");
+  outboundLabel.append(outbound);
+  const domainLabel = text("label", "\u0421\u0430\u0439\u0442 \u0434\u043B\u044F \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0438 \u0441\u043E\u0435\u0434\u0438\u043D\u0435\u043D\u0438\u044F");
+  const domain = document.createElement("input");
+  domain.name = "compatibility_domain";
+  domain.placeholder = "example.org";
+  domainLabel.append(domain);
+  const serverLabel = text("label", "\u041F\u0430\u0440\u0430\u043C\u0435\u0442\u0440\u044B \u0441\u0435\u0440\u0432\u0435\u0440\u0430 (JSON, \u043D\u0435\u043E\u0431\u044F\u0437\u0430\u0442\u0435\u043B\u044C\u043D\u043E)");
+  const server = document.createElement("textarea");
+  server.rows = 4;
+  server.autocomplete = "off";
+  server.spellcheck = false;
+  serverLabel.append(server);
+  const help = text(
+    "p",
+    "\u041C\u043E\u0436\u043D\u043E \u0432\u0441\u0442\u0430\u0432\u0438\u0442\u044C \u043F\u0430\u0440\u0430\u043C\u0435\u0442\u0440\u044B \u0432\u0445\u043E\u0434\u044F\u0449\u0435\u0433\u043E \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u044F \u0438\u0437 3x-ui. \u0414\u0430\u043D\u043D\u044B\u0435 \u0438\u0441\u043F\u043E\u043B\u044C\u0437\u0443\u044E\u0442\u0441\u044F \u0434\u043B\u044F \u0441\u043E\u043F\u043E\u0441\u0442\u0430\u0432\u043B\u0435\u043D\u0438\u044F; \u043F\u0430\u0440\u043E\u043B\u0438 \u0438 \u043A\u043B\u044E\u0447\u0438 \u043D\u0435 \u0432\u044B\u0432\u043E\u0434\u044F\u0442\u0441\u044F \u0432 \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442\u0430\u0445."
+  );
+  const result = text("div", "\u041F\u0440\u043E\u0432\u0435\u0440\u043A\u0430 \u043D\u0435 \u0432\u044B\u043F\u043E\u043B\u043D\u044F\u043B\u0430\u0441\u044C");
+  result.className = "fkp-next-result";
+  result.setAttribute("role", "status");
+  root.append(
+    sectionLabel,
+    outboundLabel,
+    domainLabel,
+    serverLabel,
+    help,
+    result
+  );
+  function button(label, work) {
+    const b = text("button", label);
+    b.type = "button";
+    b.onclick = async () => {
+      b.disabled = true;
+      try {
+        await work();
+      } catch {
+        result.textContent = "\u041D\u0435\u0442 \u0441\u0432\u044F\u0437\u0438 \u0441 \u0440\u043E\u0443\u0442\u0435\u0440\u043E\u043C. \u041F\u043E\u0432\u0442\u043E\u0440\u0438\u0442\u0435 \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0443.";
+      } finally {
+        b.disabled = false;
+      }
+    };
+    root.append(b);
+    return b;
+  }
+  const comparison = async (probe = false) => {
+    const payload = { section: section.value };
+    if (outbound.value) payload.outbound_tag = outbound.value;
+    if (server.value.trim()) {
+      try {
+        const value = JSON.parse(server.value);
+        if (!value || typeof value !== "object" || Array.isArray(value))
+          throw new Error();
+        payload.server = value;
+      } catch {
+        result.textContent = "\u041F\u0440\u043E\u0432\u0435\u0440\u044C\u0442\u0435 JSON \u043F\u0430\u0440\u0430\u043C\u0435\u0442\u0440\u043E\u0432 \u0441\u0435\u0440\u0432\u0435\u0440\u0430.";
+        return;
+      }
+    }
+    if (probe) {
+      if (!domain.value.trim() || !outbound.value) {
+        result.textContent = "\u0421\u043D\u0430\u0447\u0430\u043B\u0430 \u0441\u043E\u043F\u043E\u0441\u0442\u0430\u0432\u044C\u0442\u0435 \u043D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438, \u0432\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u0441\u0435\u0440\u0432\u0435\u0440 \u0438 \u0443\u043A\u0430\u0436\u0438\u0442\u0435 \u0441\u0430\u0439\u0442 \u0434\u043B\u044F \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0438.";
+        return;
+      }
+      payload.probe = true;
+      payload.domain = domain.value.trim();
+    }
+    result.textContent = probe ? "\u041F\u0440\u043E\u0432\u0435\u0440\u044F\u0435\u043C \u0441\u043E\u0435\u0434\u0438\u043D\u0435\u043D\u0438\u0435\u2026" : "\u0421\u043E\u043F\u043E\u0441\u0442\u0430\u0432\u043B\u044F\u0435\u043C \u043F\u0430\u0440\u0430\u043C\u0435\u0442\u0440\u044B\u2026";
+    const response = await request("compatibility_check", payload);
+    if (!response.success) {
+      result.textContent = `\u041F\u0440\u043E\u0432\u0435\u0440\u043A\u0430 \u043D\u0435 \u0432\u044B\u043F\u043E\u043B\u043D\u0435\u043D\u0430: ${response.error || "\u043D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043D\u0430\u044F \u043E\u0448\u0438\u0431\u043A\u0430"}`;
+      return;
+    }
+    const data = object(response.data);
+    const oldOutbound = outbound.value;
+    outbound.replaceChildren();
+    for (const raw of Array.isArray(data.outbounds) ? data.outbounds : []) {
+      const item = object(raw);
+      const option = text("option", String(item.label || item.outbound_tag));
+      option.value = String(item.outbound_tag);
+      outbound.append(option);
+    }
+    outbound.value = [...outbound.options].some((o) => o.value === oldOutbound) ? oldOutbound : outbound.options[0]?.value || "";
+    handshake.disabled = !outbound.value;
+    const status = String(data.status);
+    const labels = {
+      probe_required: "\u041D\u0443\u0436\u043D\u0430 \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0430 \u0441\u043E\u0435\u0434\u0438\u043D\u0435\u043D\u0438\u044F",
+      unsupported: "\u041E\u0431\u043D\u0430\u0440\u0443\u0436\u0435\u043D\u044B \u043D\u0435\u0441\u043E\u0432\u043C\u0435\u0441\u0442\u0438\u043C\u044B\u0435 \u043F\u0430\u0440\u0430\u043C\u0435\u0442\u0440\u044B",
+      verified: "\u0421\u043E\u0435\u0434\u0438\u043D\u0435\u043D\u0438\u0435 \u043F\u0440\u043E\u0432\u0435\u0440\u0435\u043D\u043E"
+    };
+    result.replaceChildren(
+      text("strong", labels[status] || "\u0421\u043E\u0432\u043C\u0435\u0441\u0442\u0438\u043C\u043E\u0441\u0442\u044C \u043D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043D\u0430")
+    );
+    const versions = object(data.client), remote = object(data.server);
+    result.append(
+      text(
+        "p",
+        `sing-box: ${versions.version || "\u043D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043D\u043E"} \xB7 3x-ui: ${remote.panel_version || "\u043D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043D\u043E"} \xB7 Xray: ${remote.xray_version || "\u043D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043D\u043E"}`
+      )
+    );
+    const checks = document.createElement("ul");
+    for (const raw of Array.isArray(data.checks) ? data.checks : []) {
+      const c = object(raw);
+      checks.append(
+        text(
+          "li",
+          `${c.capability || "\u041F\u0430\u0440\u0430\u043C\u0435\u0442\u0440"}: ${c.status || "unknown"} \u2014 ${c.detail || ""}${c.next_step ? " \xB7 " + c.next_step : ""}`
+        )
+      );
+    }
+    result.append(checks);
+    if (data.probe) {
+      const p = object(data.probe);
+      result.append(
+        text(
+          "p",
+          `\u0421\u043E\u0435\u0434\u0438\u043D\u0435\u043D\u0438\u0435: ${p.reachable ? "\u0435\u0441\u0442\u044C \u0441\u0435\u0442\u0435\u0432\u043E\u0439 \u043E\u0442\u0432\u0435\u0442" : "\u043D\u0435 \u043F\u043E\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043D\u043E"} \xB7 HTTP ${p.http_status || "\u2014"} \xB7 ${p.duration_ms ?? "\u2014"} \u043C\u0441`
+        )
+      );
+    }
+    result.append(
+      text(
+        "p",
+        "\u041F\u0440\u043E\u0432\u0435\u0440\u043A\u0430 \u043E\u0442\u043D\u043E\u0441\u0438\u0442\u0441\u044F \u043A \u0432\u044B\u0431\u0440\u0430\u043D\u043D\u043E\u043C\u0443 \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u044E. \u0414\u043E\u0441\u0442\u0443\u043F \u043A \u0430\u043A\u043A\u0430\u0443\u043D\u0442\u0443 \u0438 \u0432\u0441\u0435\u043C \u0444\u0443\u043D\u043A\u0446\u0438\u044F\u043C \u0441\u0430\u0439\u0442\u0430 \u043E\u0442\u0434\u0435\u043B\u044C\u043D\u043E \u043D\u0435 \u043F\u0440\u043E\u0432\u0435\u0440\u044F\u0435\u0442\u0441\u044F."
+      )
+    );
+  };
+  button("\u0421\u043E\u043F\u043E\u0441\u0442\u0430\u0432\u0438\u0442\u044C \u043D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438", () => comparison(false));
+  const handshake = button("\u041F\u0440\u043E\u0432\u0435\u0440\u0438\u0442\u044C \u0441\u043E\u0435\u0434\u0438\u043D\u0435\u043D\u0438\u0435", () => comparison(true));
+  handshake.disabled = true;
+  section.onchange = () => {
+    outbound.replaceChildren();
+    handshake.disabled = true;
+    result.textContent = "\u041F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435 \u0438\u0437\u043C\u0435\u043D\u0435\u043D\u043E. \u0421\u043E\u043F\u043E\u0441\u0442\u0430\u0432\u044C\u0442\u0435 \u043D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438 \u0437\u0430\u043D\u043E\u0432\u043E.";
+  };
+  const updates = text("div", "");
+  updates.className = "fkp-next-result";
+  updates.setAttribute("role", "status");
+  const panelVersionLabel = text(
+    "label",
+    "\u0423\u0441\u0442\u0430\u043D\u043E\u0432\u043B\u0435\u043D\u043D\u0430\u044F \u0432\u0435\u0440\u0441\u0438\u044F 3x-ui (\u0435\u0441\u043B\u0438 \u0438\u0437\u0432\u0435\u0441\u0442\u043D\u0430)"
+  );
+  const panelVersion = document.createElement("input");
+  panelVersion.name = "compatibility_panel_version";
+  panelVersionLabel.append(panelVersion);
+  const xrayVersionLabel = text(
+    "label",
+    "\u0423\u0441\u0442\u0430\u043D\u043E\u0432\u043B\u0435\u043D\u043D\u0430\u044F \u0432\u0435\u0440\u0441\u0438\u044F Xray (\u0435\u0441\u043B\u0438 \u0438\u0437\u0432\u0435\u0441\u0442\u043D\u0430)"
+  );
+  const xrayVersion = document.createElement("input");
+  xrayVersion.name = "compatibility_xray_version";
+  xrayVersionLabel.append(xrayVersion);
+  root.append(panelVersionLabel, xrayVersionLabel);
+  button("\u041F\u0440\u043E\u0432\u0435\u0440\u0438\u0442\u044C \u043E\u0431\u043D\u043E\u0432\u043B\u0435\u043D\u0438\u044F 3x-ui \u0438 Xray", async () => {
+    updates.textContent = "\u041F\u0440\u043E\u0432\u0435\u0440\u044F\u0435\u043C \u043E\u0444\u0438\u0446\u0438\u0430\u043B\u044C\u043D\u044B\u0435 \u0440\u0435\u043B\u0438\u0437\u044B\u2026";
+    const installed = {};
+    if (panelVersion.value.trim()) installed.panel = panelVersion.value.trim();
+    if (xrayVersion.value.trim()) installed.xray = xrayVersion.value.trim();
+    const response = await request(
+      "compatibility_updates",
+      Object.keys(installed).length ? { installed } : {}
+    );
+    if (!response.success) {
+      updates.textContent = `\u041F\u0440\u043E\u0432\u0435\u0440\u043A\u0430 \u043E\u0431\u043D\u043E\u0432\u043B\u0435\u043D\u0438\u0439 \u043D\u0435 \u0432\u044B\u043F\u043E\u043B\u043D\u0435\u043D\u0430: ${response.error || "\u043D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043D\u0430\u044F \u043E\u0448\u0438\u0431\u043A\u0430"}`;
+      return;
+    }
+    updates.replaceChildren();
+    const d = object(response.data);
+    for (const raw of Array.isArray(d.updates) ? d.updates : []) {
+      const u = object(raw);
+      const status = u.status === "update_available" ? "\u0414\u043E\u0441\u0442\u0443\u043F\u043D\u043E \u043E\u0431\u043D\u043E\u0432\u043B\u0435\u043D\u0438\u0435" : u.status === "current" ? "\u0423\u0441\u0442\u0430\u043D\u043E\u0432\u043B\u0435\u043D\u0430 \u0430\u043A\u0442\u0443\u0430\u043B\u044C\u043D\u0430\u044F \u0432\u0435\u0440\u0441\u0438\u044F" : "\u0421\u0442\u0430\u0442\u0443\u0441 \u043E\u0431\u043D\u043E\u0432\u043B\u0435\u043D\u0438\u044F \u043D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u0435\u043D";
+      updates.append(
+        text(
+          "p",
+          `${u.component}: ${status}. \u0423\u0441\u0442\u0430\u043D\u043E\u0432\u043B\u0435\u043D\u043E: ${u.installed || "\u043D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043D\u043E"}, \u043F\u043E\u0441\u043B\u0435\u0434\u043D\u044F\u044F: ${u.latest || "\u043D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043D\u043E"}`
+        )
+      );
+      if (typeof u.url === "string") {
+        try {
+          const url = new URL(u.url);
+          if (url.protocol === "https:" && url.hostname === "github.com") {
+            const link = text("a", "\u041E\u0444\u0438\u0446\u0438\u0430\u043B\u044C\u043D\u044B\u0439 \u0440\u0435\u043B\u0438\u0437");
+            link.href = url.href;
+            link.target = "_blank";
+            link.rel = "noopener noreferrer";
+            updates.append(link);
+          }
+        } catch {
+        }
+      }
+    }
+    updates.append(
+      text(
+        "p",
+        "\u0410\u0432\u0442\u043E\u043C\u0430\u0442\u0438\u0447\u0435\u0441\u043A\u0430\u044F \u0443\u0441\u0442\u0430\u043D\u043E\u0432\u043A\u0430 \u043E\u0442\u043A\u043B\u044E\u0447\u0435\u043D\u0430. \u041E\u0431\u043D\u043E\u0432\u043B\u0435\u043D\u0438\u0435 \u0441\u0435\u0440\u0432\u0435\u0440\u0430 \u0432\u044B\u043F\u043E\u043B\u043D\u044F\u0435\u0442\u0441\u044F \u043E\u0442\u0434\u0435\u043B\u044C\u043D\u043E \u043F\u043E\u0441\u043B\u0435 \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0438 \u0440\u0435\u0437\u0435\u0440\u0432\u043D\u043E\u0439 \u043A\u043E\u043F\u0438\u0438."
+      )
+    );
+  });
+  root.append(updates);
+  void request("status", {}).then((response) => {
+    if (!response.success) {
+      result.textContent = "\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0437\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044C \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u044F. \u041E\u0431\u043D\u043E\u0432\u0438\u0442\u0435 \u0441\u0442\u0440\u0430\u043D\u0438\u0446\u0443.";
+      return;
+    }
+    const sections = object(response.data).sections;
+    for (const raw of Array.isArray(sections) ? sections : []) {
+      const s = object(raw);
+      const option = text("option", String(s.label || s.name));
+      option.value = String(s.name);
+      section.append(option);
+    }
+    section.value = section.options[0]?.value || "";
+  }).catch(
+    () => result.textContent = "\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0437\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044C \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u044F. \u041E\u0431\u043D\u043E\u0432\u0438\u0442\u0435 \u0441\u0442\u0440\u0430\u043D\u0438\u0446\u0443."
+  );
+  return root;
+}
+
+// src/forkop/next/api.ts
+async function nextRequest(action, payload = {}) {
+  const response = await executeShellCommand({
+    command: "/usr/bin/forkop",
+    args: action === "route_explain" ? ["route_explain", JSON.stringify(payload)] : ["next", action, JSON.stringify(payload)],
+    timeout: 6e4,
+    operationName: `Forkop Next ${action}`
+  });
+  try {
+    const value = JSON.parse(response.stdout);
+    if (!value || typeof value.success !== "boolean")
+      return { success: false, error: "invalid_response" };
+    if ((response.code ?? 0) !== 0 && value.success)
+      return { success: false, error: response.stderr || "command_failed" };
+    if (value.success && typeof window !== "undefined" && [
+      "profile_apply",
+      "rollback",
+      "device_set",
+      "gaming_apply",
+      "temporary_add",
+      "temporary_delete",
+      "recommendation_accept",
+      "smart_detect_configure"
+    ].includes(action))
+      window.dispatchEvent(new CustomEvent("forkop:configuration-changed"));
+    return value;
+  } catch {
+    return { success: false, error: response.stderr || "invalid_response" };
+  }
+}
+
+// src/forkop/next/render.ts
+var object2 = (v) => v && typeof v === "object" ? v : {};
+var items = (v) => Array.isArray(object2(v).items) ? object2(v).items : [];
+function el(tag, text = "", className = "") {
+  const node = document.createElement(tag);
+  node.textContent = text;
+  node.className = className;
+  return node;
+}
+function input(name, label, value = "") {
+  const wrap = el("label", label);
+  const node = el("input");
+  node.name = name;
+  node.value = value;
+  wrap.append(node);
+  return { wrap, node };
+}
+function select(label, choices) {
+  const wrap = el("label", label);
+  const node = el("select");
+  for (const [value, text] of choices) {
+    const option = el("option", text);
+    option.value = value;
+    node.append(option);
+  }
+  wrap.append(node);
+  return { wrap, node };
+}
+function renderNextPanel(request = nextRequest, loadConnections) {
+  const root = el("section", "", "fkp-next");
+  root.dataset.mode = "simple";
+  const header = el("header");
+  const title = el("div");
+  title.append(
+    el("h2", "Forkop Next"),
+    el("p", "\u041F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u044F, \u043F\u0440\u0430\u0432\u0438\u043B\u0430 \u0438 \u0432\u043E\u0441\u0441\u0442\u0430\u043D\u043E\u0432\u043B\u0435\u043D\u0438\u0435 \u2014 \u043F\u043E\u0434 \u0432\u0430\u0448\u0438\u043C \u043A\u043E\u043D\u0442\u0440\u043E\u043B\u0435\u043C.")
+  );
+  const mode = el("button", "\u041F\u043E\u0434\u0440\u043E\u0431\u043D\u044B\u0439 \u0440\u0435\u0436\u0438\u043C");
+  mode.type = "button";
+  mode.onclick = () => {
+    const detailed = root.dataset.mode === "simple";
+    root.dataset.mode = detailed ? "detailed" : "simple";
+    mode.textContent = detailed ? "\u041F\u0440\u043E\u0441\u0442\u043E\u0439 \u0440\u0435\u0436\u0438\u043C" : "\u041F\u043E\u0434\u0440\u043E\u0431\u043D\u044B\u0439 \u0440\u0435\u0436\u0438\u043C";
+    root.querySelectorAll("[data-detail]").forEach((node) => node.hidden = !detailed);
+  };
+  const theme = select("\u0422\u0435\u043C\u0430", [
+    ["auto", "\u041A\u0430\u043A \u0432 LuCI"],
+    ["light", "\u0421\u0432\u0435\u0442\u043B\u0430\u044F"],
+    ["dark", "\u0422\u0451\u043C\u043D\u0430\u044F"]
+  ]);
+  theme.node.onchange = () => root.dataset.theme = theme.node.value;
+  header.append(title, mode, theme.wrap);
+  root.append(header);
+  const message = el("p", "", "fkp-next-notice");
+  message.setAttribute("role", "status");
+  message.setAttribute("aria-live", "polite");
+  const status = el("p", "\u0417\u0430\u0433\u0440\u0443\u0436\u0430\u0435\u043C \u0441\u043E\u0441\u0442\u043E\u044F\u043D\u0438\u0435\u2026", "fkp-next-status");
+  root.append(status, message);
+  const summary = el("p", "", "fkp-next-summary");
+  root.append(summary);
+  async function refreshConnections() {
+    if (!loadConnections) return;
+    try {
+      const r = await loadConnections();
+      if (!r.success) {
+        summary.textContent = "\u041F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u044F \u043D\u0435\u0434\u043E\u0441\u0442\u0443\u043F\u043D\u044B. \u041F\u0440\u043E\u0432\u0435\u0440\u044C\u0442\u0435 \u0441\u043E\u0441\u0442\u043E\u044F\u043D\u0438\u0435 \u0441\u0435\u0440\u0432\u0438\u0441\u0430 \u043D\u0430 \u0432\u043A\u043B\u0430\u0434\u043A\u0435 Dashboard.";
+        return;
+      }
+      summary.replaceChildren();
+      for (const group2 of r.data || []) {
+        const node = group2.outbounds.find((o) => o.selected);
+        if (node)
+          summary.append(
+            el(
+              "span",
+              `${group2.displayName}: ${node.displayName} \xB7 ${node.latency > 0 ? `${node.latency} \u043C\u0441` : "\u0437\u0430\u0434\u0435\u0440\u0436\u043A\u0430 \u043D\u0435 \u0438\u0437\u043C\u0435\u0440\u0435\u043D\u0430"}${node.latencyTestedAt ? " \xB7 \u043F\u0440\u043E\u0432\u0435\u0440\u0435\u043D\u043E " + new Date(node.latencyTestedAt).toLocaleString() : ""}`
+            )
+          );
+      }
+    } catch {
+      summary.textContent = "\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u043E\u0431\u043D\u043E\u0432\u0438\u0442\u044C \u0432\u044B\u0431\u0440\u0430\u043D\u043D\u044B\u0435 \u0441\u0435\u0440\u0432\u0435\u0440\u044B.";
+    }
+  }
+  const content = el("div", "", "fkp-next-content");
+  root.append(content);
+  let digest = "";
+  let sections = [];
+  let previewName = "";
+  const sectionSelects = [];
+  function connection(label = "\u041F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435") {
+    const s = select(label, sections);
+    sectionSelects.push(s.node);
+    return s;
+  }
+  function panel(title2, help) {
+    const p = el("section", "", "fkp-next-panel");
+    p.append(el("h3", title2), el("p", help, "fkp-next-help"));
+    content.append(p);
+    return p;
+  }
+  async function invoke(action2, payload = {}, output) {
+    message.textContent = "\u0412\u044B\u043F\u043E\u043B\u043D\u044F\u0435\u043C\u2026";
+    root.setAttribute("aria-busy", "true");
+    try {
+      const result = await request(action2, payload);
+      message.textContent = result.success ? "\u0413\u043E\u0442\u043E\u0432\u043E" : `\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0432\u044B\u043F\u043E\u043B\u043D\u0438\u0442\u044C \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u0435: ${result.error || "\u043D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043D\u0430\u044F \u043E\u0448\u0438\u0431\u043A\u0430"}`;
+      if (output)
+        output.textContent = JSON.stringify(
+          result.data ?? { error: result.error },
+          null,
+          2
+        );
+      return result;
+    } catch {
+      message.textContent = "\u041D\u0435\u0442 \u0441\u0432\u044F\u0437\u0438 \u0441 \u0440\u043E\u0443\u0442\u0435\u0440\u043E\u043C. \u041F\u043E\u0432\u0442\u043E\u0440\u0438\u0442\u0435 \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u0435.";
+      return { success: false, error: "connection_failed" };
+    } finally {
+      root.setAttribute("aria-busy", "false");
+    }
+  }
+  function action(text, handler) {
+    const b = el("button", text);
+    b.type = "button";
+    b.onclick = async () => {
+      b.disabled = true;
+      try {
+        await handler();
+      } finally {
+        b.disabled = b === apply && (!previewName || previewName !== profile.node.value);
+      }
+    };
+    return b;
+  }
+  const route = panel(
+    "\u041F\u043E\u0447\u0435\u043C\u0443 \u0441\u0430\u0439\u0442 \u0438\u0434\u0451\u0442 \u0442\u0430\u043A?",
+    "\u041F\u0440\u043E\u0432\u0435\u0440\u043A\u0430 \u043F\u0440\u0430\u0432\u0438\u043B \u043E\u0431\u044A\u044F\u0441\u043D\u044F\u0435\u0442 \u043C\u0430\u0440\u0448\u0440\u0443\u0442. \u0414\u043E\u0441\u0442\u0443\u043F\u043D\u043E\u0441\u0442\u044C \u043F\u0440\u043E\u0432\u0435\u0440\u044F\u0435\u0442\u0441\u044F \u043E\u0442\u0434\u0435\u043B\u044C\u043D\u044B\u043C \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u0435\u043C."
+  );
+  const domain = input("domain", "\u0414\u043E\u043C\u0435\u043D");
+  domain.node.placeholder = "example.org";
+  const device = input("device", "IP \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430 (\u043D\u0435\u043E\u0431\u044F\u0437\u0430\u0442\u0435\u043B\u044C\u043D\u043E)");
+  const routeResult = el("div", "", "fkp-next-result");
+  routeResult.setAttribute("aria-live", "polite");
+  route.append(
+    domain.wrap,
+    device.wrap,
+    action("\u041E\u0431\u044A\u044F\u0441\u043D\u0438\u0442\u044C \u043C\u0430\u0440\u0448\u0440\u0443\u0442", async () => {
+      const r = await invoke("route_explain", {
+        domain: domain.node.value.trim(),
+        device: device.node.value.trim(),
+        port: 443,
+        protocol: "tcp"
+      });
+      routeResult.replaceChildren();
+      if (!r.success) return;
+      const data = object2(r.data);
+      const decision = object2(data.decision);
+      const decisionLabels = {
+        matched: "\u041F\u0440\u0430\u0432\u0438\u043B\u043E \u043D\u0430\u0439\u0434\u0435\u043D\u043E",
+        direct: "\u041D\u0430\u043F\u0440\u044F\u043C\u0443\u044E",
+        blocked: "\u0417\u0430\u0431\u043B\u043E\u043A\u0438\u0440\u043E\u0432\u0430\u043D\u043E",
+        indeterminate: "\u041C\u0430\u0440\u0448\u0440\u0443\u0442 \u0442\u0440\u0435\u0431\u0443\u0435\u0442 \u0443\u0442\u043E\u0447\u043D\u0435\u043D\u0438\u044F"
+      };
+      const connectionLabel = sections.find(([name]) => name === decision.section)?.[1] || decision.section || decision.outbound || "\u2014";
+      routeResult.append(
+        el(
+          "strong",
+          `${decisionLabels[String(decision.status)] || "\u041D\u0435 \u043E\u043F\u0440\u0435\u0434\u0435\u043B\u0435\u043D\u043E"} \u2192 ${connectionLabel}`
+        ),
+        el("p", "\u0414\u043E\u0441\u0442\u0443\u043F\u043D\u043E\u0441\u0442\u044C \u0441\u0430\u0439\u0442\u0430 \u043D\u0435 \u043F\u0440\u043E\u0432\u0435\u0440\u044F\u043B\u0430\u0441\u044C")
+      );
+      const trace = el("ol");
+      trace.dataset.detail = "true";
+      trace.hidden = root.dataset.mode !== "detailed";
+      for (const step of Array.isArray(data.trace) ? data.trace : []) {
+        const row = object2(step);
+        trace.append(
+          el("li", `${row.section || ""}: ${row.reason || row.match || ""}`)
+        );
+      }
+      routeResult.append(trace);
+    }),
+    routeResult
+  );
+  const probeSection = select("\u041C\u0430\u0440\u0448\u0440\u0443\u0442 \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0438", [
+    ["", "\u0422\u0435\u043A\u0443\u0449\u0438\u0439 \u043C\u0430\u0440\u0448\u0440\u0443\u0442 \u0440\u043E\u0443\u0442\u0435\u0440\u0430"]
+  ]);
+  const probeResult = el("p", "", "fkp-next-result");
+  probeResult.setAttribute("aria-live", "polite");
+  route.append(
+    probeSection.wrap,
+    action("\u041F\u0440\u043E\u0432\u0435\u0440\u0438\u0442\u044C \u0434\u043E\u0441\u0442\u0443\u043F\u043D\u043E\u0441\u0442\u044C", async () => {
+      const payload = { domain: domain.node.value.trim() };
+      if (probeSection.node.value) payload.section = probeSection.node.value;
+      const r = await invoke("probe", payload);
+      if (!r.success) {
+        probeResult.textContent = `\u041F\u0440\u043E\u0432\u0435\u0440\u043A\u0430 \u043D\u0435 \u0432\u044B\u043F\u043E\u043B\u043D\u0435\u043D\u0430: ${r.error}`;
+        return;
+      }
+      const d = object2(r.data);
+      probeResult.textContent = `${d.reachable ? "\u0421\u0430\u0439\u0442 \u0434\u043E\u0441\u0442\u0443\u043F\u0435\u043D" : "\u0421\u0430\u0439\u0442 \u043D\u0435\u0434\u043E\u0441\u0442\u0443\u043F\u0435\u043D"} \xB7 HTTP ${d.http_status || "\u2014"} \xB7 ${d.duration_ms ?? "\u2014"} \u043C\u0441. \u041F\u0440\u043E\u0432\u0435\u0440\u0435\u043D \u0441\u0435\u0442\u0435\u0432\u043E\u0439 \u0434\u043E\u0441\u0442\u0443\u043F \u0441 \u0440\u043E\u0443\u0442\u0435\u0440\u0430; \u0432\u0445\u043E\u0434 \u0432 \u0441\u0435\u0440\u0432\u0438\u0441 \u043D\u0435 \u043F\u0440\u043E\u0432\u0435\u0440\u044F\u0435\u0442\u0441\u044F.`;
+    }),
+    probeResult
+  );
+  const profiles = panel(
+    "\u041F\u0440\u043E\u0444\u0438\u043B\u0438 \u0438 \u0432\u043E\u0441\u0441\u0442\u0430\u043D\u043E\u0432\u043B\u0435\u043D\u0438\u0435",
+    "\u0421\u043D\u0430\u0447\u0430\u043B\u0430 \u0441\u0440\u0430\u0432\u043D\u0438\u0442\u0435 \u043F\u0440\u043E\u0444\u0438\u043B\u044C. \u041F\u0440\u0438 \u043F\u0440\u0438\u043C\u0435\u043D\u0435\u043D\u0438\u0438 \u0441\u043E\u0445\u0440\u0430\u043D\u044F\u0435\u0442\u0441\u044F \u043F\u0440\u0435\u0434\u044B\u0434\u0443\u0449\u0430\u044F \u0440\u0430\u0431\u043E\u0447\u0430\u044F \u043A\u043E\u043D\u0444\u0438\u0433\u0443\u0440\u0430\u0446\u0438\u044F."
+  );
+  const profile = select("\u0421\u043E\u0445\u0440\u0430\u043D\u0451\u043D\u043D\u044B\u0439 \u043F\u0440\u043E\u0444\u0438\u043B\u044C", []);
+  const profileName = input("profile_name", "\u041D\u0430\u0437\u0432\u0430\u043D\u0438\u0435 \u043D\u043E\u0432\u043E\u0433\u043E \u043F\u0440\u043E\u0444\u0438\u043B\u044F");
+  const profileResult = el("pre", "", "fkp-next-result");
+  const apply = action("\u041F\u0440\u0438\u043C\u0435\u043D\u0438\u0442\u044C \u043F\u0440\u043E\u0444\u0438\u043B\u044C", async () => {
+    await invoke(
+      "profile_apply",
+      { name: profile.node.value, expected: digest },
+      profileResult
+    );
+    previewName = "";
+    await refreshStatus();
+    apply.disabled = true;
+  });
+  apply.disabled = true;
+  profile.node.onchange = () => {
+    previewName = "";
+    apply.disabled = true;
+  };
+  profiles.append(
+    profile.wrap,
+    action("\u0421\u0440\u0430\u0432\u043D\u0438\u0442\u044C \u043F\u0440\u043E\u0444\u0438\u043B\u044C", async () => {
+      const requestedName = profile.node.value;
+      const r = await invoke(
+        "profile_diff",
+        { name: requestedName },
+        profileResult
+      );
+      if (r.success && requestedName === profile.node.value) {
+        previewName = requestedName;
+        digest = String(object2(r.data).current_digest || digest);
+        apply.disabled = false;
+      }
+    }),
+    apply,
+    profileName.wrap,
+    action("\u0421\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u044C \u0442\u0435\u043A\u0443\u0449\u0438\u0439 \u043F\u0440\u043E\u0444\u0438\u043B\u044C", async () => {
+      await invoke(
+        "profile_save",
+        { name: profileName.node.value },
+        profileResult
+      );
+      await refreshProfiles();
+    }),
+    profileResult
+  );
+  const rollback = action("\u0412\u0435\u0440\u043D\u0443\u0442\u044C \u043F\u0440\u0435\u0434\u044B\u0434\u0443\u0449\u0443\u044E \u043A\u043E\u043D\u0444\u0438\u0433\u0443\u0440\u0430\u0446\u0438\u044E", async () => {
+    await invoke("rollback", { expected: digest }, profileResult);
+    await refreshStatus();
+  });
+  rollback.disabled = true;
+  profiles.append(rollback);
+  const temporary = panel(
+    "\u0412\u0440\u0435\u043C\u0435\u043D\u043D\u044B\u0435 \u043F\u0440\u0430\u0432\u0438\u043B\u0430",
+    "\u041F\u0440\u0430\u0432\u0438\u043B\u043E \u0430\u0432\u0442\u043E\u043C\u0430\u0442\u0438\u0447\u0435\u0441\u043A\u0438 \u043F\u0435\u0440\u0435\u0441\u0442\u0430\u043D\u0435\u0442 \u0434\u0435\u0439\u0441\u0442\u0432\u043E\u0432\u0430\u0442\u044C \u043F\u043E \u0438\u0441\u0442\u0435\u0447\u0435\u043D\u0438\u0438 \u0432\u044B\u0431\u0440\u0430\u043D\u043D\u043E\u0433\u043E \u0441\u0440\u043E\u043A\u0430."
+  );
+  const td = input("temporary_domain", "\u0414\u043E\u043C\u0435\u043D");
+  const ts = connection();
+  const ttl = select("\u0421\u0440\u043E\u043A \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u044F", [
+    ["3600", "1 \u0447\u0430\u0441"],
+    ["14400", "4 \u0447\u0430\u0441\u0430"],
+    ["86400", "24 \u0447\u0430\u0441\u0430"]
+  ]);
+  const tempList = el("div");
+  temporary.append(
+    td.wrap,
+    ts.wrap,
+    ttl.wrap,
+    action("\u0414\u043E\u0431\u0430\u0432\u0438\u0442\u044C \u0432\u0440\u0435\u043C\u0435\u043D\u043D\u043E\u0435 \u043F\u0440\u0430\u0432\u0438\u043B\u043E", async () => {
+      await invoke("temporary_add", {
+        domain: td.node.value.trim(),
+        section: ts.node.value,
+        ttl: Number(ttl.node.value)
+      });
+      await refreshTemporary();
+    }),
+    tempList
+  );
+  const recommendations = panel(
+    "Smart Detect",
+    "\u0422\u043E\u043B\u044C\u043A\u043E \u0440\u0435\u043A\u043E\u043C\u0435\u043D\u0434\u0430\u0446\u0438\u0438 \u043D\u0430 \u043E\u0441\u043D\u043E\u0432\u0435 \u043D\u0430\u0431\u043B\u044E\u0434\u0435\u043D\u0438\u0439. \u041F\u0440\u0438\u043C\u0435\u043D\u0435\u043D\u0438\u0435 \u2014 \u043F\u043E \u0432\u0430\u0448\u0435\u043C\u0443 \u0440\u0435\u0448\u0435\u043D\u0438\u044E."
+  );
+  const rs = connection();
+  const recList = el("div");
+  const recommendationDomain = input(
+    "recommendation_domain",
+    "\u0414\u043E\u043C\u0435\u043D \u0434\u043B\u044F \u0441\u0440\u0430\u0432\u043D\u0435\u043D\u0438\u044F"
+  );
+  recommendationDomain.node.placeholder = "example.org";
+  const scanResult = el("p", "", "fkp-next-result");
+  const autoDetect = input(
+    "smart_detect_enabled",
+    "\u0410\u0432\u0442\u043E\u043C\u0430\u0442\u0438\u0447\u0435\u0441\u043A\u0438 \u043F\u0440\u0435\u0434\u043B\u0430\u0433\u0430\u0442\u044C \u043E\u0431\u0445\u043E\u0434 \u043E\u0448\u0438\u0431\u043E\u043A \u0438\u0437 \u0436\u0443\u0440\u043D\u0430\u043B\u0430"
+  );
+  autoDetect.node.type = "checkbox";
+  autoDetect.wrap.className = "fkp-next-check";
+  const autoResult = el("p", "", "fkp-next-result");
+  autoResult.setAttribute("aria-live", "polite");
+  scanResult.setAttribute("aria-live", "polite");
+  recommendations.append(
+    recommendationDomain.wrap,
+    rs.wrap,
+    action("\u041F\u0440\u043E\u0432\u0435\u0440\u0438\u0442\u044C \u0434\u0440\u0443\u0433\u043E\u0439 \u043C\u0430\u0440\u0448\u0440\u0443\u0442", async () => {
+      const r = await invoke("recommendation_scan", {
+        domain: recommendationDomain.node.value.trim(),
+        section: rs.node.value
+      });
+      if (r.success) {
+        const data = object2(r.data);
+        const current = object2(data.current), target = object2(data.section);
+        scanResult.textContent = `\u0422\u0435\u043A\u0443\u0449\u0438\u0439 \u043C\u0430\u0440\u0448\u0440\u0443\u0442: ${current.reachable === true ? "\u0435\u0441\u0442\u044C \u0441\u0435\u0442\u0435\u0432\u043E\u0439 \u043E\u0442\u0432\u0435\u0442" : current.reachable === false ? "\u043D\u0435\u0442 \u043E\u0442\u0432\u0435\u0442\u0430" : "\u0441\u043C. \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442\u044B \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0438"}. \u0412\u044B\u0431\u0440\u0430\u043D\u043D\u043E\u0435 \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435: ${target.reachable === true ? "\u0435\u0441\u0442\u044C \u0441\u0435\u0442\u0435\u0432\u043E\u0439 \u043E\u0442\u0432\u0435\u0442" : target.reachable === false ? "\u043D\u0435\u0442 \u043E\u0442\u0432\u0435\u0442\u0430" : "\u0441\u043C. \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442\u044B \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0438"}. \u0420\u0435\u043A\u043E\u043C\u0435\u043D\u0434\u0430\u0446\u0438\u044F \u043F\u043E\u044F\u0432\u043B\u044F\u0435\u0442\u0441\u044F \u043F\u043E\u0441\u043B\u0435 \u043F\u043E\u0432\u0442\u043E\u0440\u043D\u044B\u0445 \u043D\u0430\u0431\u043B\u044E\u0434\u0435\u043D\u0438\u0439; \u043F\u0440\u0430\u0432\u0438\u043B\u0430 \u0430\u0432\u0442\u043E\u043C\u0430\u0442\u0438\u0447\u0435\u0441\u043A\u0438 \u043D\u0435 \u043F\u0440\u0438\u043C\u0435\u043D\u044F\u044E\u0442\u0441\u044F.`;
+        await refreshRecommendations();
+      } else
+        scanResult.textContent = `\u0421\u0440\u0430\u0432\u043D\u0435\u043D\u0438\u0435 \u043D\u0435 \u0432\u044B\u043F\u043E\u043B\u043D\u0435\u043D\u043E: ${r.error || "\u043D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043D\u0430\u044F \u043E\u0448\u0438\u0431\u043A\u0430"}`;
+    }),
+    scanResult,
+    recList
+  );
+  recommendations.append(
+    autoDetect.wrap,
+    el(
+      "p",
+      "\u041F\u043E\u0438\u0441\u043A \u0432\u044B\u043F\u043E\u043B\u043D\u044F\u0435\u0442\u0441\u044F \u0440\u0430\u0437 \u0432 \u043C\u0438\u043D\u0443\u0442\u0443 \u043F\u043E\u0441\u043B\u0435 \u0432\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u044F. \u041C\u0430\u0440\u0448\u0440\u0443\u0442\u044B \u043C\u0435\u043D\u044F\u044E\u0442\u0441\u044F \u0442\u043E\u043B\u044C\u043A\u043E \u043F\u043E\u0441\u043B\u0435 \u043F\u0440\u0438\u043D\u044F\u0442\u0438\u044F \u0440\u0435\u043A\u043E\u043C\u0435\u043D\u0434\u0430\u0446\u0438\u0438."
+    ),
+    action("\u0421\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u044C \u0430\u0432\u0442\u043E\u043C\u0430\u0442\u0438\u0447\u0435\u0441\u043A\u0438\u0439 \u043F\u043E\u0438\u0441\u043A", async () => {
+      const r = await invoke("smart_detect_configure", {
+        enabled: autoDetect.node.checked,
+        section: rs.node.value
+      });
+      autoResult.textContent = r.success ? "\u041D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438 \u0430\u0432\u0442\u043E\u043C\u0430\u0442\u0438\u0447\u0435\u0441\u043A\u043E\u0433\u043E \u043F\u043E\u0438\u0441\u043A\u0430 \u0441\u043E\u0445\u0440\u0430\u043D\u0435\u043D\u044B." : r.error === "section_probe_unavailable" ? "\u0412\u043A\u043B\u044E\u0447\u0438\u0442\u0435 \u043B\u043E\u043A\u0430\u043B\u044C\u043D\u044B\u0439 SOCKS \u0434\u043B\u044F \u0432\u044B\u0431\u0440\u0430\u043D\u043D\u043E\u0433\u043E \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u044F \u0432 \u0440\u0430\u0441\u0448\u0438\u0440\u0435\u043D\u043D\u044B\u0445 \u043D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0430\u0445 \u0438 \u043F\u043E\u0432\u0442\u043E\u0440\u0438\u0442\u0435 \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u0435." : `\u041D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438 \u043D\u0435 \u0441\u043E\u0445\u0440\u0430\u043D\u0435\u043D\u044B: ${r.error || "\u043D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043D\u0430\u044F \u043E\u0448\u0438\u0431\u043A\u0430"}`;
+    }),
+    autoResult
+  );
+  async function refreshStatus() {
+    const r = await request("status", {});
+    if (!r.success) {
+      status.textContent = "\u0421\u043E\u0441\u0442\u043E\u044F\u043D\u0438\u0435 \u043D\u0435\u0434\u043E\u0441\u0442\u0443\u043F\u043D\u043E. \u041E\u0431\u043D\u043E\u0432\u0438\u0442\u0435 \u0441\u0442\u0440\u0430\u043D\u0438\u0446\u0443 \u0438\u043B\u0438 \u043F\u0440\u043E\u0432\u0435\u0440\u044C\u0442\u0435 \u0441\u0435\u0440\u0432\u0438\u0441.";
+      return;
+    }
+    const d = object2(r.data);
+    const smart = object2(d.smart_detect);
+    autoDetect.node.checked = smart.enabled === true;
+    digest = String(d.digest || "");
+    const versions = object2(d.versions);
+    status.textContent = `Forkop ${versions.forkop || "\u2014"} \xB7 sing-box ${versions.sing_box || "\u2014"}${d.recovery_pending ? " \xB7 \u0422\u0440\u0435\u0431\u0443\u0435\u0442\u0441\u044F \u0432\u043E\u0441\u0441\u0442\u0430\u043D\u043E\u0432\u043B\u0435\u043D\u0438\u0435" : ""}`;
+    rollback.disabled = !d.previous_available;
+    sections = (Array.isArray(d.sections) ? d.sections : []).map(
+      (s) => {
+        const o = object2(s);
+        return [String(o.name), String(o.label || o.name)];
+      }
+    );
+    const probeChoice = probeSection.node.value;
+    probeSection.node.replaceChildren();
+    for (const [value, label] of [
+      ["", "\u0422\u0435\u043A\u0443\u0449\u0438\u0439 \u043C\u0430\u0440\u0448\u0440\u0443\u0442 \u0440\u043E\u0443\u0442\u0435\u0440\u0430"],
+      ...sections
+    ]) {
+      const option = el("option", label);
+      option.value = value;
+      probeSection.node.append(option);
+    }
+    probeSection.node.value = probeChoice;
+    for (const s of sectionSelects) {
+      const old = s.value;
+      s.replaceChildren();
+      for (const [value, label] of sections) {
+        const o = el("option", label);
+        o.value = value;
+        s.append(o);
+      }
+      s.value = sections.some(([value]) => value === old) ? old : sections[0]?.[0] || "";
+    }
+    if (sections.some(([name]) => name === smart.section))
+      rs.node.value = String(smart.section);
+  }
+  async function refreshProfiles() {
+    const r = await request("profile_list", {});
+    if (!r.success) {
+      message.textContent = "\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0437\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044C \u043F\u0440\u043E\u0444\u0438\u043B\u0438. \u041D\u0430\u0436\u043C\u0438\u0442\u0435 \xAB\u041E\u0431\u043D\u043E\u0432\u0438\u0442\u044C \u0434\u0430\u043D\u043D\u044B\u0435\xBB.";
+      return;
+    }
+    profile.node.replaceChildren();
+    for (const p of items(r.data)) {
+      const o = el("option", String(p.name));
+      o.value = String(p.name);
+      profile.node.append(o);
+    }
+    apply.disabled = previewName !== profile.node.value || !previewName;
+  }
+  async function refreshTemporary() {
+    const r = await request("temporary_list", {});
+    if (!r.success) {
+      message.textContent = "\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0437\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044C \u0432\u0440\u0435\u043C\u0435\u043D\u043D\u044B\u0435 \u043F\u0440\u0430\u0432\u0438\u043B\u0430. \u041D\u0430\u0436\u043C\u0438\u0442\u0435 \xAB\u041E\u0431\u043D\u043E\u0432\u0438\u0442\u044C \u0434\u0430\u043D\u043D\u044B\u0435\xBB.";
+      return;
+    }
+    tempList.replaceChildren();
+    for (const t of items(r.data)) {
+      const row = el("div", "", "fkp-next-row");
+      row.append(
+        el(
+          "span",
+          `${t.domain} \u2192 ${t.section} \xB7 \u0434\u043E ${new Date(Number(t.expires) * 1e3).toLocaleString()}`
+        ),
+        action("\u0423\u0434\u0430\u043B\u0438\u0442\u044C \u043F\u0440\u0430\u0432\u0438\u043B\u043E", async () => {
+          await invoke("temporary_delete", { id: t.id });
+          await refreshTemporary();
+        })
+      );
+      tempList.append(row);
+    }
+    if (!tempList.childNodes.length)
+      tempList.append(el("p", "\u0412\u0440\u0435\u043C\u0435\u043D\u043D\u044B\u0445 \u043F\u0440\u0430\u0432\u0438\u043B \u043D\u0435\u0442."));
+  }
+  async function refreshRecommendations() {
+    const r = await request("recommendations", {});
+    if (!r.success) {
+      message.textContent = "\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0437\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044C \u0440\u0435\u043A\u043E\u043C\u0435\u043D\u0434\u0430\u0446\u0438\u0438. \u041D\u0430\u0436\u043C\u0438\u0442\u0435 \xAB\u041E\u0431\u043D\u043E\u0432\u0438\u0442\u044C \u0434\u0430\u043D\u043D\u044B\u0435\xBB.";
+      return;
+    }
+    recList.replaceChildren();
+    for (const rec of items(r.data)) {
+      const row = el("div", "", "fkp-next-row");
+      row.append(
+        el(
+          "span",
+          `${rec.domain} \xB7 \u043E\u0448\u0438\u0431\u043A\u0438 \u0442\u0435\u043A\u0443\u0449\u0435\u0433\u043E \u043C\u0430\u0440\u0448\u0440\u0443\u0442\u0430: ${rec.current_route_failures ?? "\u2014"}, \u0443\u0441\u043F\u0435\u0448\u043D\u044B\u0445 \u0447\u0435\u0440\u0435\u0437 \u0432\u044B\u0431\u0440\u0430\u043D\u043D\u043E\u0435 \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435: ${rec.proxy_successes ?? "\u2014"}`
+        ),
+        action("\u041F\u0440\u0438\u043D\u044F\u0442\u044C \u0440\u0435\u043A\u043E\u043C\u0435\u043D\u0434\u0430\u0446\u0438\u044E", async () => {
+          await invoke("recommendation_accept", {
+            id: rec.id,
+            section: rs.node.value
+          });
+          await refreshRecommendations();
+        })
+      );
+      recList.append(row);
+    }
+    if (!recList.childNodes.length)
+      recList.append(el("p", "\u0420\u0435\u043A\u043E\u043C\u0435\u043D\u0434\u0430\u0446\u0438\u0439 \u043F\u043E\u043A\u0430 \u043D\u0435\u0442."));
+  }
+  const tools = renderDeviceProfileTools(request);
+  tools.className = "fkp-next-tools";
+  let group;
+  for (const child of [...tools.children]) {
+    if (child.tagName === "H3") {
+      group = el("section", "", "fkp-next-panel");
+      tools.append(group);
+    }
+    group?.append(child);
+  }
+  const compatibility = renderCompatibilityPanel(request);
+  compatibility.classList.add("fkp-next-compatibility");
+  content.append(compatibility, tools);
+  header.append(
+    action("\u041E\u0431\u043D\u043E\u0432\u0438\u0442\u044C \u0434\u0430\u043D\u043D\u044B\u0435", async () => {
+      message.textContent = "";
+      await Promise.all([
+        refreshStatus(),
+        refreshProfiles(),
+        refreshTemporary(),
+        refreshRecommendations(),
+        refreshConnections()
+      ]);
+    })
+  );
+  root.addEventListener(
+    "forkop:profiles-changed",
+    () => void refreshProfiles()
+  );
+  void Promise.all([
+    refreshStatus(),
+    refreshProfiles(),
+    refreshTemporary(),
+    refreshRecommendations(),
+    refreshConnections()
+  ]);
+  return root;
+}
+
+// src/forkop/next/configReload.ts
+var registered = /* @__PURE__ */ new WeakSet();
+function registerConfigurationReload(target = window) {
+  if (registered.has(target)) return;
+  registered.add(target);
+  target.addEventListener(
+    "forkop:configuration-changed",
+    () => {
+      target.setTimeout(() => target.location.reload(), 200);
+    },
+    { once: true }
+  );
+}
+
 // src/main.ts
 if (typeof structuredClone !== "function")
   globalThis.structuredClone = (obj) => JSON.parse(JSON.stringify(obj));
@@ -14138,9 +15229,12 @@ return baseclass.extend({
   bulkValidate,
   coreService,
   getClashUIUrl,
+  getDashboardSections,
   getProxyUrlName,
   injectGlobalStyles,
   parseValueList,
+  registerConfigurationReload,
+  renderNextPanel,
   showToast,
   store,
   validateDNS,

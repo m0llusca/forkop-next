@@ -35,12 +35,17 @@ SDK_CACHE_DIR="${SDK_CACHE_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/forkop/openwrt-s
 SDK_DIR="${SDK_DIR:-$SDK_CACHE_DIR/extracted}"
 IPK_SDK_URL="${IPK_SDK_URL:-https://downloads.openwrt.org/releases/24.10.6/targets/x86/64/openwrt-sdk-24.10.6-x86-64_gcc-13.3.0_musl.Linux-x86_64.tar.zst}"
 APK_SDK_URL="${APK_SDK_URL:-https://downloads.openwrt.org/releases/25.12.3/targets/x86/64/openwrt-sdk-25.12.3-x86-64_gcc-14.3.0_musl.Linux-x86_64.tar.zst}"
+# Published OpenWrt release sha256sums, pinned with the matching SDK URLs.
+IPK_SDK_SHA256="${IPK_SDK_SHA256:-9e398ea7efc098e4a986f97efff595e32d08c615fe356bcb3d885d7ad3a39ac0}"
+APK_SDK_SHA256="${APK_SDK_SHA256:-70fc990b2f9a2705e8bbca610e421a55e789901d4aeba10d9fdd7c89777bf695}"
+LUCI_SOURCE_URL="${LUCI_SOURCE_URL:-https://github.com/openwrt/luci.git}"
+LUCI_SOURCE_REV="${LUCI_SOURCE_REV:-0e6537981036ea221a73e497920192179e9f74c3}"
 
 BACKEND_DESCRIPTION="Rule-based Forkop backend with hybrid sing-box + zapret orchestration"
 APP_DESCRIPTION="Rule-based Forkop LuCI app with hybrid sing-box + zapret orchestration"
 I18N_DESCRIPTION="Translation for luci-app-forkop - Русский (Russian)"
-MAINTAINER="ushan0v <ushan0v@users.noreply.github.com>"
-PROJECT_URL="https://github.com/ushan0v/forkop"
+MAINTAINER="m0llusca <43199527+m0llusca@users.noreply.github.com>"
+PROJECT_URL="https://github.com/m0llusca/forkop-next"
 BACKEND_DEPENDS_IPK="libc, ca-bundle, kmod-inet-diag, kmod-netlink-diag, kmod-tun, curl, ucode, ucode-mod-fs, ucode-mod-uci, kmod-nft-tproxy, coreutils-base64, bind-dig, nftables, kmod-nft-nat, ip-full"
 BACKEND_DEPENDS_APK="bind-dig ca-bundle coreutils-base64 curl ip-full kmod-inet-diag kmod-netlink-diag kmod-nft-nat kmod-nft-tproxy kmod-tun libc nftables ucode ucode-mod-fs ucode-mod-uci !https-dns-proxy !nextdns !luci-app-passwall !luci-app-passwall2"
 BACKEND_CONFLICTS_IPK="https-dns-proxy, nextdns, luci-app-passwall, luci-app-passwall2"
@@ -84,13 +89,29 @@ ensure_host_deps() {
 
 download_sdk_archive() {
   local url="$1"
+  local expected="${2:-}"
   local archive_path="$SDK_CACHE_DIR/$(basename "$url")"
 
+  if [[ ! "$url" =~ ^https:// || ! "$expected" =~ ^[a-f0-9]{64}$ ]]; then
+    echo "An HTTPS SDK URL and explicit SHA256 are required" >&2
+    return 1
+  fi
   mkdir -p "$SDK_CACHE_DIR"
   if [[ ! -f "$archive_path" ]]; then
     echo "Downloading SDK: $url" >&2
-    curl --fail --location --retry 3 --output "$archive_path.part" "$url"
+    curl --fail --location --proto '=https' --proto-redir '=https' --connect-timeout 15 --max-time 900 --retry 3 --output "$archive_path.part" "$url" || {
+      rm -f "$archive_path.part"
+      return 1
+    }
+    if ! printf '%s  %s\n' "$expected" "$archive_path.part" | sha256sum --check --status; then
+      rm -f "$archive_path.part"
+      echo "SDK checksum mismatch: $url" >&2
+      return 1
+    fi
     mv "$archive_path.part" "$archive_path"
+  elif ! printf '%s  %s\n' "$expected" "$archive_path" | sha256sum --check --status; then
+    echo "Cached SDK checksum mismatch: $archive_path" >&2
+    return 1
   fi
 
   printf '%s\n' "$archive_path"
@@ -125,27 +146,26 @@ extract_sdk() {
 }
 
 ensure_po2lmo() {
-  local ipk_sdk_dir="$1"
-  local po2lmo_bin="$ipk_sdk_dir/staging_dir/hostpkg/bin/po2lmo"
-  local luci_src_dir="$ipk_sdk_dir/feeds/luci/modules/luci-base/src"
-
-  if [[ -x "$po2lmo_bin" ]]; then
-    printf '%s\n' "$po2lmo_bin"
-    return 0
+  local repository="$SDK_CACHE_DIR/luci-$LUCI_SOURCE_REV"
+  local luci_src_dir="$repository/modules/luci-base/src"
+  if [[ ! "$LUCI_SOURCE_REV" =~ ^[a-f0-9]{40}$ ]]; then
+    echo "LuCI translation source must use a full pinned commit" >&2
+    return 1
   fi
-
-  (
-    cd "$ipk_sdk_dir"
-    if [[ ! -f "$luci_src_dir/po2lmo.c" ]]; then
-      rm -rf feeds/luci
-      ./scripts/feeds update luci >&2
-    fi
-  )
-
-  if [[ ! -f "$luci_src_dir/po2lmo" ]]; then
-    make -C "$luci_src_dir" po2lmo >&2
+  if [[ ! -d "$repository/.git" ]]; then
+    mkdir -p "$repository"
+    git -C "$repository" init -q
+    git -C "$repository" remote add origin "$LUCI_SOURCE_URL"
   fi
-
+  if ! git -C "$repository" cat-file -e "$LUCI_SOURCE_REV^{commit}" 2>/dev/null; then
+    git -C "$repository" fetch --depth 1 "$LUCI_SOURCE_URL" "$LUCI_SOURCE_REV" >&2 || return 1
+  fi
+  git -C "$repository" checkout --detach --force "$LUCI_SOURCE_REV" >&2 || return 1
+  # Do not reuse binaries or modifications from a previous cached build.
+  git -C "$repository" clean -fdx >&2 || return 1
+  [[ "$(git -C "$repository" rev-parse HEAD)" == "$LUCI_SOURCE_REV" ]] || return 1
+  make -C "$luci_src_dir" po2lmo >&2 || return 1
+  [[ -x "$luci_src_dir/po2lmo" ]] || return 1
   printf '%s\n' "$luci_src_dir/po2lmo"
 }
 
@@ -662,8 +682,8 @@ main() {
   mkdir -p "$output_dir"
   rm -f "$output_dir"/forkop_* "$output_dir"/luci-app-forkop_* "$output_dir"/luci-i18n-forkop-ru_*
 
-  ipk_archive="$(download_sdk_archive "$IPK_SDK_URL")"
-  apk_archive="$(download_sdk_archive "$APK_SDK_URL")"
+  ipk_archive="$(download_sdk_archive "$IPK_SDK_URL" "$IPK_SDK_SHA256")"
+  apk_archive="$(download_sdk_archive "$APK_SDK_URL" "$APK_SDK_SHA256")"
   ipk_sdk_dir="$(extract_sdk ipk "$ipk_archive" "$IPK_SDK_URL")"
   apk_sdk_dir="$(extract_sdk apk "$apk_archive" "$APK_SDK_URL")"
 

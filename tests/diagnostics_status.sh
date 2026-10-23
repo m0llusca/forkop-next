@@ -140,6 +140,25 @@ fake_bin="$WORK_DIR/bin"
 mkdir -p "$fake_bin"
 cat >"$fake_bin/curl" <<'SH'
 #!/usr/bin/env sh
+case "$*" in
+  *--parallel*)
+    emit_transfer() {
+      [ -n "$destination" ] || return 0
+      printf '%s\n' "$endpoint" >>"$FAKE_CURL_LOG"
+      printf '%s\n' '{"delay":1}' >"$destination"
+      printf '%s\t0\n' "$destination"
+    }
+    destination= endpoint= previous=
+    for argument in "$@"; do
+      [ "$argument" != --next ] || { emit_transfer; destination=; endpoint=; }
+      [ "$previous" != --output ] || destination="$argument"
+      case "$argument" in *127.0.0.1:9090/*) endpoint="$argument";; esac
+      previous="$argument"
+    done
+    emit_transfer
+    exit 0
+    ;;
+esac
 printf '%s\n' "$*" >>"$FAKE_CURL_LOG"
 case "$*" in
   *'127.0.0.1:9090/proxies') printf '%s\n' '{"proxies":{"urltest":{"type":"URLTest"},"provider-urltest":{"type":"urltest"},"proxy-a":{"type":"VLESS"},"proxy-b":{"type":"Trojan"}}}' ;;

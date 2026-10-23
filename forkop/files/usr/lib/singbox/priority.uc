@@ -78,7 +78,7 @@ function log_message(message, level) {
 }
 
 function now_seconds() {
-    return int(clock()[0]);
+    return int(require("core.scheduler").now());
 }
 
 function duration_to_milliseconds(value, fallback_ms) {
@@ -327,7 +327,7 @@ function choose_fastest_same_level(group, level_index, active_tag, probe) {
 }
 
 function set_group_proxy(group, tag_name) {
-    let result = module_capture([ "set_group_proxy", group.tag, tag_name, "" ]);
+    let result = module_capture([ "set_group_proxy", group.tag, tag_name, "automatic" ]);
     return result.status == 0;
 }
 

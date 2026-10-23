@@ -1,5 +1,6 @@
 name: Build packages
 on:
+  pull_request:
   push:
     tags:
       - '*'
@@ -18,6 +19,14 @@ permissions:
   contents: read
 
 jobs:
+  quality_backend:
+    name: Backend release gate
+    uses: ./.github/workflows/backend-ci.yml
+
+  quality_frontend:
+    name: Frontend release gate
+    uses: ./.github/workflows/frontend-ci.yml
+
   preparation:
     name: Setup build version
     runs-on: ubuntu-24.04
@@ -34,11 +43,15 @@ jobs:
         env:
           INPUT_VERSION: ${{ inputs.release_tag || '' }}
           INPUT_RELEASE_NOTES: ${{ inputs.release_notes || '' }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
           if [ -n "$INPUT_VERSION" ]; then
             VERSION="$INPUT_VERSION"
           else
             VERSION=$(git describe --tags --exact-match 2>/dev/null || true)
+          fi
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            VERSION=$(cat VERSION)
           fi
           if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "Release version must use x.y.z format, got: ${VERSION:-<empty>}" >&2
@@ -60,7 +73,7 @@ jobs:
   build:
     name: Build Forkop release packages
     runs-on: ubuntu-24.04
-    needs: preparation
+    needs: [preparation, quality_backend, quality_frontend]
     steps:
       - uses: actions/checkout@v5.0.0
 
@@ -86,6 +99,7 @@ jobs:
 
   release:
     name: Create Release
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-24.04
     permissions:
       contents: write

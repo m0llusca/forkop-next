@@ -1,3 +1,4 @@
+import { nextStyles } from './forkop/next/styles';
 // language=CSS
 import { DashboardTab } from './forkop/tabs/dashboard';
 import { DiagnosticTab } from './forkop/tabs/diagnostic';
@@ -6,7 +7,7 @@ import { UpdatesTab } from './forkop/tabs/updates';
 import { PartialStyles } from './partials';
 import { FORKOP_UCI_PACKAGE as FORKOP_CBI_PREFIX } from './constants';
 
-export const GlobalStyles = `
+export const GlobalStyles = `${nextStyles}
 ${DashboardTab.styles}
 ${DiagnosticTab.styles}
 ${MonitoringTab.styles}

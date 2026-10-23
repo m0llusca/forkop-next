@@ -1,6 +1,7 @@
 name: Frontend CI
 
 on:
+  workflow_call:
   pull_request:
     paths:
       - 'fe-app-forkop/**'
@@ -24,43 +25,43 @@ jobs:
           node-version: '22'
 
       - name: Enable Corepack
-        run: corepack enable
+        run: corepack enable && corepack prepare pnpm@11.25.0 --activate
 
       - name: Get yarn cache directory path
         id: yarn-cache-dir-path
         working-directory: fe-app-forkop
-        run: echo "dir=$(yarn config get cacheFolder)" >> $GITHUB_OUTPUT
+        run: echo "dir=$(pnpm store path --silent)" >> $GITHUB_OUTPUT
 
       - name: Cache yarn dependencies
         uses: actions/cache@v4.3.0
         with:
           path: ${{ steps.yarn-cache-dir-path.outputs.dir }}
-          key: ${{ runner.os }}-yarn-${{ hashFiles('fe-app-forkop/yarn.lock') }}
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('fe-app-forkop/pnpm-lock.yaml') }}
           restore-keys: |
-            ${{ runner.os }}-yarn-
+            ${{ runner.os }}-pnpm-
 
       - name: Install dependencies
-        run: yarn install --frozen-lockfile
+        run: pnpm install --frozen-lockfile
 
       - name: Check formatting
         id: format
         run: |
-          yarn format
+          pnpm exec prettier --check src
           if ! git diff --exit-code; then
             echo "::error::Code is not formatted. Run 'yarn format' locally."
             exit 1
           fi
 
       - name: Run linter
-        run: yarn lint --max-warnings=0
+        run: pnpm run lint --max-warnings=0
 
       - name: Run tests
-        run: yarn test --run
+        run: pnpm test --run
 
       - name: Build project
         id: build
         run: |
-          yarn build
+          pnpm run build
           if ! git diff --exit-code; then
             echo "::error::Build generated changes. Check build output."
             exit 1

@@ -39,6 +39,9 @@ function config(settings, runtime) {
         default_mark: runtime_constants.OUTBOUND_MARK
     };
 
+    if (type(runtime) == "object" && bool_value(runtime.source_aware_dns))
+        push(result.rules, { action: "reject", inbound: [ runtime_constants.SOURCE_DNS_INBOUND_TAG ] });
+
     if (output_network_interface != "")
         result.default_interface = output_network_interface;
     if (bool_option(settings, "disable_quic", false))
@@ -48,6 +51,8 @@ function config(settings, runtime) {
 }
 
 function target(section, outbound_tag_name) {
+    if (option(section, "next_target", "") != "")
+        outbound_tag_name = option(section, "next_target", "") + "-out";
     let action = option(section, "action", "");
     if (connections.is_connections_action(action) ||
         action == "byedpi" || action == "zapret" || action == "zapret2")

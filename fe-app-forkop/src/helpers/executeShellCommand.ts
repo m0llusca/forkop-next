@@ -5,6 +5,7 @@ interface ExecuteShellCommandParams {
   command: string;
   args: string[];
   timeout?: number;
+  operationName?: string;
 }
 
 interface ExecuteShellCommandResponse {
@@ -17,12 +18,13 @@ export async function executeShellCommand({
   command,
   args,
   timeout = COMMAND_TIMEOUT,
+  operationName,
 }: ExecuteShellCommandParams): Promise<ExecuteShellCommandResponse> {
   try {
     return await withTimeout(
       fs.exec(command, args),
       timeout,
-      [command, ...args].join(' '),
+      operationName || [command, ...args].join(' '),
     );
   } catch (err) {
     const error = err as Error & { code?: unknown };

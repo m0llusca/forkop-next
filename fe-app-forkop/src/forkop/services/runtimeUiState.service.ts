@@ -13,7 +13,7 @@ let runtimeUiStateRefreshPromise: Promise<Forkop.UiState | undefined> | null =
 let lastRuntimeUiStateRefreshAt = 0;
 let lastRuntimeUiState: Forkop.UiState | undefined;
 let runtimeStateResumeRefreshRegistered = false;
-let runtimeStatePollTimer: ReturnType<typeof setTimeout> | null = null;
+let runtimeStatePollTimer: number | null = null;
 let runtimeStatePollingStarted = false;
 let runtimeStateHasRunningAction = false;
 const runtimeUiStateListeners = new Set<RuntimeUiStateListener>();

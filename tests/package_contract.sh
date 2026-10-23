@@ -60,8 +60,8 @@ grep -Fq 'SDK_DIR="${SDK_DIR:-$SDK_CACHE_DIR/extracted}"' "$BUILD_SCRIPT" ||
   fail "build.sh must reuse the prepared SDK cache independently of BUILD_DIR"
 grep -Fq 'flock -n 9' "$BUILD_SCRIPT" ||
   fail "build.sh must reject concurrent package builds"
-grep -Fq '[[ ! -f "$luci_src_dir/po2lmo.c" ]]' "$BUILD_SCRIPT" ||
-  fail "build.sh must recover from an interrupted LuCI feed checkout"
+# Pinned-source selection and interrupted checkout recovery execute real Git and
+# compiler behavior in tests/backend/test_release_download.py.
 [ "$(grep -Fc 'fakeroot sh -c' "$BUILD_SCRIPT")" -eq 1 ] ||
   fail "build.sh must use fakeroot for IPK ownership"
 [ "$(grep -Fc 'unshare -r sh -c' "$BUILD_SCRIPT")" -eq 1 ] ||

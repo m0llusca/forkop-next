@@ -144,7 +144,9 @@ if sed -n '/^function process_age_seconds(pid) {$/,/^}$/p' "$STATE_UC" | grep -F
 fi
 
 mkdir -p "$WORK_DIR/stable-start-bin"
-cp "$(command -v sleep)" "$WORK_DIR/stable-start-bin/sing-box"
+# A copied multicall sleep (Alpine coreutils/BusyBox) rejects the renamed argv[0].
+# A renamed bash stays a real named process and supervises its bounded sleeper.
+cp "$(command -v bash)" "$WORK_DIR/stable-start-bin/sing-box"
 cat >"$WORK_DIR/stable-start-bin/ubus" <<'SH'
 #!/usr/bin/env bash
 set -eo pipefail
@@ -181,7 +183,7 @@ udp        0      0 0.0.0.0:1602            0.0.0.0:*
 udp        0      0 ::1:1602                :::*
 EOF_NETSTAT
 
-"$WORK_DIR/stable-start-bin/sing-box" 30 &
+"$WORK_DIR/stable-start-bin/sing-box" -c 'sleep 30 & child=$!; trap '\''kill "$child" 2>/dev/null; exit'\'' TERM INT; wait "$child"' &
 sing_box_pid=$!
 printf '%s\n' "$sing_box_pid" >"$WORK_DIR/sing-box.pid"
 if ! PATH="$WORK_DIR/stable-start-bin:$PATH" \

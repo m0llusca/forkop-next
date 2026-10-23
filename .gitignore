@@ -7,3 +7,7 @@ fe-app-forkop/.env
 sandbox/
 .build/
 dist/
+work/
+__pycache__/
+*.pyc
+.impeccable/review/

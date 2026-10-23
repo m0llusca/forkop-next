@@ -1,5 +1,8 @@
 import { logger } from './logger.service';
 
+const socketLogUrl = (url: string) =>
+  url.replace(/([?&]token=)[^&]*/gi, '$1[redacted]');
+
 // eslint-disable-next-line
 type Listener = (data: any) => void;
 type ErrorListener = (error: Event | string) => void;
@@ -10,6 +13,8 @@ class SocketManager {
   private listeners = new Map<string, Set<Listener>>();
   private connected = new Map<string, boolean>();
   private errorListeners = new Map<string, Set<ErrorListener>>();
+  private reconnectAttempts = new Map<string, number>();
+  private reconnectTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
   private constructor() {}
 
@@ -21,7 +26,16 @@ class SocketManager {
   }
 
   resetAll(): void {
-    for (const [url, ws] of this.sockets.entries()) {
+    const sockets = [...this.sockets.entries()];
+    for (const timer of this.reconnectTimers.values()) clearTimeout(timer);
+    this.sockets.clear();
+    this.listeners.clear();
+    this.errorListeners.clear();
+    this.connected.clear();
+    this.reconnectAttempts.clear();
+    this.reconnectTimers.clear();
+
+    for (const [url, ws] of sockets) {
       try {
         if (
           ws.readyState === WebSocket.OPEN ||
@@ -32,16 +46,12 @@ class SocketManager {
       } catch (err) {
         logger.error(
           '[SOCKET]',
-          `resetAll: failed to close socket ${url}`,
+          `resetAll: failed to close socket ${socketLogUrl(url)}`,
           err,
         );
       }
     }
 
-    this.sockets.clear();
-    this.listeners.clear();
-    this.errorListeners.clear();
-    this.connected.clear();
     logger.info('[SOCKET]', 'All connections and state have been reset.');
   }
 
@@ -55,10 +65,11 @@ class SocketManager {
     } catch (err) {
       logger.error(
         '[SOCKET]',
-        `failed to construct WebSocket for ${url}:`,
+        `failed to construct WebSocket for ${socketLogUrl(url)}:`,
         err,
       );
       this.triggerError(url, err instanceof Event ? err : String(err));
+      this.scheduleReconnect(url);
       return;
     }
 
@@ -69,7 +80,8 @@ class SocketManager {
 
     ws.addEventListener('open', () => {
       this.connected.set(url, true);
-      logger.info('[SOCKET]', 'Connected to', url);
+      this.reconnectAttempts.delete(url);
+      logger.info('[SOCKET]', 'Connected to', socketLogUrl(url));
     });
 
     ws.addEventListener('message', (event) => {
@@ -79,20 +91,27 @@ class SocketManager {
           try {
             handler(event.data);
           } catch (err) {
-            logger.error('[SOCKET]', `Handler error for ${url}:`, err);
+            logger.error(
+              '[SOCKET]',
+              `Handler error for ${socketLogUrl(url)}:`,
+              err,
+            );
           }
         }
       }
     });
 
     ws.addEventListener('close', () => {
+      if (this.sockets.get(url) !== ws) return;
+      this.sockets.delete(url);
       this.connected.set(url, false);
-      logger.warn('[SOCKET]', `Disconnected: ${url}`);
+      logger.warn('[SOCKET]', `Disconnected: ${socketLogUrl(url)}`);
       this.triggerError(url, 'Connection closed');
+      this.scheduleReconnect(url);
     });
 
     ws.addEventListener('error', (err) => {
-      logger.error('[SOCKET]', `Socket error for ${url}:`, err);
+      logger.error('[SOCKET]', `Socket error for ${socketLogUrl(url)}:`, err);
       this.triggerError(url, err);
     });
   }
@@ -105,20 +124,23 @@ class SocketManager {
       this.errorListeners.get(url)?.add(onError);
     }
 
-    if (!this.sockets.has(url)) {
-      this.connect(url);
-    }
-
     if (!this.listeners.has(url)) {
       this.listeners.set(url, new Set());
     }
     this.listeners.get(url)?.add(listener);
+
+    if (!this.sockets.has(url)) {
+      this.connect(url);
+    }
   }
 
   unsubscribe(url: string, listener: Listener, onError?: ErrorListener): void {
     this.listeners.get(url)?.delete(listener);
     if (onError) {
       this.errorListeners.get(url)?.delete(onError);
+    }
+    if (this.listeners.get(url)?.size === 0) {
+      this.disconnect(url);
     }
   }
 
@@ -128,24 +150,31 @@ class SocketManager {
     if (ws && this.connected.get(url)) {
       ws.send(typeof data === 'string' ? data : JSON.stringify(data));
     } else {
-      logger.warn('[SOCKET]', `Cannot send: not connected to ${url}`);
+      logger.warn(
+        '[SOCKET]',
+        `Cannot send: not connected to ${socketLogUrl(url)}`,
+      );
       this.triggerError(url, 'Not connected');
     }
   }
 
   disconnect(url: string): void {
     const ws = this.sockets.get(url);
-    if (ws) {
-      ws.close();
-      this.sockets.delete(url);
-      this.listeners.delete(url);
-      this.errorListeners.delete(url);
-      this.connected.delete(url);
-    }
+    this.clearReconnect(url);
+    this.sockets.delete(url);
+    this.listeners.delete(url);
+    this.errorListeners.delete(url);
+    this.connected.delete(url);
+    if (ws) ws.close();
   }
 
   disconnectAll(): void {
-    for (const url of this.sockets.keys()) {
+    const urls = new Set([
+      ...this.sockets.keys(),
+      ...this.listeners.keys(),
+      ...this.reconnectTimers.keys(),
+    ]);
+    for (const url of urls) {
       this.disconnect(url);
     }
   }
@@ -157,10 +186,42 @@ class SocketManager {
         try {
           cb(err);
         } catch (e) {
-          logger.error('[SOCKET]', `Error handler threw for ${url}:`, e);
+          logger.error(
+            '[SOCKET]',
+            `Error handler threw for ${socketLogUrl(url)}:`,
+            e,
+          );
         }
       }
     }
+  }
+
+  private scheduleReconnect(url: string): void {
+    if (
+      this.reconnectTimers.has(url) ||
+      (this.listeners.get(url)?.size || 0) === 0
+    ) {
+      return;
+    }
+
+    const attempt = this.reconnectAttempts.get(url) || 0;
+    const delays = [1000, 2000, 5000];
+    const delay = delays[Math.min(attempt, delays.length - 1)];
+    this.reconnectAttempts.set(url, attempt + 1);
+    this.reconnectTimers.set(
+      url,
+      setTimeout(() => {
+        this.reconnectTimers.delete(url);
+        if ((this.listeners.get(url)?.size || 0) > 0) this.connect(url);
+      }, delay),
+    );
+  }
+
+  private clearReconnect(url: string): void {
+    const timer = this.reconnectTimers.get(url);
+    if (timer) clearTimeout(timer);
+    this.reconnectTimers.delete(url);
+    this.reconnectAttempts.delete(url);
   }
 }
 

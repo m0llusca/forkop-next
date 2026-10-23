@@ -1,3 +1,4 @@
+import { latestLatency } from '../../next/latency';
 import { getConfigSections } from './getConfigSections';
 import { ClashAPI, Forkop } from '../../types';
 import {
@@ -890,7 +891,7 @@ function buildUrlTestInfo({
             outboundMetadata,
             cachedProxyLinks.has(childCode),
           ),
-          latency: childEntry?.value?.history?.[0]?.delay || 0,
+          ...latestLatency(childEntry?.value?.history),
           type: childEntry?.value?.type || '',
           selected: selectedCode === childCode,
           link,
@@ -1003,7 +1004,7 @@ function buildPriorityInfo({
           outboundMetadata,
           cachedProxyLinks.has(childCode),
         ),
-        latency: childEntry?.value?.history?.[0]?.delay || 0,
+        ...latestLatency(childEntry?.value?.history),
         type: childEntry?.value?.type || '',
         selected: selectedCode === childCode,
         link,
@@ -1135,7 +1136,7 @@ function buildProxyGroupOutbounds(
       {
         code,
         displayName,
-        latency: item?.value.history?.[0]?.delay || 0,
+        ...latestLatency(item?.value.history),
         type: priorityConfig ? 'Priority' : item?.value.type || 'URLTest',
         selected: selector?.value?.now === code,
         link,
@@ -1446,7 +1447,7 @@ export async function getDashboardSections(
               {
                 code: outbound?.code || sectionName,
                 displayName: section.interface || outbound?.value?.name || '',
-                latency: outbound?.value?.history?.[0]?.delay || 0,
+                ...latestLatency(outbound?.value?.history),
                 type: outbound?.value?.type || '',
                 selected: true,
                 canCopyLink: false,
@@ -1473,7 +1474,7 @@ export async function getDashboardSections(
                   getJsonOutboundDisplayName(section) ||
                   outbound?.value?.name ||
                   '',
-                latency: outbound?.value?.history?.[0]?.delay || 0,
+                ...latestLatency(outbound?.value?.history),
                 type: outbound?.value?.type || '',
                 selected: true,
                 canCopyLink: false,

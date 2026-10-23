@@ -1,8 +1,8 @@
 #!/bin/sh
 # shellcheck shell=dash
 
-REPO_OWNER="ushan0v"
-REPO_NAME="forkop"
+REPO_OWNER="m0llusca"
+REPO_NAME="forkop-next"
 
 REQUIRED_SPACE_KB=15360
 CONNECT_TIMEOUT_SECONDS=15
@@ -69,6 +69,10 @@ EOF
 parse_args() {
     while [ "$#" -gt 0 ]; do
         case "$1" in
+            --release-source)
+                printf '%s/%s\n' "$REPO_OWNER" "$REPO_NAME"
+                exit 0
+                ;;
             -h|--help)
                 usage
                 exit 0
@@ -158,7 +162,18 @@ process_starttime() {
 
 child_pids() {
     local parent="$1"
-    local status key value pid ppid
+    local status key value pid ppid children
+
+    # Linux exposes immediate children without scanning every process. Scanning
+    # all status fields recursively can itself exceed a short service deadline
+    # on low-power routers. Keep the portable procfs fallback for older kernels.
+    if [ -r "/proc/$parent/task/$parent/children" ]; then
+        IFS= read -r children < "/proc/$parent/task/$parent/children" || true
+        for pid in $children; do
+            printf '%s\n' "$pid"
+        done
+        return 0
+    fi
 
     for status in /proc/[0-9]*/status; do
         [ -r "$status" ] || continue
@@ -175,6 +190,7 @@ child_pids() {
                     ppid="${1:-}"
                     ;;
             esac
+            [ -z "$pid" ] || [ -z "$ppid" ] || break
         done < "$status"
         [ "$ppid" = "$parent" ] && [ -n "$pid" ] && printf '%s\n' "$pid"
     done

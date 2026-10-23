@@ -823,28 +823,34 @@ function add_subscription_source_with_state(config, section, source_index, sourc
 }
 
 function duration_to_seconds(value) {
-    value = as_string(value);
-    if (value == "")
+    let rest = as_string(value);
+    if (rest == "")
         return null;
-    if (match(value, /^[0-9]+$/) != null)
-        return int(value, 10);
+    if (match(rest, /^[0-9]+$/) != null)
+        return int(rest, 10);
 
-    let suffix = substr(value, length(value) - 1);
-    let number = substr(value, 0, length(value) - 1);
-    if (match(number, /^[0-9]+$/) == null)
-        return null;
+    let total = 0.0;
+    let multipliers = {
+        ns: 0.000000001,
+        us: 0.000001,
+        ms: 0.001,
+        s: 1,
+        m: 60,
+        h: 3600,
+        d: 86400
+    };
 
-    let multiplier = null;
-    if (suffix == "s")
-        multiplier = 1;
-    else if (suffix == "m")
-        multiplier = 60;
-    else if (suffix == "h")
-        multiplier = 3600;
-    else if (suffix == "d")
-        multiplier = 86400;
+    while (rest != "") {
+        let matched = match(rest, /^([0-9]+(\.[0-9]+)?)(ns|us|ms|s|m|h|d)/);
+        if (!matched)
+            return null;
 
-    return multiplier == null ? null : int(number, 10) * multiplier;
+        let token = as_string(matched[0]);
+        total += (matched[1] * 1) * multipliers[matched[3]];
+        rest = substr(rest, length(token));
+    }
+
+    return total <= 0 ? null : total;
 }
 
 function urltest_check_interval(section, urltest_id) {
@@ -852,23 +858,22 @@ function urltest_check_interval(section, urltest_id) {
     return interval != "" ? interval : "3m";
 }
 
-function legacy_urltest_idle_timeout(section, urltest_id) {
-    if (urltest_id != "urltest")
-        return "";
-
-    let settings = connections.urltest_settings(section, urltest_id);
-    if (type(settings) == "object" && as_string(settings[".type"] || "") == "urltest")
-        return "";
-
-    let interval = urltest_check_interval(section, urltest_id);
-    let interval_seconds = duration_to_seconds(interval);
-    let default_idle_seconds = duration_to_seconds(runtime_constants.URLTEST_DEFAULT_IDLE_TIMEOUT);
-    return interval_seconds != null && interval_seconds > default_idle_seconds ? interval : "";
-}
-
 function urltest_idle_timeout(section, urltest_id) {
     let configured = connections.urltest_idle_timeout(section, urltest_id);
-    return configured != "" ? configured : legacy_urltest_idle_timeout(section, urltest_id);
+    let interval = urltest_check_interval(section, urltest_id);
+    let interval_seconds = duration_to_seconds(interval);
+    let idle_seconds = duration_to_seconds(configured != ""
+        ? configured
+        : runtime_constants.URLTEST_DEFAULT_IDLE_TIMEOUT);
+
+    // sing-box refuses to start a URLTest group whose interval exceeds its
+    // idle_timeout, and substitutes URLTEST_DEFAULT_IDLE_TIMEOUT when the
+    // option is omitted. Raise the timeout to the interval instead of emitting
+    // a config that fails with "interval must be less or equal than idle_timeout".
+    if (interval_seconds != null && idle_seconds != null && interval_seconds > idle_seconds)
+        return interval;
+
+    return configured;
 }
 
 function supported_urltest_filter_mode(mode) {
@@ -1240,6 +1245,28 @@ function dashboard_filtered_outbounds(section, selector_tags, state, group_outbo
     );
 }
 
+function section_pool_candidate_outbounds(section, urltest_candidate_tags, state) {
+    if (!filter_mode_uses_exclude(connections.dashboard_filter_mode(section)))
+        return urltest_candidate_tags;
+
+    return filter_candidate_outbounds(
+        "exclude",
+        urltest_candidate_tags,
+        object_or_empty(object_or_empty(state.outboundMetadata).names),
+        dashboard_country_metadata(section, state),
+        object_or_empty(state.outboundMetadata),
+        // include side is unused in "exclude" mode
+        [], [], [], false, [], [], [],
+        connections.dashboard_exclude_outbounds(section),
+        connections.dashboard_exclude_regex(section),
+        connections.dashboard_exclude_countries(section),
+        connections.dashboard_exclude_proxy_parameters(section),
+        connections.dashboard_exclude_protocols(section),
+        connections.dashboard_exclude_transports(section),
+        connections.dashboard_exclude_securities(section)
+    );
+}
+
 function priority_levels_with_outbounds(group_id, urltest_candidate_tags, state) {
     let result = [];
     let assigned = {};
@@ -1389,9 +1416,10 @@ function add_proxy_selector(config, section, selector_tags, urltest_candidate_ta
     let urltest_tags = [];
     let priority_tags = [];
     let group_outbounds = {};
+    let group_candidate_tags = section_pool_candidate_outbounds(section, urltest_candidate_tags, state);
 
     for (let urltest_id in connections.urltests(section)) {
-        let urltest = add_urltest_outbound(config, section, urltest_id, urltest_candidate_tags, state);
+        let urltest = add_urltest_outbound(config, section, urltest_id, group_candidate_tags, state);
         remember_dashboard_group_outbounds(
             group_outbounds,
             connections.urltest_display_name(section, urltest_id),
@@ -1404,7 +1432,7 @@ function add_proxy_selector(config, section, selector_tags, urltest_candidate_ta
     }
 
     for (let group_id in connections.priority_groups(section)) {
-        let priority = add_priority_group_outbound(config, section, group_id, urltest_candidate_tags, state);
+        let priority = add_priority_group_outbound(config, section, group_id, group_candidate_tags, state);
         remember_dashboard_group_outbounds(
             group_outbounds,
             connections.priority_group_display_name(section, group_id),
@@ -1434,7 +1462,7 @@ function add_proxy_selector(config, section, selector_tags, urltest_candidate_ta
         tag: selector_tag,
         outbounds: selector_outbounds,
         default: selector_default,
-        interrupt_exist_connections: true
+        interrupt_exist_connections: bool_option(section, "interrupt_exist_connections", true)
     });
 }
 
@@ -2843,6 +2871,8 @@ function unsupported_matcher_key(section) {
 }
 
 function add_outbound_for_section(config, section, taken, sections) {
+    if (option(section, "next_target", "") != "")
+        return;
     let action = option(section, "action", "");
     let section_name = section[".name"];
     if (!valid_section_name(section_name))
@@ -2900,6 +2930,7 @@ function add_route_for_section(config, section) {
 function add_service_route_rules(config, sections) {
     let first = null;
     for (let section in sections) {
+        if (option(section, "next_target", "") != "") continue;
         let action = option(section, "action", "");
         if (connections.is_connections_action(action) ||
             action == "byedpi" || action == "zapret" || action == "zapret2") {
@@ -2936,7 +2967,7 @@ function enabled_sections(deferred_sections) {
     let deferred = deferred_section_set(deferred_sections);
     let result = [];
     uci_cursor().foreach(CONFIG_NAME, "section", function(section) {
-        if (section_enabled(section) && !deferred[as_string(section[".name"])])
+        if (section_enabled(section) && (!section.next_expires || int(section.next_expires) == 0 || int(section.next_expires) > time()) && !deferred[as_string(section[".name"])])
             push(result, section);
     });
     return result;
@@ -3040,8 +3071,19 @@ function generate_config(output_path, service_address, mwan3_active, supports_xh
     for (let section in sections)
         add_mixed_proxy_for_section(config, section, service_address);
 
+    require("service.selection").apply(config);
     assert_unique_outbound_tags(config);
     strip_internal_fields(config);
+    let version = getenv("FORKOP_SING_BOX_VERSION") || "";
+    if (version == "") {
+        let pipe = fs.popen("sing-box version 2>/dev/null", "r");
+        if (pipe) {
+            let text = pipe.read(4096), status = pipe.close();
+            let found = match(text || "", /sing-box version ([0-9][0-9A-Za-z.+_-]*)/);
+            if (status == 0 && found) version = found[1];
+        }
+    }
+    require("singbox.compatibility").transform(config, version);
     if (!write_json_file(output_path, config)) {
         warn("failed to write ", output_path, "\n");
         exit(1);

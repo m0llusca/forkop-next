@@ -32,6 +32,12 @@ sync_service_triggers_payload() {
 start_service() {
     initd_ucode start-service "$1" "$$"
     FORKOP_LAST_START_STATUS="$?"
+    if [ "$FORKOP_LAST_START_STATUS" = 0 ]; then
+        procd_open_instance next-expiry
+        procd_set_param command /usr/bin/forkop next timer "{}"
+        procd_set_param respawn 3600 5 5
+        procd_close_instance
+    fi
     return "$FORKOP_LAST_START_STATUS"
 }
 

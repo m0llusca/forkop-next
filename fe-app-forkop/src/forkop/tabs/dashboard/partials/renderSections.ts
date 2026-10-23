@@ -416,8 +416,28 @@ function renderDefaultState({
           ),
           E(
             'div',
-            { class: getLatencyClass() },
-            outbound.latency ? `${outbound.latency}ms` : 'N/A',
+            {
+              class: getLatencyClass(),
+              title: outbound.latencyTestedAt
+                ? new Date(outbound.latencyTestedAt).toLocaleString()
+                : _('Not measured'),
+            },
+            [
+              E('span', {}, outbound.latency ? `${outbound.latency}ms` : 'N/A'),
+              ...(outbound.latencyTestedAt
+                ? [
+                    E(
+                      'time',
+                      {
+                        dateTime: outbound.latencyTestedAt,
+                        style:
+                          'display:block;font-size:11px;font-weight:normal',
+                      },
+                      new Date(outbound.latencyTestedAt).toLocaleString(),
+                    ),
+                  ]
+                : []),
+            ],
           ),
         ]),
       ],
