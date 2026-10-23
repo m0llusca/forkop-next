@@ -349,7 +349,8 @@ function restore_sing_box_package_variant(variant){die("fixture forbids network 
                         if not compressed:
                             self.assertIn('success', result['events'], result)
 
-    def backup_failure_install(self, compressed, variant, failed_target):
+    def backup_failure_install(self, compressed, variant, failed_target,
+                               include_candidate_library=True):
         """Run the entry point through backup failure with real local restores.
 
         Only downloads, package-manager calls, runtime inspection and candidate
@@ -372,6 +373,8 @@ function restore_sing_box_package_variant(variant){die("fixture forbids network 
         with tarfile.open(archive, 'w:gz') as tar:
             for name, content in [('sing-box', b'candidate core'),
                                   ('libcronet.so', b'candidate cronet')]:
+                if name == 'libcronet.so' and not include_candidate_library:
+                    continue
                 member = tarfile.TarInfo(name)
                 member.size = len(content)
                 tar.addfile(member, io.BytesIO(content))
@@ -395,12 +398,16 @@ function sing_box_runtime_success(mode,args){return true;}
 function normalize_sing_box_version(value){return replace(value,/^v/,"");}
 function resolve_sing_box_extended_release(compressed){return release;}
 function download_with_retry(url,path,label){return fs.writefile(path,fs.readfile(ARGV[2]))!=null;}
-function select_archive_member_path(archive,name){return name;}
+function select_archive_member_path(archive,name){return name=="libcronet.so" && ARGV[6]=="false"?"":name;}
 function validate_sing_box_extended_binary(path,library){return "1.14.3-extended-2.7.3";}
 function pkg_list_update_command(){return "update";}
 function pkg_install_files_command(files){return "install";}
 function run_logged(label,command){push(events,command);return true;}
-function pkg_remove_sing_box_conflict(package){push(events,"remove-"+package);return true;}
+function pkg_remove_sing_box_conflict(package){
+ push(events,"remove-"+package);
+ // A missing-library fixture must stop before installation if production
+ // incorrectly skips the original library backup.
+ return ARGV[6]!="false";}
 function run_logged_pkg_remove_sing_box_conflict(package,label){return pkg_remove_sing_box_conflict(package);}
 function restore_sing_box_package_variant(variant){push(events,"restore-package-"+variant);return false;}
 function restore_sing_box_variant_state(marker,version){}
@@ -432,7 +439,8 @@ function action_success(component,action,message){die("unexpected install succes
         code = code.replace('/usr/lib/libcronet.so', str(library)).replace('/etc/init.d/sing-box', str(init))
         code += '\nlet message="",error_detail="";try{install_sing_box_extended("update",' + ('true' if compressed else 'false') + ');}catch(e){message=""+e;error_detail=sprintf("%J",e);}print(sprintf("%J",{events,message,error_detail}));'
         result = self.run_code(code, self.d, json.dumps(release), archive,
-                               library if failed_target == 'library' else binary, variant, init)
+                               library if failed_target == 'library' else binary, variant, init,
+                               str(include_candidate_library).lower())
         return result, binary, library, init
 
     def test_cronet_backup_failure_preserves_original_library_and_core(self):
@@ -467,6 +475,19 @@ function action_success(component,action,message){die("unexpected install succes
         self.assertEqual(library.read_bytes(), b'exact previous cronet library')
         self.assertIn('restart-with-init', result['events'], result)
         self.assertNotIn('restart-without-init', result['events'], result)
+        self.assertTrue(init.exists())
+        self.assertTrue(os.access(init, os.X_OK))
+
+    def test_compressed_archive_without_cronet_still_backs_up_existing_library_before_package_mutation(self):
+        result, binary, library, init = self.backup_failure_install(
+            True, 'extended', 'library', include_candidate_library=False)
+        self.assertIn('injected-backup-failure', result['events'], result)
+        self.assertIn('backup', result['message'].lower(), result)
+        self.assertNotIn('unexpected install success', result['message'], result)
+        self.assertFalse(any(event.startswith(('remove-', 'restore-package-')) or event == 'install'
+                             for event in result['events']), result)
+        self.assertEqual(binary.read_bytes(), b'exact previous Extended core')
+        self.assertEqual(library.read_bytes(), b'exact previous cronet library')
         self.assertTrue(init.exists())
         self.assertTrue(os.access(init, os.X_OK))
 
