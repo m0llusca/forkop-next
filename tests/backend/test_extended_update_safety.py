@@ -349,6 +349,127 @@ function restore_sing_box_package_variant(variant){die("fixture forbids network 
                         if not compressed:
                             self.assertIn('success', result['events'], result)
 
+    def backup_failure_install(self, compressed, variant, failed_target):
+        """Run the entry point through backup failure with real local restores.
+
+        Only downloads, package-manager calls, runtime inspection and candidate
+        execution are boundaries. Service script creation/removal and all restore
+        helpers run their production implementations against the fixture tree.
+        """
+        binary = self.d / 'runtime/sing-box'
+        binary.parent.mkdir()
+        binary.write_bytes(b'exact previous Extended core')
+        library = self.d / 'runtime/libcronet.so'
+        library.write_bytes(b'exact previous cronet library')
+        init = self.d / 'init.d/sing-box'
+        init.parent.mkdir()
+        init.write_text('#!/bin/sh\n# Forkop managed sing-box service for binary variants\nexit 0\n')
+        init.chmod(0o755)
+        archive = self.d / 'candidate.tar.gz'
+        with tarfile.open(archive, 'w:gz') as tar:
+            for name, content in [('sing-box', b'candidate core'),
+                                  ('libcronet.so', b'candidate cronet')]:
+                member = tarfile.TarInfo(name)
+                member.size = len(content)
+                tar.addfile(member, io.BytesIO(content))
+        release = dict(tag=TAG, asset_name=NAME, asset_url=URL, release_url='',
+                       sha256=hashlib.sha256(archive.read_bytes()).hexdigest())
+        prelude = '''let fs=require("fs");let events=[];let rollback=[];
+let tmp_dir=ARGV[0];let release=json(ARGV[1]);let reality={verified_runtime:function(version,path){return null;}};
+const SB_MANAGED_SERVICE_MARKER="Forkop managed sing-box service for binary variants";
+const SERVICE_INIT=tmp_dir+"/missing-forkop-init";
+let uci_core={available:function(){return false;}};
+function init_tmp_dir(){return true;}
+function owner_pid(){return "fixture";}
+function updates_log(message,level){}
+function sing_box_runtime_output(mode,args){
+ if(mode=="variant")return ARGV[4];
+ if(mode=="read-variant-marker")return "extended";
+ return "1.14.3-extended-2.7.3";}
+function sing_box_runtime_success(mode,args){return true;}
+function normalize_sing_box_version(value){return replace(value,/^v/,"");}
+function resolve_sing_box_extended_release(compressed){return release;}
+function download_with_retry(url,path,label){return fs.writefile(path,fs.readfile(ARGV[2]))!=null;}
+function select_archive_member_path(archive,name){return name;}
+function validate_sing_box_extended_binary(path,library){return "1.14.3-extended-2.7.3";}
+function stop_forkop_before_sing_box_change(){prepare_sing_box_service_disabled();}
+function pkg_list_update_command(){return "update";}
+function pkg_install_files_command(files){return "install";}
+function run_logged(label,command){push(events,command);return true;}
+function pkg_remove_sing_box_conflict(package){push(events,"remove-"+package);return true;}
+function run_logged_pkg_remove_sing_box_conflict(package,label){return pkg_remove_sing_box_conflict(package);}
+function restore_sing_box_package_variant(variant){return false;}
+function restore_sing_box_variant_state(marker,version){}
+function clear_version_caches(){}
+function action_fail(component,action,message){
+ push(events,fs.stat(ARGV[5])!=null?"restart-with-init":"restart-without-init");die(message);}
+function action_success(component,action,message){die("unexpected install success");}
+'''
+        implementation = functions('as_string', 'shell_quote', 'command_from_args',
+            'command_status', 'command_success', 'command_success_from_args',
+            'command_output', 'command_output_from_args', 'file_exists', 'file_nonempty',
+            'read_file', 'write_file', 'remove_file', 'move_file_portable',
+            'move_file_to_backup', 'restore_file_backup', 'restore_sing_box_backup',
+            'managed_sing_box_service_installed', 'managed_sing_box_service_text',
+            'install_managed_sing_box_service_script', 'remove_managed_sing_box_service_script',
+            'disable_sing_box_service_config', 'prepare_sing_box_service_disabled',
+            'prepare_sing_box_package_service_install', 'restore_sing_box_service_from_marker',
+            'sing_box_variant_is_package_managed', 'restore_sing_box_install_backup',
+            'restore_sing_box_after_failed_extended_install',
+            'restore_sing_box_after_failed_extended_package_install',
+            'sing_box_verified_runtime', 'download_verified_sing_box_extended',
+            'install_sing_box_extended_package', 'install_sing_box_extended')
+        implementation = implementation.replace(
+            'function move_file_to_backup(target_path, backup_path) {',
+            'function move_file_to_backup(target_path, backup_path) {\n'
+            '    if (target_path == ARGV[3]) { push(events,"injected-backup-failure"); return false; }')
+        for helper in ('restore_sing_box_after_failed_extended_install',
+                       'restore_sing_box_after_failed_extended_package_install'):
+            implementation = implementation.replace('function ' + helper + '(', 'function real_' + helper + '(')
+            implementation += '\nfunction ' + helper + '(variant,binary,cronet,marker,version,archive,touched) {\n'
+            implementation += 'let ok=real_' + helper + '(variant,binary,cronet,marker,version,archive,touched);push(rollback,ok);return ok;\n}\n'
+        code = (prelude + implementation).replace('/usr/bin/sing-box', str(binary))
+        code = code.replace('/usr/lib/libcronet.so', str(library)).replace('/etc/init.d/sing-box', str(init))
+        code += '\nlet message="";try{install_sing_box_extended("update",' + ('true' if compressed else 'false') + ');}catch(e){message=""+e;}print(sprintf("%J",{events,rollback,message}));'
+        result = self.run_code(code, self.d, json.dumps(release), archive,
+                               library if failed_target == 'library' else binary, variant, init)
+        return result, binary, library, init
+
+    def test_cronet_backup_failure_preserves_original_library_and_core(self):
+        for compressed, variant in ((True, 'extended'), (False, 'extended'),
+                                    (False, 'stable')):
+            with self.subTest(compressed=compressed, variant=variant):
+                with tempfile.TemporaryDirectory() as directory:
+                    previous = self.d
+                    self.d = Path(directory)
+                    try:
+                        result, binary, library, init = self.backup_failure_install(
+                            compressed, variant, 'library')
+                        self.assertIn('injected-backup-failure', result['events'], result)
+                        self.assertIn('backup', result['message'].lower(), result)
+                        self.assertFalse(any(event.startswith('remove-') or event == 'install'
+                                             for event in result['events']), result)
+                        self.assertEqual(binary.read_bytes(), b'exact previous Extended core')
+                        self.assertTrue(library.exists(), 'Failed backup deleted the original libcronet.so')
+                        self.assertEqual(library.read_bytes(), b'exact previous cronet library')
+                        self.assertEqual(result['rollback'], [True], result)
+                        self.assertTrue(init.exists(), 'Rollback must restore a usable service')
+                    finally:
+                        self.d = previous
+
+    def test_package_binary_backup_failure_restores_service_before_restart(self):
+        result, binary, library, init = self.backup_failure_install(False, 'extended', 'binary')
+        self.assertIn('injected-backup-failure', result['events'], result)
+        self.assertIn('backup', result['message'].lower(), result)
+        self.assertFalse(any(event.startswith('remove-') or event == 'install'
+                             for event in result['events']), result)
+        self.assertEqual(binary.read_bytes(), b'exact previous Extended core')
+        self.assertEqual(library.read_bytes(), b'exact previous cronet library')
+        self.assertIn('restart-with-init', result['events'], result)
+        self.assertNotIn('restart-without-init', result['events'], result)
+        self.assertTrue(init.exists())
+        self.assertTrue(os.access(init, os.X_OK))
+
 
 if __name__ == '__main__':
     unittest.main()
