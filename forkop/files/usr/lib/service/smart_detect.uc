@@ -116,9 +116,12 @@ function handle(action, payload) {
         if (status != 0) return failure("smart_detect_logs_unavailable");
         let candidates = [];
         for (let line in split(text, "\n")) {
+            // Native regexes are POSIX ERE; do not use non-capturing groups.
+            // Uppercase ERROR also matches the core's ANSI-coloured level tag.
+            if (!match(line, /ERROR|(^|[[:space:]])error([[:space:]:]|$)/)) continue;
             if (!match(line, /outbound\/direct\[(direct-out|bypass-out)\]/)) continue;
-            let found = match(line, /outbound connection to ([A-Za-z0-9.-]+):[0-9]+/);
-            let host = found ? domain(found[1]) : null;
+            let found = match(line, /(outbound|open) (packet )?connection to ([A-Za-z0-9.-]+):[0-9]+/);
+            let host = found ? domain(found[3]) : null;
             if (host && index(candidates, host) < 0 && length(candidates) < 20) push(candidates, host);
         }
         if (length(candidates) == 0) return { success: true, data: { enabled: true, scanned: 0 } };

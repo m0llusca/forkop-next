@@ -43,3 +43,28 @@ measured 2.9845s against a 2.5s limit while multiple VM suites were active. This
 reported to the root orchestrator; no assertion was relaxed and no failed test is
 omitted. Root is rerunning the focused timeout and final whole suite without VM
 contention. Backend production files are frozen for integration.
+
+## Independent audit: management controller isolation
+
+- Native behavioral RED supplied by the integration runner: snapshot
+  `fd7f87a5fb66`, `python3 -m unittest discover -s tests/backend -p
+  'test_controller_security.py' -v`. Default generation bound the controller to
+  the service address instead of loopback, enabling WAN dashboard access without
+  a secret exposed the wildcard listener, disabling the dashboard discarded a
+  configured secret, and local RPC diagnostics failed to reach/authenticate the
+  private fixture controller. The explicitly authenticated LAN case passed.
+- Generator now uses `127.0.0.1:9090` by default. An enabled dashboard with a
+  nonempty configured secret may bind to the service address or, with explicit
+  WAN access, the wildcard address. Configured authentication survives disabling
+  the dashboard; UI serving remains tied to the dashboard setting.
+- Native diagnostic requests choose the corresponding private/controller address
+  and include the configured Bearer secret independently of WAN access. The
+  regression uses a real temporary localhost HTTP server to verify the request
+  and authentication header rather than a command-output mock.
+- GREEN and affected-suite verification are pending the root runner's fresh
+  snapshot; no VM or live-network checks were run by this worker.
+
+Integration runner follow-up: `cff38e6527d6` passed all 148 Python tests including
+all five controller security cases, and all 70 shell suites. Fresh normal/strict
+ucode compilation passed in `f677e7f12184`. Detailed re-audit evidence superseding
+the intermediate pending checks is in [re-audit.md](re-audit.md).

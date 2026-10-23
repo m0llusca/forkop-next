@@ -47,6 +47,14 @@ class NextPolicies(profiles.NextProfiles):
         self.assertTrue(result['success'])
         self.assertIn("bypass", self.config.read_text())
 
+    def test_assigning_second_direct_device_preserves_first_assignment(self):
+        for address in ['192.168.1.25', '192.168.1.26']:
+            self.assertTrue(self.call('device_set', {'address': address, 'section': 'direct'})['success'])
+        self.assertEqual(self.call('devices')['data']['items'], [
+            {'address': '192.168.1.25', 'section': 'nxt_direct'},
+            {'address': '192.168.1.26', 'section': 'nxt_direct'},
+        ])
+
     def test_clearing_device_restores_normal_rules(self):
         self.call('device_set', {'address': '192.168.1.25', 'section': 'main'})
         self.assertTrue(self.call('device_set', {'address': '192.168.1.25', 'section': ''})['success'])

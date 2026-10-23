@@ -1,4 +1,5 @@
 import {
+  canUseDirectClashApi,
   getClashWsUrl,
   isCopyableProxyLink,
   onMount,
@@ -26,7 +27,6 @@ import {
   renderWidget,
 } from './partials';
 import { fetchServicesInfo } from '../../fetchers/fetchServicesInfo';
-import { getClashApiSecret } from '../../methods/custom/getClashApiSecret';
 import { Forkop } from '../../types';
 import {
   getCachedRuntimeUiState,
@@ -39,6 +39,21 @@ import { shouldShowLoadingForRestoredAction } from '../../helpers/restoredAction
 import { getServiceAvailability } from '../../helpers/serviceAvailability';
 
 const SECTIONS_REFRESH_INTERVAL_MS = 10000;
+const TELEMETRY_RPC_POLL_INTERVAL_MS = 3000;
+let telemetryPollTimer: ReturnType<typeof setInterval> | null = null;
+let telemetryPolling = false;
+let previousTelemetry: {
+  downloadTotal: number;
+  uploadTotal: number;
+  time: number;
+} | null = null;
+
+type ConnectionsSnapshot = {
+  downloadTotal: number;
+  uploadTotal: number;
+  connections?: unknown[];
+  memory?: number;
+};
 const LATENCY_TEST_BUTTON_CLASS = 'dashboard-sections-grid-item-test-latency';
 const LATENCY_TEST_BUTTON_LABEL_CLASS =
   'dashboard-sections-grid-item-test-latency__label';
@@ -451,18 +466,155 @@ function stopActionStateWatcher() {
   actionStateUnsubscribe = null;
 }
 
+function applyBandwidth(data: { up: number; down: number }) {
+  store.set({ bandwidthWidget: { loading: false, failed: false, data } });
+}
+
+function applyConnectionsSnapshot(snapshot: ConnectionsSnapshot) {
+  store.set({
+    trafficTotalWidget: {
+      loading: false,
+      failed: false,
+      data: {
+        downloadTotal: snapshot.downloadTotal,
+        uploadTotal: snapshot.uploadTotal,
+      },
+    },
+    systemInfoWidget: {
+      loading: false,
+      failed: false,
+      data: {
+        connections: snapshot.connections?.length || 0,
+        memory: snapshot.memory || 0,
+      },
+    },
+  });
+}
+
+function canUpdateTelemetry(dataUpdatesId: number) {
+  return (
+    dashboardMounted &&
+    dataUpdatesId === dashboardDataUpdatesId &&
+    getDashboardServiceAvailability() === 'running'
+  );
+}
+
+async function pollTelemetrySnapshot(dataUpdatesId: number) {
+  if (
+    !canUpdateTelemetry(dataUpdatesId) ||
+    telemetryPolling ||
+    document.hidden ||
+    pageUnloading
+  ) {
+    return;
+  }
+  telemetryPolling = true;
+  try {
+    const response = await ForkopShellMethods.getClashApiConnections();
+    if (!canUpdateTelemetry(dataUpdatesId)) {
+      return;
+    }
+    if (
+      !response.success ||
+      !response.data ||
+      typeof response.data !== 'object'
+    ) {
+      throw new Error('failed to fetch controller telemetry');
+    }
+    const snapshot = response.data as ConnectionsSnapshot;
+    if (
+      !Number.isFinite(snapshot.downloadTotal) ||
+      snapshot.downloadTotal < 0 ||
+      !Number.isFinite(snapshot.uploadTotal) ||
+      snapshot.uploadTotal < 0
+    ) {
+      throw new Error('invalid controller traffic counters');
+    }
+    const time = performance.now();
+    const previous = previousTelemetry;
+    const elapsed = previous ? (time - previous.time) / 1000 : 0;
+    const validDelta =
+      previous &&
+      elapsed > 0 &&
+      snapshot.downloadTotal >= previous.downloadTotal &&
+      snapshot.uploadTotal >= previous.uploadTotal;
+    applyBandwidth({
+      down: validDelta
+        ? (snapshot.downloadTotal - previous.downloadTotal) / elapsed
+        : 0,
+      up: validDelta
+        ? (snapshot.uploadTotal - previous.uploadTotal) / elapsed
+        : 0,
+    });
+    previousTelemetry = {
+      downloadTotal: snapshot.downloadTotal,
+      uploadTotal: snapshot.uploadTotal,
+      time,
+    };
+    applyConnectionsSnapshot(snapshot);
+  } catch (error) {
+    if (!canUpdateTelemetry(dataUpdatesId)) {
+      return;
+    }
+    logger.warn('[DASHBOARD]', 'controller telemetry polling failed', error);
+    previousTelemetry = null;
+    const current = store.get();
+    store.set({
+      bandwidthWidget: {
+        ...current.bandwidthWidget,
+        loading: false,
+        failed: true,
+      },
+      trafficTotalWidget: {
+        ...current.trafficTotalWidget,
+        loading: false,
+        failed: true,
+      },
+      systemInfoWidget: {
+        ...current.systemInfoWidget,
+        loading: false,
+        failed: true,
+      },
+    });
+  } finally {
+    telemetryPolling = false;
+  }
+}
+
+function startTelemetryPolling(dataUpdatesId: number) {
+  if (telemetryPollTimer) {
+    return;
+  }
+  void pollTelemetrySnapshot(dataUpdatesId);
+  telemetryPollTimer = setInterval(() => {
+    void pollTelemetrySnapshot(dataUpdatesId);
+  }, TELEMETRY_RPC_POLL_INTERVAL_MS);
+}
+
 async function connectToClashSockets(dataUpdatesId: number) {
   const mountId = dashboardMountId;
-  const clashApiSecret = await getClashApiSecret();
+  const sections = await CustomForkopMethods.getConfigSections().catch(
+    (error) => {
+      logger.warn('[DASHBOARD]', 'controller settings unavailable', error);
+      return [];
+    },
+  );
+  const settings = sections.find((section) => section['.type'] === 'settings');
 
   if (
     !dashboardMounted ||
     mountId !== dashboardMountId ||
     dataUpdatesId !== dashboardDataUpdatesId ||
-    getDashboardServiceAvailability() === 'stopped'
+    !canUpdateTelemetry(dataUpdatesId)
   ) {
     return;
   }
+
+  if (!canUseDirectClashApi(settings)) {
+    startTelemetryPolling(dataUpdatesId);
+    return;
+  }
+  const clashApiSecret = encodeURIComponent(settings?.yacd_secret_key || '');
 
   socket.subscribe(
     `${getClashWsUrl()}/traffic?token=${clashApiSecret}`,
@@ -476,13 +628,7 @@ async function connectToClashSockets(dataUpdatesId: number) {
 
       const parsedMsg = JSON.parse(msg);
 
-      store.set({
-        bandwidthWidget: {
-          loading: false,
-          failed: false,
-          data: { up: parsedMsg.up, down: parsedMsg.down },
-        },
-      });
+      applyBandwidth({ up: parsedMsg.up, down: parsedMsg.down });
     },
     (_err) => {
       if (
@@ -519,24 +665,7 @@ async function connectToClashSockets(dataUpdatesId: number) {
 
       const parsedMsg = JSON.parse(msg);
 
-      store.set({
-        trafficTotalWidget: {
-          loading: false,
-          failed: false,
-          data: {
-            downloadTotal: parsedMsg.downloadTotal,
-            uploadTotal: parsedMsg.uploadTotal,
-          },
-        },
-        systemInfoWidget: {
-          loading: false,
-          failed: false,
-          data: {
-            connections: parsedMsg.connections?.length,
-            memory: parsedMsg.memory,
-          },
-        },
-      });
+      applyConnectionsSnapshot(parsedMsg);
     },
     (_err) => {
       if (
@@ -583,6 +712,11 @@ function getDashboardServiceAvailability() {
 function stopDashboardDataUpdates() {
   dashboardDataUpdatesStarted = false;
   dashboardDataUpdatesId += 1;
+  previousTelemetry = null;
+  if (telemetryPollTimer) {
+    clearInterval(telemetryPollTimer);
+    telemetryPollTimer = null;
+  }
 
   if (sectionsRefreshTimer) {
     clearInterval(sectionsRefreshTimer);
@@ -618,7 +752,7 @@ function syncDashboardServiceAvailability() {
 
   container?.classList.toggle('fkp_dashboard-page--service-stopped', stopped);
 
-  if (stopped || availability === 'loading') {
+  if (availability !== 'running') {
     stopDashboardDataUpdates();
     return;
   }

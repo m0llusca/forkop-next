@@ -57,6 +57,56 @@ class NextProfiles(unittest.TestCase):
         diff = self.call('profile_diff', {'name': 'Home'})['data']
         self.assertEqual(diff['changed'], ['settings.dns_type'])
 
+    def test_profile_diff_identifies_exact_saved_profile_contents(self):
+        import hashlib
+        self.assertTrue(self.call('profile_save', {'name': 'Home'})['success'])
+        reviewed = self.call('profile_diff', {'name': 'Home'})['data']
+        original_digest = hashlib.sha256(self.original.encode()).hexdigest()
+        self.assertEqual(reviewed.get('profile_digest'), original_digest)
+
+    def test_replaced_profile_cannot_apply_against_reviewed_profile_digest(self):
+        import hashlib
+        self.assertTrue(self.call('profile_save', {'name': 'Home'})['success'])
+        reviewed = self.call('profile_diff', {'name': 'Home'})['data']
+        original_digest = hashlib.sha256(self.original.encode()).hexdigest()
+        self.assertTrue(self.call('profile_import', {
+            'name': 'Home', 'config': self.original.replace('udp', 'dot')
+        })['success'])
+        result = self.call('profile_apply', {
+            'name': 'Home', 'expected': reviewed['current_digest'],
+            'expected_profile': original_digest,
+        })
+        self.assertEqual(result.get('error'), 'profile_conflict')
+        self.assertEqual(self.config.read_text(), self.original)
+
+    def test_profile_diff_digest_identifies_reviewed_bytes_during_external_edit(self):
+        import hashlib
+        import shlex
+        self.assertTrue(self.call('profile_import', {
+            'name': 'Home', 'config': self.original.replace('udp', 'dot')
+        })['success'])
+        replacement = self.dir / 'external-edit'
+        replacement.write_text(self.original.replace('udp', 'doh'))
+        marker = self.dir / 'edited'
+        bindir = self.dir / 'bin'
+        bindir.mkdir()
+        sync = bindir / 'sync'
+        sync.write_text('#!/bin/sh\nif [ ! -f ' + shlex.quote(str(marker)) + ' ]; then\n'
+                        'cp ' + shlex.quote(str(replacement)) + ' ' + shlex.quote(str(self.config)) + '\n'
+                        'touch ' + shlex.quote(str(marker)) + '\nfi\nexit 0\n')
+        sync.chmod(0o700)
+        self.env['PATH'] = str(bindir) + ':' + self.env['PATH']
+        reviewed = self.call('profile_diff', {'name': 'Home'})['data']
+        self.assertEqual(self.config.read_text(), replacement.read_text())
+        self.assertEqual(reviewed['changed'], ['settings.dns_type'])
+        self.assertEqual(reviewed['current_digest'], hashlib.sha256(self.original.encode()).hexdigest())
+        result = self.call('profile_apply', {
+            'name': 'Home', 'expected': reviewed['current_digest'],
+            'expected_profile': reviewed['profile_digest'],
+        })
+        self.assertEqual(result.get('error'), 'conflict')
+        self.assertEqual(self.config.read_text(), replacement.read_text())
+
     def test_apply_then_rollback_restores_original(self):
         changed = self.original.replace('udp', 'dot')
         self.assertTrue(self.call('profile_import', {'name': 'Travel', 'config': changed})['success'])

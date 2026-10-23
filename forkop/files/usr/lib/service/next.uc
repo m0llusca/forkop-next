@@ -180,9 +180,10 @@ function policy(action,payload) {
     else if(action=='device_set') {
         if(!address(payload.address))return fail('invalid_address');
         if(payload.section=='direct') {
+            let existing=c.get_all('forkop','nxt_direct');
             c.set('forkop','nxt_direct','section');c.set('forkop','nxt_direct','enabled','1');c.set('forkop','nxt_direct','action','bypass');
             c.reorder('forkop','nxt_direct',0);payload.section='nxt_direct';
-            push(all,{'.type':'section','.name':'nxt_direct'});
+            if(!existing || existing['.type']!='section')push(all,{'.type':'section','.name':'nxt_direct'});
         }
         let target=payload.section?c.get_all('forkop',payload.section):null;
         if(payload.section && (!target || target['.type']!='section' || target.enabled=='0'))return fail('invalid_section');
@@ -258,12 +259,17 @@ function handle(action,payload) {
         }
         if(text==null)return fail('not_found');
         if(action=='profile_export')return ok({name:payload.name,config:text});
-        if(action=='profile_apply')return apply(text,payload.expected);
+        if(action=='profile_apply') {
+            if(payload.expected_profile && payload.expected_profile!=digest(path))return fail('profile_conflict');
+            return apply(text,payload.expected);
+        }
         if(action=='profile_diff') {
-            let old=parsed(read(CONFIG));if(!old)return fail('invalid_config');let a=flatten(old.rows), saved=parsed(text);if(!saved)return fail('invalid_config');let b=flatten(saved.rows),changed=[];
+            let old=parsed(read(CONFIG));if(!old)return fail('invalid_config');
+            let current_digest=digest(old.path+'/forkop'),a=flatten(old.rows),saved=parsed(text);if(!saved)return fail('invalid_config');
+            let profile_digest=digest(saved.path+'/forkop'),b=flatten(saved.rows),changed=[];
             for(let key in keys(a))if(a[key]!=b[key])push(changed,key);
             for(let key in keys(b))if(a[key]==null)push(changed,key);
-            sort(changed);return ok({changed,current_digest:digest(CONFIG)});
+            sort(changed);return ok({changed,current_digest,profile_digest});
         }
     }
     if(contains(['smart_detect_configure','devices','device_set','gaming_apply','temporary_add','temporary_list','temporary_delete','expire'],action))return policy(action,payload);

@@ -142,14 +142,17 @@ function getClashApiSecret(configSections: Forkop.ConfigSection[]) {
   return getSettingsSection(configSections)?.yacd_secret_key || '';
 }
 
-function canFetchClashApiDirectly() {
-  return canUseDirectClashApi() && typeof fetch === 'function';
+function canFetchClashApiDirectly(configSections: Forkop.ConfigSection[]) {
+  return (
+    canUseDirectClashApi(getSettingsSection(configSections)) &&
+    typeof fetch === 'function'
+  );
 }
 
 async function getClashApiProxies(
   configSections: Forkop.ConfigSection[],
 ): Promise<Forkop.MethodResponse<ClashAPI.Proxies>> {
-  if (canFetchClashApiDirectly()) {
+  if (canFetchClashApiDirectly(configSections)) {
     const secret = getClashApiSecret(configSections);
     const controller = new AbortController();
     const timeoutId = setTimeout(

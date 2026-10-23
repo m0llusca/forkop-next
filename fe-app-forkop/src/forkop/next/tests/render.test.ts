@@ -39,7 +39,14 @@ function setup() {
     if (action === 'profile_list')
       return { success: true, data: { items: [{ name: 'home' }] } };
     if (action === 'profile_diff')
-      return { success: true, data: { changes: ['section main: changed'] } };
+      return {
+        success: true,
+        data: {
+          current_digest: 'abc123',
+          profile_digest: 'profile123',
+          changes: ['section main: changed'],
+        },
+      };
     if (action === 'route_explain')
       return {
         success: true,
@@ -71,6 +78,91 @@ function setup() {
 }
 const button = (text: string) =>
   [...document.querySelectorAll('button')].find((x) => x.textContent === text)!;
+
+function profileScenario() {
+  let digest = 'current-before';
+  let comparisonFails = false;
+  const calls: Array<[string, Record<string, unknown>]> = [];
+  const panel = renderNextPanel(async (action, payload = {}) => {
+    calls.push([action, payload]);
+    if (action === 'status')
+      return { success: true, data: { digest, versions: {}, sections: [] } };
+    if (action === 'profile_list')
+      return { success: true, data: { items: [{ name: 'home' }] } };
+    if (action === 'profile_diff')
+      return comparisonFails
+        ? { success: false, error: 'profile_unavailable' }
+        : {
+            success: true,
+            data: {
+              current_digest: digest,
+              profile_digest: 'reviewed-profile',
+            },
+          };
+    return { success: true, data: { items: [] } };
+  });
+  document.body.append(panel);
+  return {
+    panel,
+    calls,
+    changeConfig: () => (digest = 'current-after'),
+    failComparison: () => (comparisonFails = true),
+  };
+}
+
+it('invalidates a reviewed profile when refreshed current configuration changes', async () => {
+  const scenario = profileScenario();
+  await tick();
+  button('Сравнить профиль').click();
+  await tick();
+  expect(button('Применить профиль').disabled).toBe(false);
+  scenario.changeConfig();
+  button('Обновить данные').click();
+  await tick();
+  expect(button('Применить профиль').disabled).toBe(true);
+});
+
+it('invalidates a reviewed profile when an import replaces a profile with the same name', async () => {
+  const { panel } = profileScenario();
+  await tick();
+  button('Сравнить профиль').click();
+  await tick();
+  expect(button('Применить профиль').disabled).toBe(false);
+  panel.dispatchEvent(
+    new CustomEvent('forkop:profiles-changed', { bubbles: true }),
+  );
+  await tick();
+  expect(button('Применить профиль').disabled).toBe(true);
+});
+
+it('does not keep an older comparison valid after a new comparison fails', async () => {
+  const scenario = profileScenario();
+  await tick();
+  button('Сравнить профиль').click();
+  await tick();
+  scenario.failComparison();
+  button('Сравнить профиль').click();
+  await tick();
+  expect(button('Применить профиль').disabled).toBe(true);
+});
+
+it('binds profile activation to the exact saved profile that was reviewed', async () => {
+  const { calls } = profileScenario();
+  await tick();
+  button('Сравнить профиль').click();
+  await tick();
+  button('Применить профиль').click();
+  await tick();
+  expect(calls).toContainEqual([
+    'profile_apply',
+    {
+      name: 'home',
+      expected: 'current-before',
+      expected_profile: 'reviewed-profile',
+    },
+  ]);
+});
+
 describe('Next control panel', () => {
   it('shows real versions and keeps configuration detail behind an explicit mode', async () => {
     const { panel } = setup();
@@ -109,7 +201,7 @@ describe('Next control panel', () => {
     await tick();
     expect(calls).toContainEqual([
       'profile_apply',
-      { name: 'home', expected: 'abc123' },
+      { name: 'home', expected: 'abc123', expected_profile: 'profile123' },
     ]);
   });
   it('only accepts a Smart Detect proposal on explicit user action', async () => {

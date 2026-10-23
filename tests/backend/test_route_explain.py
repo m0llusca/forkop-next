@@ -57,6 +57,23 @@ class RouteExplainTests(unittest.TestCase):
         self.assertEqual(data["decision"]["status"], "indeterminate")
         self.assertIn("rule_set", data["missing"])
 
+    def test_unknown_ruleset_can_extend_a_nonmatching_destination_group(self):
+        data = self.explain([("remote", {"domain_suffix": "other.example", "rule_set": "remote"}),
+                             ("later", {"domain_suffix": "example.com"})])["data"]
+        self.assertEqual(data["decision"]["status"], "indeterminate")
+        self.assertEqual(data["decision"]["section"], "remote")
+
+    def test_matching_domain_does_not_prove_an_unknown_compound_ruleset_matches(self):
+        data = self.explain([("remote", {"domain_suffix": "example.com", "rule_set": "remote"})])["data"]
+        self.assertEqual(data["decision"]["status"], "indeterminate")
+
+    def test_internal_service_override_does_not_choose_an_expired_connection(self):
+        data = self.explain([("expired", {"next_expires": "1"}),
+                             ("active", {"domain_suffix": "other.example"})],
+                            {"domain": "ip.podkop.fyi"})["data"]
+        self.assertEqual(data["decision"]["section"], "active")
+        self.assertEqual(data["decision"]["outbound"], "active-out")
+
     def test_port_is_and_guard_and_missing_port_stays_unknown(self):
         sections = [("main", {"domain_suffix": "example.com", "ports": "443 8000-8010"})]
         self.assertEqual(self.explain(sections, {"domain": "example.com", "port": 8001})["data"]["decision"]["section"], "main")

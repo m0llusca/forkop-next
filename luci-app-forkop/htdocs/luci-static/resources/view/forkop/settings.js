@@ -433,10 +433,16 @@ function createSettingsContent(section, capabilities) {
     "yacd_secret_key",
     _("YACD Secret Key"),
     _(
-      "Secret key for authenticating remote access to YACD when WAN access is enabled.",
+      "A secret key is required for YACD access from LAN or WAN. Without remote access, the controller stays private and LuCI uses its authenticated connection.",
     ),
   );
-  o.depends("enable_yacd_wan_access", "1");
+  o.depends("enable_yacd", "1");
+  o.password = true;
+  o.validate = function (section_id, value) {
+    return String(value || "").trim()
+      ? true
+      : _("Enter a secret key to enable remote YACD access.");
+  };
   o.rmempty = false;
 
   o = section.option(

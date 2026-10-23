@@ -9,7 +9,6 @@ import {
 } from '../../../icons';
 import { CustomForkopMethods, ForkopShellMethods } from '../../methods';
 import { getOutboundTagBySection } from '../../runtimeTags';
-import { getClashApiSecret } from '../../methods/custom/getClashApiSecret';
 import { logger, socket, store, StoreType } from '../../services';
 import { Forkop } from '../../types';
 import {
@@ -1416,7 +1415,13 @@ function startConnectionsPolling() {
 
 async function connectToConnectionsSocket(updatesId: number) {
   const mountId = monitoringMountId;
-  const clashApiSecret = await getClashApiSecret();
+  const sections = await CustomForkopMethods.getConfigSections().catch(
+    (error) => {
+      logger.warn('[MONITORING]', 'controller settings unavailable', error);
+      return [];
+    },
+  );
+  const settings = sections.find((section) => section['.type'] === 'settings');
 
   if (
     !monitoringMounted ||
@@ -1427,7 +1432,12 @@ async function connectToConnectionsSocket(updatesId: number) {
     return;
   }
 
-  connectionsSocketUrl = `${getClashWsUrl()}/connections?token=${clashApiSecret}`;
+  if (!canUseDirectClashApi(settings)) {
+    startConnectionsPolling();
+    return;
+  }
+
+  connectionsSocketUrl = `${getClashWsUrl()}/connections?token=${encodeURIComponent(settings?.yacd_secret_key || '')}`;
 
   socket.subscribe(
     connectionsSocketUrl,
@@ -1467,13 +1477,8 @@ function startConnectionsUpdates() {
     return;
   }
 
-  if (canUseDirectClashApi()) {
-    const updatesId = ++connectionsUpdatesId;
-    void connectToConnectionsSocket(updatesId);
-    return;
-  }
-
-  startConnectionsPolling();
+  const updatesId = ++connectionsUpdatesId;
+  void connectToConnectionsSocket(updatesId);
 }
 
 function stopConnectionsUpdates() {

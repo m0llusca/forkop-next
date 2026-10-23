@@ -4,7 +4,7 @@ from pathlib import Path
 from test_next_profiles import LIB
 
 class RoutingRegressions(unittest.TestCase):
-    def generate(self, options=None, child=None):
+    def generate(self, options=None, child=None, settings=None):
         with tempfile.TemporaryDirectory() as d:
             fixture=Path(d)/'fixture.json'; output=Path(d)/'out.json'
             section={'.name':'main','.type':'section','enabled':'1','action':'connection',
@@ -12,6 +12,7 @@ class RoutingRegressions(unittest.TestCase):
                                              'vless://00000000-0000-4000-8000-000000000002@drop.example:443?security=none#Drop']}
             section.update(options or {})
             data={'settings':{'.name':'settings','.type':'settings'},'section':[section]}
+            data['settings'].update(settings or {})
             if child:data['urltest']=[dict({'.name':'slow','.type':'urltest','section':'main'},**child)]
             fixture.write_text(json.dumps(data))
             run=subprocess.run(['ucode','-L',str(LIB),str(LIB/'singbox/generator.uc'),'generate-config-fixture',str(fixture),str(output),'127.0.0.1'],env=dict(os.environ,FORKOP_LIB=str(LIB),FORKOP_SECTION_CACHE_DIR=d+'/cache',FORKOP_SING_BOX_VERSION=getattr(self,'version','')),capture_output=True,text=True)
@@ -26,6 +27,26 @@ class RoutingRegressions(unittest.TestCase):
     def test_non_dns_source_dns_packets_are_rejected(self):
         config=self.generate({'source_ip_cidr':['192.168.1.2'],'domain_suffix':['example.org']})
         self.assertTrue([rule for rule in config['route']['rules'] if rule.get('action')=='reject' and 'source-dns-in' in rule.get('inbound',[])])
+
+    def test_ipv6_transparent_traffic_is_sniffed_for_domain_policies(self):
+        # Without sniffing the IPv6 listener, TLS SNI and QUIC domain policies
+        # cannot classify real-IP traffic on the same terms as IPv4 traffic.
+        config=self.generate({'domain_suffix':['example.org']})
+        sniffed=set()
+        for rule in config['route']['rules']:
+            if rule.get('action')=='sniff':
+                inbound=rule.get('inbound',[])
+                sniffed.update(inbound if isinstance(inbound,list) else [inbound])
+        self.assertTrue({'tproxy-in','tproxy6-in'}.issubset(sniffed),sniffed)
+
+    def test_disable_quic_rejects_both_transparent_ip_families(self):
+        config=self.generate(settings={'disable_quic':'1'})
+        rejected=set()
+        for rule in config['route']['rules']:
+            if rule.get('action')=='reject' and rule.get('protocol')=='quic':
+                inbound=rule.get('inbound',[])
+                rejected.update(inbound if isinstance(inbound,list) else [inbound])
+        self.assertTrue({'tproxy-in','tproxy6-in'}.issubset(rejected),rejected)
 
     def test_manual_selector_respects_keep_existing_connections(self):
         config=self.generate({'interrupt_exist_connections':'0'})

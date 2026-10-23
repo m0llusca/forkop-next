@@ -424,30 +424,11 @@ function clash_api_json(action, arg1, arg2, arg3) {
     }
 }
 
-function capture_selector_state() {
-    return selector_state_from_proxies_payload(clash_api_json("get_proxies"));
-}
-
-function restore_selector_state(snapshot) {
-    let pairs = selector_restore_pairs(snapshot, clash_api_json("get_proxies"));
-
-    for (let pair in pairs)
-        module_success(DIAGNOSTICS_UC, [ "clash-api", "set_group_proxy", pair.group, pair.proxy, "restore" ]);
-}
-
-function module_background(module_path, args) {
-    return command_status(module_command(module_path, args) + " >/dev/null 2>&1 1000>&- &") == 0;
-}
-
 function config_get(path, fallback) {
     path = as_string(path);
     if (!uci_core.exists(path))
         return as_string(fallback);
     return trim(uci_core.get(path));
-}
-
-function config_set(path, value) {
-    return uci_core.set(path, value);
 }
 
 function file_md5(path) {
@@ -458,6 +439,33 @@ function file_md5(path) {
     let output = command_output("md5sum " + shell_quote(path) + " 2>/dev/null");
     let fields = split(trim(output), /[ \t\r\n]+/);
     return length(fields) > 0 ? as_string(fields[0]) : "";
+}
+
+function capture_selector_state() {
+    let config_path = config_get(CONFIG_NAME + ".settings.config_path", "/etc/sing-box/config.json");
+    return {
+        config_hash: file_md5(config_path),
+        selections: selector_state_from_proxies_payload(clash_api_json("get_proxies"))
+    };
+}
+
+function restore_selector_state(snapshot) {
+    snapshot = object_or_empty(snapshot);
+    let config_path = config_get(CONFIG_NAME + ".settings.config_path", "/etc/sing-box/config.json");
+    if (as_string(snapshot.config_hash) == "" || snapshot.config_hash != file_md5(config_path))
+        return;
+    let pairs = selector_restore_pairs(snapshot.selections, clash_api_json("get_proxies"));
+
+    for (let pair in pairs)
+        module_success(DIAGNOSTICS_UC, [ "clash-api", "set_group_proxy", pair.group, pair.proxy, "restore" ]);
+}
+
+function module_background(module_path, args) {
+    return command_status(module_command(module_path, args) + " >/dev/null 2>&1 1000>&- &") == 0;
+}
+
+function config_set(path, value) {
+    return uci_core.set(path, value);
 }
 
 function current_config_hash() {

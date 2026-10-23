@@ -92,7 +92,6 @@ function section_match(section, request) {
         else if (destination == "unknown" || address == "unknown") destination = "unknown";
         else destination = "no";
     }
-    if (destination != null) { push(checks, destination); if (destination == "unknown") push(missing, "destination"); }
     let source = values(section, "source_ip_cidr");
     if (length(source)) { let value = address_match(request.device, source); push(checks, value); if (value == "unknown") push(missing, "device"); }
     let port = port_match(section, request.port);
@@ -101,6 +100,11 @@ function section_match(section, request) {
     for (let key in ["rule_set", "rule_set_with_subnets", "community_lists", "domain_ip_lists"])
         if (length(list(section, key))) has_set = true;
     if (has_set) { push(checks, "unknown"); push(missing, "rule_set"); }
+    // A simple ruleset may merge destination fields into the outer OR group;
+    // a compound set is an additional AND guard. Without its contents, neither
+    // a local destination miss nor a local hit can settle the whole rule.
+    if (has_set && destination == "no") destination = "unknown";
+    if (destination != null) { push(checks, destination); if (destination == "unknown") push(missing, "destination"); }
     if (index(checks, "no") >= 0) return {value:"no", missing:[]};
     // A source-only section generates no combined sing-box route.
     if (destination == null && port == null && !has_set) return {value:"no", missing:[]};
@@ -142,6 +146,8 @@ function explain(raw) {
     if (request.domain == require("singbox.constants").CHECK_PROXY_IP_DOMAIN) {
         for (let section in uci.section_objects(package_name,"section")) {
             if (!common.bool_option(section,"enabled",true) || option(section,"next_target","") != "") continue;
+            let expires = option(section,"next_expires","");
+            if (match(expires,/^[0-9]+$/) && int(expires)>0 && int(expires)<=time()) continue;
             if (index(["connection","proxy","outbound","vpn","byedpi","zapret","zapret2"],option(section,"action","")) < 0) continue;
             let route=target.target(section,section[".name"]+"-out");
             data.decision={status:"matched",section:section[".name"],outbound:route.outbound};

@@ -3,7 +3,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   getConfigSections: vi.fn(),
   getClashApiProxies: vi.fn(),
-  canUseDirectClashApi: vi.fn(),
   fsRead: vi.fn(),
 }));
 
@@ -17,8 +16,9 @@ vi.mock('../../shell', () => ({
   },
 }));
 
-vi.mock('../../../../helpers', () => ({
-  canUseDirectClashApi: mocks.canUseDirectClashApi,
+vi.mock('../../../../helpers', async () => ({
+  canUseDirectClashApi: (await import('../../../../helpers/getClashApiUrl'))
+    .canUseDirectClashApi,
   getClashHttpUrl: () => 'http://router.example:9090',
   getProxyUrlName: (link?: string) =>
     link?.includes('#') ? decodeURIComponent(link.split('#').pop() || '') : '',
@@ -136,7 +136,6 @@ describe('getDashboardSections', () => {
   beforeEach(() => {
     mocks.getConfigSections.mockReset();
     mocks.getClashApiProxies.mockReset();
-    mocks.canUseDirectClashApi.mockReset();
     mocks.fsRead.mockReset();
     mocks.fsRead.mockRejectedValue(new Error('cache miss'));
     vi.stubGlobal('fs', { read: mocks.fsRead });
@@ -147,7 +146,6 @@ describe('getDashboardSections', () => {
       success: true,
       data: { proxies: clashProxies },
     });
-    mocks.canUseDirectClashApi.mockReturnValue(false);
   });
 
   it('shows the full selector group by default', async () => {
@@ -1026,16 +1024,22 @@ describe('getDashboardSections', () => {
 
   it('fetches Clash API proxies directly in the browser to avoid rpcd output limits', async () => {
     mocks.getConfigSections.mockResolvedValue([
-      { '.name': 'settings', '.type': 'settings', yacd_secret_key: 'secret' },
+      {
+        '.name': 'settings',
+        '.type': 'settings',
+        enable_yacd: '1',
+        yacd_secret_key: 'secret',
+      },
       proxySection(),
     ]);
-    mocks.canUseDirectClashApi.mockReturnValue(true);
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       json: () => Promise.resolve({ proxies: clashProxies }),
     });
 
-    vi.stubGlobal('window', { location: { hostname: 'router.example' } });
+    vi.stubGlobal('window', {
+      location: { hostname: 'router.example', protocol: 'http:' },
+    });
     vi.stubGlobal('fetch', fetchMock);
 
     const result = await getDashboardSections();
@@ -1055,8 +1059,18 @@ describe('getDashboardSections', () => {
     vi.useFakeTimers();
 
     try {
-      mocks.getConfigSections.mockResolvedValue([proxySection()]);
-      mocks.canUseDirectClashApi.mockReturnValue(true);
+      mocks.getConfigSections.mockResolvedValue([
+        {
+          '.name': 'settings',
+          '.type': 'settings',
+          enable_yacd: '1',
+          yacd_secret_key: 'secret',
+        },
+        proxySection(),
+      ]);
+      vi.stubGlobal('window', {
+        location: { hostname: 'router.example', protocol: 'http:' },
+      });
       const fetchMock = vi.fn(
         (_url: string, options?: RequestInit) =>
           new Promise<Response>((_resolve, reject) => {
@@ -1077,6 +1091,30 @@ describe('getDashboardSections', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it.each([
+    {},
+    { enable_yacd: '0', yacd_secret_key: 'secret' },
+    { enable_yacd: '1', yacd_secret_key: '' },
+  ])('uses rpcd immediately for a private controller: %j', async (settings) => {
+    mocks.getConfigSections.mockResolvedValue([
+      { '.name': 'settings', '.type': 'settings', ...settings },
+      proxySection(),
+    ]);
+    vi.stubGlobal('window', {
+      location: { hostname: 'router.example', protocol: 'http:' },
+    });
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ proxies: clashProxies }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const result = await getDashboardSections();
+    expect(result.success).toBe(true);
+    expect(result.data[0].outbounds.length).toBeGreaterThan(0);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(mocks.getClashApiProxies).toHaveBeenCalledTimes(1);
   });
 
   it('uses rpcd fallback when direct Clash API access is unsafe', async () => {

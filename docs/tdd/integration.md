@@ -79,3 +79,14 @@ original repository and verifies commit 68d516e85b9a81b5a37e8e258610098ed03b02d1
 A separate clean frontend install reproduces pnpm 11's dependency-build approval
 failure; its exact allow/deny policy is recorded in product.md. These setup
 corrections retain every existing runtime test and release gate.
+
+## Candidate 1.1.1 re-audit
+
+The second audit fixed reproducible profile, device, lifecycle, IPv6, explanation,
+Smart Detect and management-controller defects. Fresh full local verification:
+148 backend tests / 70 shell suites passed (`cff38e6527d6`); normal and strict
+ucode compilation passed (`f677e7f12184`); 583 frontend tests / 54 files,
+formatting, lint, TypeScript, build and actual generated LuCI rendering passed.
+No tests were skipped. RED/GREEN records: [re-audit](re-audit.md) and
+[controller UI](audit-controller-ui.md). Independent integration review found no
+concrete additional P1/P2 regression. No live device installation was performed.

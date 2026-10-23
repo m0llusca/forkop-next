@@ -114,6 +114,16 @@ export function renderNextPanel(
   let digest = '';
   let sections: [string, string][] = [];
   let previewName = '';
+  let previewDigest = '';
+  let previewProfileDigest = '';
+  let previewGeneration = 0;
+  function invalidatePreview() {
+    previewGeneration++;
+    previewName = '';
+    previewDigest = '';
+    previewProfileDigest = '';
+    apply.disabled = true;
+  }
   const sectionSelects: HTMLSelectElement[] = [];
   function connection(label = 'Подключение') {
     const s = select(label, sections);
@@ -248,38 +258,58 @@ export function renderNextPanel(
   const profileName = input('profile_name', 'Название нового профиля');
   const profileResult = el('pre', '', 'fkp-next-result');
   const apply = action('Применить профиль', async () => {
+    if (
+      previewName !== profile.node.value ||
+      !previewDigest ||
+      !previewProfileDigest
+    )
+      return;
     await invoke(
       'profile_apply',
-      { name: profile.node.value, expected: digest },
+      {
+        name: previewName,
+        expected: previewDigest,
+        expected_profile: previewProfileDigest,
+      },
       profileResult,
     );
-    previewName = '';
+    invalidatePreview();
     await refreshStatus();
     apply.disabled = true;
   });
   apply.disabled = true;
   profile.node.onchange = () => {
-    previewName = '';
-    apply.disabled = true;
+    invalidatePreview();
   };
   profiles.append(
     profile.wrap,
     action('Сравнить профиль', async () => {
+      invalidatePreview();
+      const generation = previewGeneration;
       const requestedName = profile.node.value;
       const r = await invoke(
         'profile_diff',
         { name: requestedName },
         profileResult,
       );
-      if (r.success && requestedName === profile.node.value) {
+      const data = object(r.data);
+      if (
+        r.success &&
+        requestedName === profile.node.value &&
+        generation === previewGeneration &&
+        data.current_digest &&
+        data.profile_digest
+      ) {
         previewName = requestedName;
-        digest = String(object(r.data).current_digest || digest);
+        previewDigest = String(data.current_digest);
+        previewProfileDigest = String(data.profile_digest);
         apply.disabled = false;
       }
     }),
     apply,
     profileName.wrap,
     action('Сохранить текущий профиль', async () => {
+      invalidatePreview();
       await invoke(
         'profile_save',
         { name: profileName.node.value },
@@ -391,7 +421,9 @@ export function renderNextPanel(
     const d = object(r.data);
     const smart = object(d.smart_detect);
     autoDetect.node.checked = smart.enabled === true;
-    digest = String(d.digest || '');
+    const refreshedDigest = String(d.digest || '');
+    if (previewName && refreshedDigest !== previewDigest) invalidatePreview();
+    digest = refreshedDigest;
     const versions = object(d.versions);
     status.textContent = `Forkop ${versions.forkop || '—'} · sing-box ${versions.sing_box || '—'}${d.recovery_pending ? ' · Требуется восстановление' : ''}`;
     rollback.disabled = !d.previous_available;
@@ -428,6 +460,7 @@ export function renderNextPanel(
       rs.node.value = String(smart.section);
   }
   async function refreshProfiles() {
+    invalidatePreview();
     const r = await request('profile_list', {});
     if (!r.success) {
       message.textContent =

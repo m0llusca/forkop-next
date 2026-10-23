@@ -1572,15 +1572,19 @@ function clash_json_output(args) {
 }
 
 function clash_api_url() {
-    let address = replace(module_output(SINGBOX_RUNTIME_UC, [ "service-listen-address" ]), /[\r\n]+$/g, "");
-    if (address == "")
-        address = "127.0.0.1";
+    let cfg = settings();
+    let address = "127.0.0.1";
+    if (bool_option(cfg, "enable_yacd", false) && option(cfg, "yacd_secret_key", "") != "") {
+        let service_address = replace(module_output(SINGBOX_RUNTIME_UC, [ "service-listen-address" ]), /[\r\n]+$/g, "");
+        if (service_address != "")
+            address = service_address;
+    }
     return address + ":" + SB_CLASH_API_CONTROLLER_PORT;
 }
 
 function clash_auth_args() {
     let cfg = settings();
-    if (!bool_option(cfg, "enable_yacd_wan_access", false))
+    if (option(cfg, "yacd_secret_key", "") == "")
         return [];
     return [ "--header", "Authorization: Bearer " + option(cfg, "yacd_secret_key", "") ];
 }

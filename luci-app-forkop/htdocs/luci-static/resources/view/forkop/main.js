@@ -1082,9 +1082,9 @@ async function onMount(target) {
 function getWindowLocation() {
   return typeof window !== "undefined" ? window.location : void 0;
 }
-function canUseDirectClashApi() {
+function canUseDirectClashApi(settings) {
   const location = getWindowLocation();
-  return typeof location?.hostname === "string" && location.hostname !== "" && location.protocol !== "https:";
+  return settings?.enable_yacd === "1" && Boolean(settings.yacd_secret_key) && typeof location?.hostname === "string" && location.hostname !== "" && location.protocol !== "https:";
 }
 function getClashWsUrl() {
   const { hostname } = window.location;
@@ -3107,11 +3107,11 @@ function getSettingsSection(configSections) {
 function getClashApiSecret(configSections) {
   return getSettingsSection(configSections)?.yacd_secret_key || "";
 }
-function canFetchClashApiDirectly() {
-  return canUseDirectClashApi() && typeof fetch === "function";
+function canFetchClashApiDirectly(configSections) {
+  return canUseDirectClashApi(getSettingsSection(configSections)) && typeof fetch === "function";
 }
 async function getClashApiProxies(configSections) {
-  if (canFetchClashApiDirectly()) {
+  if (canFetchClashApiDirectly(configSections)) {
     const secret = getClashApiSecret(configSections);
     const controller = new AbortController();
     const timeoutId = setTimeout(
@@ -5539,6 +5539,10 @@ function getServiceAvailability({
 
 // src/forkop/tabs/dashboard/initController.ts
 var SECTIONS_REFRESH_INTERVAL_MS = 1e4;
+var TELEMETRY_RPC_POLL_INTERVAL_MS = 3e3;
+var telemetryPollTimer = null;
+var telemetryPolling = false;
+var previousTelemetry = null;
 var LATENCY_TEST_BUTTON_CLASS = "dashboard-sections-grid-item-test-latency";
 var LATENCY_TEST_BUTTON_LABEL_CLASS = "dashboard-sections-grid-item-test-latency__label";
 var sectionsRefreshTimer = null;
@@ -5845,12 +5849,117 @@ function stopActionStateWatcher() {
   actionStateUnsubscribe();
   actionStateUnsubscribe = null;
 }
-async function connectToClashSockets(dataUpdatesId) {
-  const mountId = dashboardMountId;
-  const clashApiSecret = await getClashApiSecret2();
-  if (!dashboardMounted || mountId !== dashboardMountId || dataUpdatesId !== dashboardDataUpdatesId || getDashboardServiceAvailability() === "stopped") {
+function applyBandwidth(data) {
+  store.set({ bandwidthWidget: { loading: false, failed: false, data } });
+}
+function applyConnectionsSnapshot(snapshot) {
+  store.set({
+    trafficTotalWidget: {
+      loading: false,
+      failed: false,
+      data: {
+        downloadTotal: snapshot.downloadTotal,
+        uploadTotal: snapshot.uploadTotal
+      }
+    },
+    systemInfoWidget: {
+      loading: false,
+      failed: false,
+      data: {
+        connections: snapshot.connections?.length || 0,
+        memory: snapshot.memory || 0
+      }
+    }
+  });
+}
+function canUpdateTelemetry(dataUpdatesId) {
+  return dashboardMounted && dataUpdatesId === dashboardDataUpdatesId && getDashboardServiceAvailability() === "running";
+}
+async function pollTelemetrySnapshot(dataUpdatesId) {
+  if (!canUpdateTelemetry(dataUpdatesId) || telemetryPolling || document.hidden || pageUnloading) {
     return;
   }
+  telemetryPolling = true;
+  try {
+    const response = await ForkopShellMethods.getClashApiConnections();
+    if (!canUpdateTelemetry(dataUpdatesId)) {
+      return;
+    }
+    if (!response.success || !response.data || typeof response.data !== "object") {
+      throw new Error("failed to fetch controller telemetry");
+    }
+    const snapshot = response.data;
+    if (!Number.isFinite(snapshot.downloadTotal) || snapshot.downloadTotal < 0 || !Number.isFinite(snapshot.uploadTotal) || snapshot.uploadTotal < 0) {
+      throw new Error("invalid controller traffic counters");
+    }
+    const time = performance.now();
+    const previous = previousTelemetry;
+    const elapsed = previous ? (time - previous.time) / 1e3 : 0;
+    const validDelta = previous && elapsed > 0 && snapshot.downloadTotal >= previous.downloadTotal && snapshot.uploadTotal >= previous.uploadTotal;
+    applyBandwidth({
+      down: validDelta ? (snapshot.downloadTotal - previous.downloadTotal) / elapsed : 0,
+      up: validDelta ? (snapshot.uploadTotal - previous.uploadTotal) / elapsed : 0
+    });
+    previousTelemetry = {
+      downloadTotal: snapshot.downloadTotal,
+      uploadTotal: snapshot.uploadTotal,
+      time
+    };
+    applyConnectionsSnapshot(snapshot);
+  } catch (error) {
+    if (!canUpdateTelemetry(dataUpdatesId)) {
+      return;
+    }
+    logger.warn("[DASHBOARD]", "controller telemetry polling failed", error);
+    previousTelemetry = null;
+    const current = store.get();
+    store.set({
+      bandwidthWidget: {
+        ...current.bandwidthWidget,
+        loading: false,
+        failed: true
+      },
+      trafficTotalWidget: {
+        ...current.trafficTotalWidget,
+        loading: false,
+        failed: true
+      },
+      systemInfoWidget: {
+        ...current.systemInfoWidget,
+        loading: false,
+        failed: true
+      }
+    });
+  } finally {
+    telemetryPolling = false;
+  }
+}
+function startTelemetryPolling(dataUpdatesId) {
+  if (telemetryPollTimer) {
+    return;
+  }
+  void pollTelemetrySnapshot(dataUpdatesId);
+  telemetryPollTimer = setInterval(() => {
+    void pollTelemetrySnapshot(dataUpdatesId);
+  }, TELEMETRY_RPC_POLL_INTERVAL_MS);
+}
+async function connectToClashSockets(dataUpdatesId) {
+  const mountId = dashboardMountId;
+  const sections = await CustomForkopMethods.getConfigSections().catch(
+    (error) => {
+      logger.warn("[DASHBOARD]", "controller settings unavailable", error);
+      return [];
+    }
+  );
+  const settings = sections.find((section) => section[".type"] === "settings");
+  if (!dashboardMounted || mountId !== dashboardMountId || dataUpdatesId !== dashboardDataUpdatesId || !canUpdateTelemetry(dataUpdatesId)) {
+    return;
+  }
+  if (!canUseDirectClashApi(settings)) {
+    startTelemetryPolling(dataUpdatesId);
+    return;
+  }
+  const clashApiSecret = encodeURIComponent(settings?.yacd_secret_key || "");
   socket.subscribe(
     `${getClashWsUrl()}/traffic?token=${clashApiSecret}`,
     (msg) => {
@@ -5858,13 +5967,7 @@ async function connectToClashSockets(dataUpdatesId) {
         return;
       }
       const parsedMsg = JSON.parse(msg);
-      store.set({
-        bandwidthWidget: {
-          loading: false,
-          failed: false,
-          data: { up: parsedMsg.up, down: parsedMsg.down }
-        }
-      });
+      applyBandwidth({ up: parsedMsg.up, down: parsedMsg.down });
     },
     (_err) => {
       if (dataUpdatesId !== dashboardDataUpdatesId || getDashboardServiceAvailability() === "stopped") {
@@ -5891,24 +5994,7 @@ async function connectToClashSockets(dataUpdatesId) {
         return;
       }
       const parsedMsg = JSON.parse(msg);
-      store.set({
-        trafficTotalWidget: {
-          loading: false,
-          failed: false,
-          data: {
-            downloadTotal: parsedMsg.downloadTotal,
-            uploadTotal: parsedMsg.uploadTotal
-          }
-        },
-        systemInfoWidget: {
-          loading: false,
-          failed: false,
-          data: {
-            connections: parsedMsg.connections?.length,
-            memory: parsedMsg.memory
-          }
-        }
-      });
+      applyConnectionsSnapshot(parsedMsg);
     },
     (_err) => {
       if (dataUpdatesId !== dashboardDataUpdatesId || getDashboardServiceAvailability() === "stopped") {
@@ -5948,6 +6034,11 @@ function getDashboardServiceAvailability() {
 function stopDashboardDataUpdates() {
   dashboardDataUpdatesStarted = false;
   dashboardDataUpdatesId += 1;
+  previousTelemetry = null;
+  if (telemetryPollTimer) {
+    clearInterval(telemetryPollTimer);
+    telemetryPollTimer = null;
+  }
   if (sectionsRefreshTimer) {
     clearInterval(sectionsRefreshTimer);
     sectionsRefreshTimer = null;
@@ -5972,7 +6063,7 @@ function syncDashboardServiceAvailability() {
   const stopped = availability === "stopped";
   const container = document.getElementById("dashboard-status");
   container?.classList.toggle("fkp_dashboard-page--service-stopped", stopped);
-  if (stopped || availability === "loading") {
+  if (availability !== "running") {
     stopDashboardDataUpdates();
     return;
   }
@@ -12020,11 +12111,21 @@ function startConnectionsPolling() {
 }
 async function connectToConnectionsSocket(updatesId) {
   const mountId = monitoringMountId;
-  const clashApiSecret = await getClashApiSecret2();
+  const sections = await CustomForkopMethods.getConfigSections().catch(
+    (error) => {
+      logger.warn("[MONITORING]", "controller settings unavailable", error);
+      return [];
+    }
+  );
+  const settings = sections.find((section) => section[".type"] === "settings");
   if (!monitoringMounted || mountId !== monitoringMountId || updatesId !== connectionsUpdatesId || serviceAvailability !== "running") {
     return;
   }
-  connectionsSocketUrl = `${getClashWsUrl()}/connections?token=${clashApiSecret}`;
+  if (!canUseDirectClashApi(settings)) {
+    startConnectionsPolling();
+    return;
+  }
+  connectionsSocketUrl = `${getClashWsUrl()}/connections?token=${encodeURIComponent(settings?.yacd_secret_key || "")}`;
   socket.subscribe(
     connectionsSocketUrl,
     (msg) => {
@@ -12051,12 +12152,8 @@ function startConnectionsUpdates() {
   if (serviceAvailability !== "running") {
     return;
   }
-  if (canUseDirectClashApi()) {
-    const updatesId = ++connectionsUpdatesId;
-    void connectToConnectionsSocket(updatesId);
-    return;
-  }
-  startConnectionsPolling();
+  const updatesId = ++connectionsUpdatesId;
+  void connectToConnectionsSocket(updatesId);
 }
 function stopConnectionsUpdates() {
   connectionsUpdatesId += 1;
@@ -14797,6 +14894,16 @@ function renderNextPanel(request = nextRequest, loadConnections) {
   let digest = "";
   let sections = [];
   let previewName = "";
+  let previewDigest = "";
+  let previewProfileDigest = "";
+  let previewGeneration = 0;
+  function invalidatePreview() {
+    previewGeneration++;
+    previewName = "";
+    previewDigest = "";
+    previewProfileDigest = "";
+    apply.disabled = true;
+  }
   const sectionSelects = [];
   function connection(label = "\u041F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435") {
     const s = select(label, sections);
@@ -14920,38 +15027,48 @@ function renderNextPanel(request = nextRequest, loadConnections) {
   const profileName = input("profile_name", "\u041D\u0430\u0437\u0432\u0430\u043D\u0438\u0435 \u043D\u043E\u0432\u043E\u0433\u043E \u043F\u0440\u043E\u0444\u0438\u043B\u044F");
   const profileResult = el("pre", "", "fkp-next-result");
   const apply = action("\u041F\u0440\u0438\u043C\u0435\u043D\u0438\u0442\u044C \u043F\u0440\u043E\u0444\u0438\u043B\u044C", async () => {
+    if (previewName !== profile.node.value || !previewDigest || !previewProfileDigest)
+      return;
     await invoke(
       "profile_apply",
-      { name: profile.node.value, expected: digest },
+      {
+        name: previewName,
+        expected: previewDigest,
+        expected_profile: previewProfileDigest
+      },
       profileResult
     );
-    previewName = "";
+    invalidatePreview();
     await refreshStatus();
     apply.disabled = true;
   });
   apply.disabled = true;
   profile.node.onchange = () => {
-    previewName = "";
-    apply.disabled = true;
+    invalidatePreview();
   };
   profiles.append(
     profile.wrap,
     action("\u0421\u0440\u0430\u0432\u043D\u0438\u0442\u044C \u043F\u0440\u043E\u0444\u0438\u043B\u044C", async () => {
+      invalidatePreview();
+      const generation = previewGeneration;
       const requestedName = profile.node.value;
       const r = await invoke(
         "profile_diff",
         { name: requestedName },
         profileResult
       );
-      if (r.success && requestedName === profile.node.value) {
+      const data = object2(r.data);
+      if (r.success && requestedName === profile.node.value && generation === previewGeneration && data.current_digest && data.profile_digest) {
         previewName = requestedName;
-        digest = String(object2(r.data).current_digest || digest);
+        previewDigest = String(data.current_digest);
+        previewProfileDigest = String(data.profile_digest);
         apply.disabled = false;
       }
     }),
     apply,
     profileName.wrap,
     action("\u0421\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u044C \u0442\u0435\u043A\u0443\u0449\u0438\u0439 \u043F\u0440\u043E\u0444\u0438\u043B\u044C", async () => {
+      invalidatePreview();
       await invoke(
         "profile_save",
         { name: profileName.node.value },
@@ -15057,7 +15174,9 @@ function renderNextPanel(request = nextRequest, loadConnections) {
     const d = object2(r.data);
     const smart = object2(d.smart_detect);
     autoDetect.node.checked = smart.enabled === true;
-    digest = String(d.digest || "");
+    const refreshedDigest = String(d.digest || "");
+    if (previewName && refreshedDigest !== previewDigest) invalidatePreview();
+    digest = refreshedDigest;
     const versions = object2(d.versions);
     status.textContent = `Forkop ${versions.forkop || "\u2014"} \xB7 sing-box ${versions.sing_box || "\u2014"}${d.recovery_pending ? " \xB7 \u0422\u0440\u0435\u0431\u0443\u0435\u0442\u0441\u044F \u0432\u043E\u0441\u0441\u0442\u0430\u043D\u043E\u0432\u043B\u0435\u043D\u0438\u0435" : ""}`;
     rollback.disabled = !d.previous_available;
@@ -15092,6 +15211,7 @@ function renderNextPanel(request = nextRequest, loadConnections) {
       rs.node.value = String(smart.section);
   }
   async function refreshProfiles() {
+    invalidatePreview();
     const r = await request("profile_list", {});
     if (!r.success) {
       message.textContent = "\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0437\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044C \u043F\u0440\u043E\u0444\u0438\u043B\u0438. \u041D\u0430\u0436\u043C\u0438\u0442\u0435 \xAB\u041E\u0431\u043D\u043E\u0432\u0438\u0442\u044C \u0434\u0430\u043D\u043D\u044B\u0435\xBB.";
