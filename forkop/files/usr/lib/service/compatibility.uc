@@ -7,7 +7,7 @@ function arr(x){return type(x)=='array'?x:[];}
 function str(x){return type(x)=='string'?x:'';}
 function quote(x){return "'"+replace(x,/'/g,"'\\''")+"'";}
 function command(cmd,limit){let p=fs.popen(cmd+' 2>/dev/null','r');if(!p)return null;let raw=p.read(limit),status=p.close();return status==0?raw:null;}
-function version(){let s=command('sing-box version',2048)||'';let m=match(s,/version ([A-Za-z0-9.+_-]+)/);return m?m[1]:'';}
+function version(){return require('singbox.reality').runtime_version();}
 function semver(s){let m=match(str(s),/^v?([0-9]+)\.([0-9]+)\.([0-9]+)$/);return m?[int(m[1]),int(m[2]),int(m[3])]:null;}
 function safe_version(s){return semver(s)?s:'';}
 function update_status(installed,latest){let a=semver(installed),b=semver(latest);if(!a||!b)return 'unknown';for(let i=0;i<3;i++){if(b[i]>a[i])return 'update_available';if(b[i]<a[i])return 'current';}return 'current';}
@@ -138,9 +138,11 @@ function check(payload){
             // Pinned native handshake evidence; do not extrapolate future versions.
             if(replace(str(obj(payload.installed).xray),/^v/,'')=='26.10.21'){
                 let known_stock=index(['1.13.7','1.14.3'],replace(v,/^v/,''))>=0;
-                add('reality_key_exchange',known_stock?'unsupported':'unknown',
-                    known_stock?'This stock client omits the hybrid key share required by Xray 26.10.21.':'This client has no validated hybrid REALITY handshake profile for Xray 26.10.21.',
-                    'Use a client with verified X25519MLKEM768 REALITY support, or explicitly configure matching TLS/Vision. Preserve certificate validation.');
+                let adapter=require('singbox.reality'),profile=adapter.verified_runtime(v);
+                let hybrid=local&&adapter.hybrid_enabled(local,profile);
+                add('reality_key_exchange',hybrid?'matched':(known_stock?'unsupported':'unknown'),
+                    hybrid?'Selected outbound uses the validated Extended hybrid REALITY profile.':(known_stock?'This stock client omits the hybrid key share required by Xray 26.10.21.':'This client has no validated hybrid REALITY handshake profile for Xray 26.10.21.'),
+                    hybrid?'':'Use the validated Extended binary with Chrome uTLS and generated support_x25519mlkem768 enabled, then probe this section. Preserve explicit legacy choices and certificate validation.');
             }
             let client_id=canonical_short_id(c.short_id),server_ids=[],invalid_id=client_id==null;
             for(let id in s.short_ids){let normalized=canonical_short_id(id);if(normalized==null)invalid_id=true;else push(server_ids,normalized);}

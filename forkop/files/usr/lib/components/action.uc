@@ -1074,6 +1074,25 @@ function validate_sing_box_extended_binary(binary, library_dir) {
     return index(version, "extended") >= 0 ? version : "";
 }
 
+function download_verified_sing_box_extended(release, output_path) {
+    let tag = as_string(release.tag);
+    let name = as_string(release.asset_name);
+    let digest = lc(as_string(release.sha256));
+    if (match(tag, /^[A-Za-z0-9._+-]+$/) == null ||
+        match(name, /^[A-Za-z0-9._+-]+$/) == null ||
+        match(digest, /^[0-9a-f]{64}$/) == null ||
+        as_string(release.asset_url) != "https://github.com/shtorm-7/sing-box-extended/releases/download/" + tag + "/" + name)
+        return false;
+
+    if (!download_with_retry(release.asset_url, output_path, name))
+        return false;
+    let fields = split(trim(command_output_from_args([ "sha256sum", output_path ])), /[ \t]+/);
+    if (length(fields) > 0 && lc(as_string(fields[0])) == digest)
+        return true;
+    remove_file(output_path);
+    return false;
+}
+
 function move_file_portable(source_path, target_path) {
     if (fs.rename(source_path, target_path))
         return true;
@@ -1170,11 +1189,34 @@ function set_sing_box_extended_release_from_json(release_json, compressed) {
     if (asset_url == "")
         return null;
 
+    let manifest;
+    try {
+        manifest = json(release_json);
+    }
+    catch (e) {
+        return null;
+    }
+    let asset_name = path_basename(asset_url);
+    let sha256 = "";
+    for (let asset in (type(manifest.assets) == "array" ? manifest.assets : [])) {
+        if (type(asset) == "object" && as_string(asset.name) == asset_name &&
+            as_string(asset.browser_download_url) == asset_url &&
+            match(as_string(asset.digest), /^sha256:[0-9a-fA-F]{64}$/) != null) {
+            sha256 = lc(substr(as_string(asset.digest), 7));
+            break;
+        }
+    }
+    if (sha256 == "" || match(tag, /^[A-Za-z0-9._+-]+$/) == null ||
+        match(asset_name, /^[A-Za-z0-9._+-]+$/) == null ||
+        asset_url != "https://github.com/shtorm-7/sing-box-extended/releases/download/" + tag + "/" + asset_name)
+        return null;
+
     return {
         tag,
         release_url: trim(helper_output_input(release_json, "object-get-default", [ "html_url", "" ])),
         asset_url,
-        asset_name: path_basename(asset_url)
+        asset_name,
+        sha256
     };
 }
 
@@ -1226,7 +1268,7 @@ function restore_sing_box_extended_package_variant() {
     if (release == null)
         return false;
     let package_file = tmp_dir + "/" + release.asset_name;
-    if (!download_with_retry(release.asset_url, package_file, release.asset_name))
+    if (!download_verified_sing_box_extended(release, package_file))
         return false;
     prepare_sing_box_package_service_install();
     pkg_remove_sing_box_conflict("sing-box-tiny");
@@ -1279,6 +1321,10 @@ function sing_box_variant_is_package_managed(variant) {
 }
 
 function restore_sing_box_install_backup(previous_variant, backup_binary) {
+    // A mutable upstream release cannot restore the build that was running.
+    if (previous_variant == "extended" || previous_variant == "extended-compressed")
+        return as_string(backup_binary) != "" && file_nonempty(backup_binary) && restore_sing_box_backup(backup_binary);
+
     if (sing_box_variant_is_package_managed(previous_variant)) {
         if (restore_sing_box_package_variant(previous_variant))
             return true;
@@ -1298,8 +1344,8 @@ function restore_sing_box_after_failed_extended_install(previous_variant, backup
     if (as_string(archive_file) != "")
         remove_file(archive_file);
     let restore_status = true;
-    if (cronet_touched)
-        restore_file_backup("/usr/lib/libcronet.so", backup_cronet);
+    if (cronet_touched && !restore_file_backup("/usr/lib/libcronet.so", backup_cronet))
+        restore_status = false;
     if (!restore_sing_box_install_backup(previous_variant, backup_binary))
         restore_status = false;
     restore_sing_box_variant_state(previous_marker, previous_version_state);
@@ -1314,9 +1360,10 @@ function restore_sing_box_after_failed_extended_package_install(previous_variant
     pkg_remove_sing_box_conflict("sing-box-extended");
     let restore_status = restore_sing_box_install_backup(previous_variant, backup_binary);
     if (cronet_touched) {
-        restore_file_backup("/usr/lib/libcronet.so", backup_cronet);
-        if (file_nonempty("/usr/lib/libcronet.so"))
-            command_success_from_args([ "chmod", "0644", "/usr/lib/libcronet.so" ]);
+        if (!restore_file_backup("/usr/lib/libcronet.so", backup_cronet))
+            restore_status = false;
+        if (file_nonempty("/usr/lib/libcronet.so") && !command_success_from_args([ "chmod", "0644", "/usr/lib/libcronet.so" ]))
+            restore_status = false;
     }
     restore_sing_box_variant_state(previous_marker, previous_version_state);
     restore_sing_box_service_from_marker(previous_marker);
@@ -1380,8 +1427,8 @@ function install_sing_box_extended_package(action) {
     }
 
     let package_file = tmp_dir + "/" + release.asset_name;
-    if (!download_with_retry(release.asset_url, package_file, release.asset_name))
-        action_fail("sing_box", action, "Failed to download sing-box-extended package", current_version, latest_version);
+    if (!download_verified_sing_box_extended(release, package_file))
+        action_fail("sing_box", action, "Failed to download or verify sing-box-extended package", current_version, latest_version);
 
     if (!run_logged("Updating package lists before sing-box-extended package installation", pkg_list_update_command()))
         action_fail("sing_box", action, "Failed to update package lists", current_version, latest_version);
@@ -1493,8 +1540,8 @@ function install_sing_box_extended(action, compressed) {
     }
 
     let archive_file = tmp_dir + "/" + release.asset_name;
-    if (!download_with_retry(release.asset_url, archive_file, release.asset_name))
-        action_fail("sing_box", action, "Failed to download " + label, current_version, latest_version);
+    if (!download_verified_sing_box_extended(release, archive_file))
+        action_fail("sing_box", action, "Failed to download or verify " + label, current_version, latest_version);
 
     let binary_path = select_archive_member_path(archive_file, "sing-box");
     if (binary_path == "") {

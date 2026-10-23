@@ -3075,15 +3075,11 @@ function generate_config(output_path, service_address, mwan3_active, supports_xh
     require("service.selection").apply(config);
     assert_unique_outbound_tags(config);
     strip_internal_fields(config);
-    let version = getenv("FORKOP_SING_BOX_VERSION") || "";
-    if (version == "") {
-        let pipe = fs.popen("sing-box version 2>/dev/null", "r");
-        if (pipe) {
-            let text = pipe.read(4096), status = pipe.close();
-            let found = match(text || "", /sing-box version ([0-9][0-9A-Za-z.+_-]*)/);
-            if (status == 0 && found) version = found[1];
-        }
-    }
+    let reality = require("singbox.reality");
+    let version = getenv("FORKOP_SING_BOX_VERSION") || reality.runtime_version();
+    let profile = reality.verified_runtime(version);
+    for (let outbound in array_or_empty(config.outbounds))
+        reality.adapt_outbound(outbound, profile);
     require("singbox.compatibility").transform(config, version);
     if (!write_json_file(output_path, config)) {
         warn("failed to write ", output_path, "\n");

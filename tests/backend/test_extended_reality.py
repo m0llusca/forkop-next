@@ -112,11 +112,12 @@ class ExtendedRealityTests(unittest.TestCase):
         private, public = fixture.parse_xray_key_pair(self.run_ok([xray, 'x25519']))
         self.assertTrue(private and public)
         self.secrets.update((identity, private, public))
-        freedom = {'protocol': 'freedom', 'tag': 'loopback'}
-        if version == '26.10.21':
-            freedom['settings'] = {'finalRules': [
+        # All three pinned Xray releases support finalRules and restrict private
+        # VLESS targets. Allow only this fixture's exact HTTPS destination.
+        freedom = {'protocol': 'freedom', 'tag': 'loopback',
+            'settings': {'finalRules': [
                 {'action': 'allow', 'network': 'tcp', 'ip': ['127.0.0.1/32'], 'port': self.target_port},
-                {'action': 'block'}]}
+                {'action': 'block'}]}}
         config = {'log': {'loglevel': 'debug'}, 'inbounds': [{
             'listen': '127.0.0.1', 'port': server_port, 'protocol': 'vless',
             'settings': {'clients': [{'id': identity, 'flow': 'xtls-rprx-vision'}], 'decryption': 'none'},

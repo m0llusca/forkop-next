@@ -24,3 +24,20 @@ The Next transaction, routing explanation, recommendation and connectivity-probe
 extensions are developed and verified against fixture configurations. No user
 credentials, real subscriptions, private server configuration or chat tokens are
 part of this source tree.
+
+## Extended REALITY adapter
+
+Use the upstream correction already shipped by shtorm-7/sing-box-extended,
+v1.14.3-extended-2.7.3, source d9442d14b19ddd02605bf3ee893a171947038e19.
+The option `tls.reality.support_x25519mlkem768` was introduced by upstream
+aae5f7ff022e834a991bd16e13537d5f899372ec. Legacy Extended 2.6.5 has no such
+option. No stock-core replacement or independent cryptographic implementation
+is imported. The Forkop adapter and identity checks are new code.
+
+`singbox/validated-cores.json` records executable SHA256 derived from 54 official
+Linux standard/compressed archives and OpenWrt IPK assets (30 unique binaries),
+after checking every archive against its official release-API SHA256. Entries
+include exact asset name, archive digest, source revision and limited admitted
+Chrome profile. Hash admission does not claim native testing on every CPU;
+the real interoperability matrix runs Linux amd64. Keep the original source
+license and the Extended package/features intact.
