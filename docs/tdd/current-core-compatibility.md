@@ -45,6 +45,21 @@ certificate rejection must not be bypassed. See COMPATIBILITY.md for source link
 Further guard RED/GREEN evidence and final full-suite results are recorded after
 the corresponding native runs, not inferred from the patch.
 
+Commit be26da4d, native Backend CI 40004674651: 188 tests, 17 failed
+assertions. All original 15 current-schema methods now pass; the TLS/Vision
+control remains green. Newly added guard tests fail as intended: known stock
+REALITY clients were wrongly certified (four version subcases), unknown/Extended
+clients lacked capability evidence, an explicit empty method fell back to network,
+and five non-string short-ID values became the valid empty ID. The two original
+REALITY success assertions still fail against actual cores. Artifact SHA256:
+f50452aefba520ad837a78ecb904af2c29199dfefe4afc158dd4cc6674bea582.
+
+Only after these failures were observed, add the pinned REALITY capability guard,
+preserve typed short IDs until validation, and honor explicit method presence.
+Replace the incorrect universal REALITY-success expectation with an honest
+incompatibility characterization that requires a same-Xray positive control
+through the exact same server/keys/cover/target before checking stock rejection.
+
 ## Additional review skills
 
 Installed from pinned primary repositories: Trail of Bits property-based-testing

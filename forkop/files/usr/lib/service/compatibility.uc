@@ -54,16 +54,19 @@ function normalize(raw,server){
     let user=length(users)==1?obj(users[0]):{};
     let transport=raw.transport,transport_type=type(transport)=='object'?transport.type:transport;
     let security=raw.security||stream.security||(tls.enabled?(reality.enabled?'reality':'tls'):'none');
+    let client_reality=obj(raw.reality),short_id='';
+    if(index(keys(client_reality),'short_id')>=0)short_id=client_reality.short_id;
+    else if(index(keys(reality),'short_id')>=0)short_id=reality.short_id;
     return {
         protocol:str(raw.protocol||raw.type),
-        transport:canonical_transport(transport_type||stream.method||stream.network||'tcp'),
+        transport:canonical_transport(transport_type||(stream.method!=null?stream.method:(stream.network||'tcp'))),
         flow:str(raw.flow!=null?raw.flow:(user.flow||settings.flow||'')),
         encryption:str(raw.encryption||settings.decryption||'none'),
         security:lc(str(security)),
         sni:str(raw.sni||tls.server_name),
         server_names:arr(raw.server_names||rs.serverNames),
         short_ids:arr(raw.short_ids||rs.shortIds),
-        short_id:str(obj(raw.reality).short_id||reality.short_id),
+        short_id,
         public_key:str(obj(raw.reality).public_key||reality.public_key),
         insecure:tls.insecure==true,
         tls_max_version:str(tls.max_version||ts.maxVersion),
@@ -132,6 +135,13 @@ function check(payload){
             else add('sni','matched','Server name matches.');
         }
         if(c.security=='reality'){
+            // Pinned native handshake evidence; do not extrapolate future versions.
+            if(replace(str(obj(payload.installed).xray),/^v/,'')=='26.10.21'){
+                let known_stock=index(['1.13.7','1.14.3'],replace(v,/^v/,''))>=0;
+                add('reality_key_exchange',known_stock?'unsupported':'unknown',
+                    known_stock?'This stock client omits the hybrid key share required by Xray 26.10.21.':'This client has no validated hybrid REALITY handshake profile for Xray 26.10.21.',
+                    'Use a client with verified X25519MLKEM768 REALITY support, or explicitly configure matching TLS/Vision. Preserve certificate validation.');
+            }
             let client_id=canonical_short_id(c.short_id),server_ids=[],invalid_id=client_id==null;
             for(let id in s.short_ids){let normalized=canonical_short_id(id);if(normalized==null)invalid_id=true;else push(server_ids,normalized);}
             if(!c.public_key||length(s.short_ids)==0)add('reality','unknown','REALITY key or short ID evidence is incomplete.','Import a fresh client link from the configured inbound, then probe the section.');

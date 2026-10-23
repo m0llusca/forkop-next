@@ -131,7 +131,8 @@ class CurrentCoreInteropTests(unittest.TestCase):
 
     def redact(self, text):
         for secret in self.secrets:
-            text = text.replace(secret, '[REDACTED]')
+            if secret:
+                text = text.replace(secret, '[REDACTED]')
         text = re.sub(r'(?im)^((?:PrivateKey|Private key|Password(?: \(PublicKey\))?|PublicKey|Public key|Hash32):).*$',
                       r'\1 [REDACTED]', text)
         return re.sub(r'\b[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}\b', '[UUID]', text)
@@ -229,6 +230,37 @@ class CurrentCoreInteropTests(unittest.TestCase):
                                '\n' + result.stdout.decode(errors='replace') + result.stderr.decode(errors='replace'))
         return result
 
+    def assert_xray_reality_control(self, server_port, identity, public_key):
+        """Same cover, SNI, key pair, UUID, server and HTTPS target; stock Xray client."""
+        port = free_port()
+        outbound = {'protocol': 'vless', 'settings': {'vnext': [{
+            'address': '127.0.0.1', 'port': server_port, 'users': [{
+                'id': identity, 'encryption': 'none', 'flow': 'xtls-rprx-vision'}]}]},
+            'streamSettings': {'network': 'raw', 'security': 'reality',
+                'realitySettings': {'fingerprint': 'chrome', 'serverName': 'localhost',
+                    'password': public_key, 'shortId': 'aabb'}}}
+        config = {'log': {'loglevel': 'debug'}, 'inbounds': [{
+            'listen': '127.0.0.1', 'port': port, 'protocol': 'socks',
+            'settings': {'auth': 'noauth', 'udp': False}}], 'outbounds': [outbound]}
+        path = self.d / 'xray-client.json'
+        path.write_text(json.dumps(config))
+        self.run_ok([XRAY, 'run', '-test', '-c', path])
+        with self.process([XRAY, 'run', '-c', path], port, 'xray-client-control'):
+            result = self.curl(port)
+            self.assertEqual(result.returncode, 0, result.stderr.decode() + '\n' + self.diagnostics())
+            self.assertEqual(result.stdout, self.marker)
+            self.assertEqual(self.curl(port, trusted=False).returncode, 60)
+        # The control also requires VLESS authentication: a bad UUID cannot
+        # borrow the cover connection or bypass the SOCKS proxy.
+        user = outbound['settings']['vnext'][0]['users'][0]
+        user['id'] = str(uuid.uuid4())
+        self.secrets.add(user['id'])
+        path.write_text(json.dumps(config))
+        with self.process([XRAY, 'run', '-c', path], port, 'xray-client-bad-uuid'):
+            rejected = self.curl(port)
+            self.assertNotEqual(rejected.returncode, 0)
+            self.assertNotEqual(rejected.stdout, self.marker)
+
     def check_interop(self, security):
         self.assertIn('Xray 26.10.21', self.run_ok([XRAY, 'version']))
         server_port, cover_port = free_port(), free_port()
@@ -264,6 +296,8 @@ class CurrentCoreInteropTests(unittest.TestCase):
         path.write_text(json.dumps(xray_config))
         self.run_ok([XRAY, 'run', '-test', '-c', path])
         with cover, self.process([XRAY, 'run', '-c', path], server_port, 'xray'):
+            if security == 'reality':
+                self.assert_xray_reality_control(server_port, identity, public_key)
             for version in VERSIONS:
                 with self.subTest(security=security, sing_box=version):
                     core = CORES / f'sing-box-{version}-linux-amd64/sing-box'
@@ -278,6 +312,10 @@ class CurrentCoreInteropTests(unittest.TestCase):
                     self.run_ok([core, 'check', '-c', client])
                     with self.process([core, 'run', '-c', client], socks_port, 'sing-' + version):
                         result = self.curl(socks_port)
+                        if security == 'reality':
+                            self.assertIn(result.returncode, (28, 97), result.stderr.decode())
+                            self.assertNotEqual(result.stdout, self.marker)
+                            continue
                         self.assertEqual(result.returncode, 0, result.stderr.decode() + '\n' + self.diagnostics())
                         self.assertEqual(result.stdout, self.marker)
                         untrusted = self.curl(socks_port, trusted=False)
@@ -293,11 +331,20 @@ class CurrentCoreInteropTests(unittest.TestCase):
                         rejected = self.curl(socks_port)
                         self.assertNotEqual(rejected.returncode, 0, 'Wrong VLESS UUID authenticated')
                         self.assertNotEqual(rejected.stdout, self.marker)
+            if security == 'reality':
+                deadline = time.monotonic() + 4
+                reason = 'authentication failed or validation criteria not met'
+                while time.monotonic() < deadline:
+                    log = (self.d / 'xray.log').read_text(errors='replace')
+                    if log.count(reason) >= len(VERSIONS):
+                        break
+                    time.sleep(.05)
+                self.assertGreaterEqual(log.count(reason), len(VERSIONS), self.diagnostics())
 
     def test_generated_tls_vision_outbound_fetches_strict_https_through_both_current_cores(self):
         self.check_interop('tls')
 
-    def test_generated_reality_vision_outbound_fetches_strict_https_through_both_current_cores(self):
+    def test_stock_reality_clients_are_rejected_by_current_xray_while_current_xray_control_succeeds(self):
         self.check_interop('reality')
 
 

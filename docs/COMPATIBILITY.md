@@ -44,6 +44,52 @@ can compare a proposal but cannot prove a live connection. Inputs are processed 
 memory and results omit UUIDs, passwords, private/public keys, short IDs and SNI.
 Do not paste complete panel backups. Remove credentials before importing metadata.
 
+3x-ui 3.10.2 serializes `settings` and `streamSettings` as JSON strings. Both
+strings and already decoded objects are accepted; malformed JSON is rejected.
+Current Xray also accepts `settings.users`, gives `clients` precedence, and
+inherits `settings.flow` when the selected client's flow is empty. Transport
+aliases and case are normalized, including `raw`/`tcp` and `websocket`/`ws`;
+an explicit `streamSettings.method` overrides `network`.
+REALITY short IDs are validated as hexadecimal bytes, including Xray's eight-byte
+zero padding. Vision without VLESS Encryption requires direct RAW/TCP with
+TLS/REALITY; a TLS ceiling below 1.3 is incompatible.
+
+## Pinned current-core results (2026-10-23)
+
+Official latest releases checked: Xray 26.10.21 and 3x-ui 3.10.2. The panel's
+source/API serialization was reviewed; a live 3x-ui service was not deployed.
+Actual loopback-core tests use checksum-pinned Xray 26.10.21 and stock sing-box
+1.13.7 / 1.14.3. TLS/Vision succeeds with both clients, including strict
+certificate validation, authenticated VLESS, and an exact random HTTPS payload.
+
+REALITY on those stock clients is incompatible with this Xray release. Xray's
+REALITY dependency requires an X25519MLKEM768 share before optional X25519, while
+both sing-box versions explicitly remove the hybrid share. An authentication
+failure followed by a cover-site certificate error is not a CA-installation
+problem. Do not trust a cover certificate or disable verification to hide it.
+
+When supplied installed Xray metadata is exactly 26.10.21, the preflight marks
+the two tested stock versions unsupported for REALITY. Other/Extended clients
+remain unknown until a capable implementation is validated. This table is
+deliberately pinned: it does not infer support or rejection for future releases.
+TLS/Vision remains eligible for a selected-outbound probe. Using the latest Xray
+with REALITY requires a client implementation supporting its handshake; a core
+downgrade is not required for the tested TLS/Vision alternative. Server security
+settings are never changed automatically.
+
+Primary implementation references:
+
+- https://github.com/XTLS/Xray-core/releases/tag/v26.10.21
+- https://github.com/MHSanaei/3x-ui/releases/tag/v3.10.2
+- https://github.com/XTLS/REALITY/blob/83f621788ca8/tls.go#L204-L224
+- https://github.com/SagerNet/sing-box/blob/v1.14.3/common/tls/reality_client.go#L138-L148
+- https://github.com/SagerNet/sing-box/blob/v1.13.7/common/tls/reality_client.go#L124-L134
+- https://github.com/XTLS/Xray-core/blob/v26.10.21/infra/conf/vless.go
+- https://github.com/XTLS/Xray-core/blob/v26.10.21/infra/conf/transport_internet.go
+- https://github.com/XTLS/Xray-core/blob/v26.10.21/infra/conf/transport_security.go
+
+See `docs/tdd/current-core-compatibility.md` for the RED/GREEN trail and limits.
+
 The response envelope is `{success:true,data:{status,checks,outbounds,client,server}}`.
 Each check contains `capability,status,detail,next_step`. Status is `unsupported`
 for known mismatches, `probe_required` for missing or unconfirmed evidence, and
