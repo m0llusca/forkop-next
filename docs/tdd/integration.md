@@ -64,3 +64,8 @@ credentials are included. Staged diff whitespace check passes. GitHub tree ident
 is checked against `git write-tree` before publishing. Package creation and live
 router/VPS acceptance remain separate release gates; neither is claimed by these
 fixture results.
+
+GitHub publication: draft PR https://github.com/m0llusca/forkop-next/pull/1.
+Actions were initially disabled by GitHub for the new fork and were explicitly
+enabled after reviewing its workflows. A documentation follow-up triggers the PR
+quality gates and package build; their outcome must be checked before release.
