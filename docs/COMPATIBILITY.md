@@ -68,9 +68,10 @@ both sing-box versions explicitly remove the hybrid share. An authentication
 failure followed by a cover-site certificate error is not a CA-installation
 problem. Do not trust a cover certificate or disable verification to hide it.
 
-When supplied installed Xray metadata is exactly 26.10.21, the preflight marks
-the two tested stock versions unsupported for REALITY. Other/Extended clients
-remain unknown until a capable implementation is validated. This table is
+When supplied installed Xray metadata is exactly 26.9.30 or 26.10.21, the
+preflight marks the two tested stock versions unsupported for REALITY.
+Unadmitted clients remain unknown; the validated Extended exception is described
+below. This table is
 deliberately pinned: it does not infer support or rejection for future releases.
 TLS/Vision remains eligible for a selected-outbound probe. Using the latest Xray
 with REALITY requires a client implementation supporting its handshake; a core

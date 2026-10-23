@@ -62,3 +62,17 @@ execution/activation (compressed before service stop, package with exact runtime
 rollback on rejection), retain usable service scripts and propagate recreation
 failure. No assertion is relaxed; installer fixture changes only expose the new
 lazy adapter helper to its isolated native-function harness.
+
+Second native GREEN: 91bee312, Backend CI 40011641800, 218 tests in 22.630
+seconds, no failures or skips; all 70 shell suites pass. The ten review
+regressions now pass without weakening positive or authentication controls.
+The three-version actual-core matrix remains green. Artifact SHA256:
+7ce06695f48445569a05af2742570545c7abe14efd4150ac68a6316d7f913cb4.
+Independent review of this immutable revision found no remaining concrete
+blockers. Frontend and ShellCheck gates pass. Build 40011641786 succeeds;
+the downloaded archive contains all six 1.1.4 IPK/APK packages. SHA256:
+664e8f237495c35dd58b7f593da86e74b76362638ecb7a946e0b4c62e259f7be.
+IPK version, runtime capability manifest, adapter, update code, UI and ACL
+payloads match the reviewed source. APK metadata is checked by the build gate.
+No router or remote server was modified. Linux amd64 interoperability and
+schema/start checks do not establish live Aeza or every-architecture behavior.

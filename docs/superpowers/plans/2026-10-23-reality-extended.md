@@ -28,25 +28,25 @@
 **Files:** tools/provision-test-cores.py; tests/backend/test_extended_reality.py.
 **Interfaces:** consume existing actual generator and loopback TLS/core fixture helpers; expose pinned official Extended and older Xray paths for required-mode CI.
 
-- [ ] Add fixed archives/digests and bounded exact-member extraction for Extended and two older Xray versions; exercise checksum mismatch without writes.
-- [ ] Add generated REALITY positive tests against three Xray versions, hybrid-off negative control, strict CA and authentication negatives, and Extended schema preservation checks.
-- [ ] Publish test-first baseline through existing draft PR; run native CI and inspect exact expected generator/handshake failures.
+- [x] Add fixed archives/digests and bounded exact-member extraction for Extended and two older Xray versions; exercise checksum mismatch without writes.
+- [x] Add generated REALITY positive tests against three Xray versions, hybrid-off negative control, strict CA and authentication negatives, and Extended schema preservation checks.
+- [x] Publish test-first baseline through existing draft PR; run native CI and inspect exact expected generator/handshake failures.
 
 ### Task 2: Generator and preflight capability adapter
 
 **Files:** forkop/files/usr/lib/singbox/compatibility.uc or focused adjacent module; generator/subscription output paths; service/compatibility.uc; focused backend tests.
 **Interfaces:** shared pure admitted-core/fingerprint predicate and outbound transformation, used for generated and imported outbounds. Existing compatibility response envelope stays unchanged.
 
-- [ ] Write and observe failed tests for admitted Extended hybrid generation, stock/unknown exclusion, explicit false preservation and consistent imported/manual paths.
-- [ ] Implement minimal opt-in/out adaptation and evidence-based preflight allowance for exact validated versions/configurations.
-- [ ] Run focused native suites, then all backend and shell checks; fix root causes, preserving RED artifacts.
-- [ ] Inspect installer/update behavior; add a reproduced safeguard if needed to preserve hybrid-enabled Extended configurations.
+- [x] Write and observe failed tests for admitted Extended hybrid generation, stock/unknown exclusion, explicit false preservation and consistent imported/manual paths.
+- [x] Implement minimal opt-in/out adaptation and evidence-based preflight allowance for exact validated versions/configurations.
+- [x] Run focused native suites, then all backend and shell checks; fix root causes, preserving RED artifacts.
+- [x] Inspect installer/update behavior; add a reproduced safeguard if needed to preserve hybrid-enabled Extended configurations.
 
 ### Task 3: Independent review and release
 
 **Files:** VERSION, README.md, docs/COMPATIBILITY.md, docs/PROVENANCE.md, docs/tdd/reality-extended.md; workflow only if required-mode coverage needs it.
 
-- [ ] Independent review of immutable patch, schema choices, negative controls and update behavior; resolve concrete findings with TDD.
-- [ ] Record pinned upstream correction, exact success matrix and unsupported combinations; prepare next candidate version.
-- [ ] Publish to existing PR, await complete backend/frontend/shell/build gates.
-- [ ] Download six packages, verify SHA256/version/runtime payloads, save source archive and manifest under current outputs, update PR evidence.
+- [x] Independent review of immutable patch, schema choices, negative controls and update behavior; resolve concrete findings with TDD.
+- [x] Record pinned upstream correction, exact success matrix and unsupported combinations; prepare next candidate version.
+- [x] Publish to existing PR, await complete backend/frontend/shell/build gates.
+- [x] Download six packages, verify SHA256/version/runtime payloads, save source archive and manifest under current outputs, update PR evidence.
