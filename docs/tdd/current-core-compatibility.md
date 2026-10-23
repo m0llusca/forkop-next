@@ -60,6 +60,22 @@ Replace the incorrect universal REALITY-success expectation with an honest
 incompatibility characterization that requires a same-Xray positive control
 through the exact same server/keys/cover/target before checking stock rejection.
 
+Candidate 6066ab4d, build run 40005035881: all 20 current-schema/preflight
+methods pass, as do prior backend tests and TLS/Vision. One of 188 tests fails:
+the new Xray-to-Xray REALITY control times out before the cover responds.
+Artifact SHA256 b6231470e39c3a9738a32bd0e49cb452739c6293f73733a78963c8ea3cd108b2.
+This is not treated as a passing build or ignored expected failure.
+
+Pinned REALITY `record_detect.go` starts six concurrent target-probe connections;
+the single-connection OpenSSL cover serializes them. Replace only that fixture
+with a threaded TLS 1.3 cover and assert that an idle raw socket cannot block
+a second strictly verified TLS handshake. REALITY also initializes record
+detection asynchronously (up to five seconds): use a bounded authenticated
+transfer readiness check before the original single positive assertion. All
+attempts are logged; per-request timeouts and TLS/authentication controls remain
+unchanged. Each stock client's rejection must appear in its own fresh server-log
+range, excluding errors from earlier clients and controls.
+
 ## Additional review skills
 
 Installed from pinned primary repositories: Trail of Bits property-based-testing

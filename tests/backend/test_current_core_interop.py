@@ -46,6 +46,7 @@ import json
 import re
 import shutil
 import socket
+import socketserver
 import ssl
 import subprocess
 import threading
@@ -82,6 +83,24 @@ class QuietHTTP(http.server.BaseHTTPRequestHandler):
         self.wfile.write(body)
     def log_message(self, *args):
         pass
+
+
+class TLSCoverHandler(socketserver.BaseRequestHandler):
+    def handle(self):
+        # REALITY probes hold multiple raw/TLS sockets concurrently. Handshake
+        # inside a worker, so neither probes nor idle clients block accept().
+        self.request.settimeout(6)
+        try:
+            with self.server.tls.wrap_socket(self.request, server_side=True) as conn:
+                self.server.events.append('TLS handshake ' + str(conn.selected_alpn_protocol()))
+                while conn.recv(4096):
+                    pass
+        except (OSError, ssl.SSLError) as error:
+            self.server.events.append(type(error).__name__)
+
+
+class TLSCoverServer(socketserver.ThreadingTCPServer):
+    daemon_threads = True
 
 
 class CurrentCoreInteropTests(unittest.TestCase):
@@ -246,6 +265,22 @@ class CurrentCoreInteropTests(unittest.TestCase):
         path.write_text(json.dumps(config))
         self.run_ok([XRAY, 'run', '-test', '-c', path])
         with self.process([XRAY, 'run', '-c', path], port, 'xray-client-control'):
+            # RAW listener readiness precedes REALITY's asynchronous target
+            # record detection. Its probes can read for five seconds; a raw
+            # listening port therefore does not imply protocol readiness.
+            # Poll an actual authenticated, strictly verified transfer under
+            # an independent setup deadline, retaining every attempt's log.
+            deadline = time.monotonic() + 12
+            while True:
+                ready = self.curl(port)
+                if ready.returncode == 0 and ready.stdout == self.marker:
+                    break
+                self.assertIn(ready.returncode, (28, 97), ready.stderr.decode() + '\n' + self.diagnostics())
+                self.assertLess(time.monotonic(), deadline,
+                                'REALITY did not become ready: ' + self.diagnostics())
+                time.sleep(.05)
+            # This single request is the positive assertion after setup has
+            # proven protocol readiness; its existing curl limits stay strict.
             result = self.curl(port)
             self.assertEqual(result.returncode, 0, result.stderr.decode() + '\n' + self.diagnostics())
             self.assertEqual(result.stdout, self.marker)
@@ -260,6 +295,46 @@ class CurrentCoreInteropTests(unittest.TestCase):
             rejected = self.curl(port)
             self.assertNotEqual(rejected.returncode, 0)
             self.assertNotEqual(rejected.stdout, self.marker)
+
+    @contextlib.contextmanager
+    def concurrent_cover(self, port):
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        context.minimum_version = ssl.TLSVersion.TLSv1_3
+        context.set_alpn_protocols(['h2', 'http/1.1'])
+        context.load_cert_chain(str(self.d / 'cert.pem'), str(self.d / 'key.pem'))
+        cover = TLSCoverServer(('127.0.0.1', port), TLSCoverHandler)
+        cover.tls = context
+        cover.events = []
+        thread = threading.Thread(target=cover.serve_forever, daemon=True)
+        thread.start()
+        try:
+            # Real regression control: an idle raw connection must not prevent
+            # another connection from completing a strictly verified TLS1.3
+            # handshake. The former single-connection s_server fails this.
+            with socket.create_connection(('127.0.0.1', port), timeout=2):
+                client = ssl.create_default_context(cafile=str(self.d / 'cert.pem'))
+                client.minimum_version = ssl.TLSVersion.TLSv1_3
+                client.set_alpn_protocols(['h2'])
+                with socket.create_connection(('127.0.0.1', port), timeout=2) as raw:
+                    with client.wrap_socket(raw, server_hostname='localhost') as tls:
+                        self.assertEqual(tls.version(), 'TLSv1.3')
+                        self.assertEqual(tls.selected_alpn_protocol(), 'h2')
+            yield cover
+        finally:
+            cover.shutdown()
+            cover.server_close()
+            thread.join(timeout=2)
+            (self.d / 'cover.log').write_text('\n'.join(cover.events))
+
+    def assert_fresh_reality_rejection(self, offset):
+        deadline = time.monotonic() + 4
+        reason = 'authentication failed or validation criteria not met'
+        while time.monotonic() < deadline:
+            fresh = (self.d / 'xray.log').read_text(errors='replace')[offset:]
+            if reason in fresh:
+                break
+            time.sleep(.05)
+        self.assertIn(reason, fresh, self.diagnostics())
 
     def check_interop(self, security):
         self.assertIn('Xray 26.10.21', self.run_ok([XRAY, 'version']))
@@ -279,9 +354,7 @@ class CurrentCoreInteropTests(unittest.TestCase):
             self.assertTrue(public_key and private_key, 'Xray x25519 returned no key pair')
             settings['realitySettings'] = {'show': False, 'target': f'127.0.0.1:{cover_port}',
                 'serverNames': ['localhost'], 'privateKey': private_key, 'shortIds': ['aabb']}
-            cover = self.process(['openssl', 's_server', '-accept', f'127.0.0.1:{cover_port}',
-                '-cert', self.d / 'cert.pem', '-key', self.d / 'key.pem',
-                '-tls1_3', '-alpn', 'h2', '-www', '-quiet'], cover_port, 'cover')
+            cover = self.concurrent_cover(cover_port)
         xray_config = {'log': {'loglevel': 'debug'}, 'inbounds': [{
             'listen': '127.0.0.1', 'port': server_port, 'protocol': 'vless',
             'settings': {'clients': [{'id': identity, 'flow': 'xtls-rprx-vision'}], 'decryption': 'none'},
@@ -310,12 +383,16 @@ class CurrentCoreInteropTests(unittest.TestCase):
                     client = self.d / 'sing-box.json'
                     client.write_text(json.dumps(config))
                     self.run_ok([core, 'check', '-c', client])
-                    with self.process([core, 'run', '-c', client], socks_port, 'sing-' + version):
-                        result = self.curl(socks_port)
-                        if security == 'reality':
+                    if security == 'reality':
+                        offset = len((self.d / 'xray.log').read_text(errors='replace'))
+                        with self.process([core, 'run', '-c', client], socks_port, 'sing-' + version):
+                            result = self.curl(socks_port)
                             self.assertIn(result.returncode, (28, 97), result.stderr.decode())
                             self.assertNotEqual(result.stdout, self.marker)
-                            continue
+                        self.assert_fresh_reality_rejection(offset)
+                        continue
+                    with self.process([core, 'run', '-c', client], socks_port, 'sing-' + version):
+                        result = self.curl(socks_port)
                         self.assertEqual(result.returncode, 0, result.stderr.decode() + '\n' + self.diagnostics())
                         self.assertEqual(result.stdout, self.marker)
                         untrusted = self.curl(socks_port, trusted=False)
@@ -331,15 +408,6 @@ class CurrentCoreInteropTests(unittest.TestCase):
                         rejected = self.curl(socks_port)
                         self.assertNotEqual(rejected.returncode, 0, 'Wrong VLESS UUID authenticated')
                         self.assertNotEqual(rejected.stdout, self.marker)
-            if security == 'reality':
-                deadline = time.monotonic() + 4
-                reason = 'authentication failed or validation criteria not met'
-                while time.monotonic() < deadline:
-                    log = (self.d / 'xray.log').read_text(errors='replace')
-                    if log.count(reason) >= len(VERSIONS):
-                        break
-                    time.sleep(.05)
-                self.assertGreaterEqual(log.count(reason), len(VERSIONS), self.diagnostics())
 
     def test_generated_tls_vision_outbound_fetches_strict_https_through_both_current_cores(self):
         self.check_interop('tls')
