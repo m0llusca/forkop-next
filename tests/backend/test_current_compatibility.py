@@ -164,6 +164,17 @@ class CurrentCompatibilityTests(unittest.TestCase):
                 result = self.probe(server)
                 self.assertEqual(result['data']['status'], 'verified', result)
 
+    def test_explicit_empty_xray_method_cannot_fall_back_to_network(self):
+        # A non-nil Method pointer overrides Network even when the method is empty;
+        # TransportProtocol.Build then rejects that unsupported empty name.
+        self.configure(flow='', security='none')
+        server = {'protocol': 'vless',
+                  'settings': {'clients': [{'flow': ''}], 'decryption': 'none'},
+                  'streamSettings': {'method': '', 'network': 'raw', 'security': 'none'}}
+        result = self.probe(server)
+        self.assertEqual(result['data']['status'], 'unsupported', result)
+        self.assertFalse((self.d / 'curl.log').exists())
+
     def test_reality_short_id_hex_case_and_zero_padding_preserve_byte_identity(self):
         # Xray decodes into an eight-byte zero-initialized buffer, not a variable string.
         for local_sid, server_sid in (
@@ -190,6 +201,18 @@ class CurrentCompatibilityTests(unittest.TestCase):
                 result = self.probe(server)
                 self.assertNotEqual(result['data']['status'], 'verified', result)
         self.assertFalse((self.d / 'curl.log').exists())
+
+    def test_nonstring_reality_short_id_cannot_be_coerced_to_valid_zero_id(self):
+        for invalid_id in (0, False, None, [], {}):
+            with self.subTest(short_id=invalid_id):
+                config = self.configure()
+                config['outbounds'][0]['tls']['reality']['short_id'] = invalid_id
+                self.write_config(config)
+                server = copy.deepcopy(self.server)
+                server['short_ids'] = ['0000000000000000']
+                result = self.probe(server)
+                self.assertNotEqual(result['data']['status'], 'verified', result)
+        self.assertFalse((self.d / 'curl.log').exists(), 'Invalid typed IDs must not become empty valid IDs')
 
     def test_vision_over_non_raw_transport_cannot_be_certified(self):
         # With decryption none, Vision's inbound TCP path requires the direct TLS/REALITY connection.
@@ -219,6 +242,44 @@ class CurrentCompatibilityTests(unittest.TestCase):
                 result = self.probe(server)
                 self.assertEqual(result['data']['status'], 'unsupported', result)
         self.assertFalse((self.d / 'curl.log').exists())
+
+    def test_current_xray_reality_rejects_native_confirmed_incompatible_stock_cores(self):
+        # Pinned native handshake evidence: Xray v26.10.21's REALITY requires
+        # X25519MLKEM768, absent from these two stock sing-box clients' wire hello.
+        self.configure()
+        for version in ('1.13.7', '1.14.3'):
+            for xray_version in ('26.10.21', 'v26.10.21'):
+                with self.subTest(client_version=version, xray_version=xray_version):
+                    (self.d / 'sing-box').write_text('#!/bin/sh\necho "sing-box version ' + version + '"\n')
+                    result = self.call(section='main', server=self.server, probe=True, domain='example.org',
+                                       installed={'xray': xray_version, 'panel': '3.10.2'})
+                    self.assertEqual(result['data']['status'], 'unsupported', result)
+        self.assertFalse((self.d / 'curl.log').exists(), 'Known failed REALITY profile must not run HTTPS probe')
+
+    def test_current_xray_tls_remains_probe_eligible_for_native_confirmed_stock_cores(self):
+        # The same pinned clients pass actual TLS Vision: scope the guard to REALITY.
+        self.configure(security='tls')
+        server = copy.deepcopy(self.server)
+        server['security'] = 'tls'
+        for version in ('1.13.7', '1.14.3'):
+            with self.subTest(client_version=version):
+                (self.d / 'sing-box').write_text('#!/bin/sh\necho "sing-box version ' + version + '"\n')
+                result = self.call(section='main', server=server, probe=True, domain='example.org',
+                                   installed={'xray': '26.10.21', 'panel': '3.10.2'})
+                self.assertEqual(result['data']['status'], 'verified', result)
+                self.assertTrue(result['data']['probe']['reachable'], result)
+                self.assertFalse(result['data']['future_compatibility_guaranteed'])
+
+    def test_current_xray_reality_unknown_or_extended_core_requires_capability_evidence(self):
+        self.configure()
+        for version in ('1.13.18-extended-2.6.5', 'unknown'):
+            with self.subTest(client_version=version):
+                (self.d / 'sing-box').write_text('#!/bin/sh\necho "sing-box version ' + version + '"\n')
+                result = self.call(section='main', server=self.server, probe=True, domain='example.org',
+                                   installed={'xray': '26.10.21', 'panel': '3.10.2'})
+                self.assertEqual(result['data']['status'], 'probe_required', result)
+                self.assertFalse(result['data']['future_compatibility_guaranteed'])
+        self.assertFalse((self.d / 'curl.log').exists(), 'An unconfirmed core suffix is not capability evidence')
 
 
 if __name__ == '__main__':

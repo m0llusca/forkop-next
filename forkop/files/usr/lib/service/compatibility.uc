@@ -22,14 +22,53 @@ function updates(payload){
     }
     return ok({updates:result,automatic_install:false});
 }
+function metadata_object(raw,key){
+    if(index(keys(raw),key)<0)return {};
+    let value=raw[key];
+    if(type(value)=='string'){
+        try{value=json(value);}catch(e){return null;}
+    }
+    return type(value)=='object'?value:null;
+}
+function canonical_transport(value){
+    value=lc(str(value));
+    if(value=='raw')return 'tcp';
+    if(value=='websocket')return 'ws';
+    if(value=='splithttp')return 'xhttp';
+    if(value=='mkcp')return 'kcp';
+    return value;
+}
+function canonical_short_id(value){
+    if(type(value)!='string'||length(value)>16||length(value)%2!=0||!match(value,/^[0-9A-Fa-f]*$/))return null;
+    value=lc(value);
+    while(length(value)<16)value+='0';
+    return value;
+}
 function normalize(raw,server){
-    raw=obj(raw);let stream=obj(raw.streamSettings),tls=obj(raw.tls),reality=obj(tls.reality),rs=obj(stream.realitySettings),ts=obj(stream.tlsSettings),settings=obj(raw.settings);
-    let users=arr(settings.clients),user=length(users)==1?obj(users[0]):{};
+    raw=obj(raw);
+    let stream=metadata_object(raw,'streamSettings'),settings=metadata_object(raw,'settings');
+    if(stream==null||settings==null)return null;
+    let tls=obj(raw.tls),reality=obj(tls.reality),rs=obj(stream.realitySettings),ts=obj(stream.tlsSettings);
+    // Current Xray prefers clients over users, and inherits the settings flow.
+    let users=arr(settings.clients!=null?settings.clients:settings.users);
+    let user=length(users)==1?obj(users[0]):{};
     let transport=raw.transport,transport_type=type(transport)=='object'?transport.type:transport;
     let security=raw.security||stream.security||(tls.enabled?(reality.enabled?'reality':'tls'):'none');
-    let result={protocol:str(raw.protocol||raw.type),transport:str(transport_type||stream.network||'tcp'),flow:str(raw.flow!=null?raw.flow:user.flow),encryption:str(raw.encryption||settings.decryption||'none'),security:str(security),sni:str(raw.sni||tls.server_name),server_names:arr(raw.server_names||rs.serverNames||ts.serverNames),short_ids:arr(raw.short_ids||rs.shortIds),short_id:str(obj(raw.reality).short_id||reality.short_id),public_key:str(obj(raw.reality).public_key||reality.public_key),insecure:tls.insecure==true};
-    if(result.transport=='raw')result.transport='tcp';
-    return result;
+    return {
+        protocol:str(raw.protocol||raw.type),
+        transport:canonical_transport(transport_type||stream.method||stream.network||'tcp'),
+        flow:str(raw.flow!=null?raw.flow:(user.flow||settings.flow||'')),
+        encryption:str(raw.encryption||settings.decryption||'none'),
+        security:lc(str(security)),
+        sni:str(raw.sni||tls.server_name),
+        server_names:arr(raw.server_names||rs.serverNames),
+        short_ids:arr(raw.short_ids||rs.shortIds),
+        short_id:str(obj(raw.reality).short_id||reality.short_id),
+        public_key:str(obj(raw.reality).public_key||reality.public_key),
+        insecure:tls.insecure==true,
+        tls_max_version:str(tls.max_version||ts.maxVersion),
+        ambiguous_client:server&&index(keys(raw),'settings')>=0&&length(users)!=1
+    };
 }
 function local_client(payload){
     let config_path=getenv('FORKOP_SINGBOX_CONFIG')||uci.get(getenv('FORKOP_CONFIG_NAME')||'forkop','settings','config_path')||'/etc/sing-box/config.json';
@@ -37,9 +76,15 @@ function local_client(payload){
     let config={};try{config=obj(json(fs.readfile(config_path)));}catch(e){return null;}
     let section=str(payload.section),tag=str(payload.outbound_tag),row=obj(uci.get_all(getenv('FORKOP_CONFIG_NAME')||'forkop',section));
     if(!match(section,/^[A-Za-z0-9_][A-Za-z0-9_-]{0,63}$/)||!common.bool_option(row,'mixed_proxy_enabled',false))return null;
-    let port=int(row.mixed_proxy_port),inbound=null,outbound=null;
-    for(let i in arr(config.inbounds))if(i.type=='mixed'&&i.listen_port==port)inbound=i.tag;
-    if(!inbound)return null;
+    let port=int(row.mixed_proxy_port),inbound=null,outbound=null,count=0;
+    let expected_tag=require('singbox.constants').inbound_tag(section+'-mixed');
+    for(let i in arr(config.inbounds))if(i.tag==expected_tag){
+        if(i.type!='mixed'||i.listen_port!=port)return null;
+        let ip=require('core.ip');
+        if(!ip.valid_ipv4(i.listen)&&!ip.valid_ipv6(i.listen))return null;
+        inbound=i.tag;count++;
+    }
+    if(count!=1||port<1||port>65535)return null;
     // First matching unconditional inbound rule must lead directly to this outbound.
     for(let rule in arr(obj(config.route).rules)){
         if(rule.inbound==null&&index(['route','reject','hijack-dns'],rule.action||'route')>=0){
@@ -58,18 +103,27 @@ function local_client(payload){
 function check(payload){
     if((payload.client!=null&&type(payload.client)!='object')||(payload.server!=null&&type(payload.server)!='object'))return fail('invalid_compatibility_metadata');
     let local=local_client(payload),c=normalize(local||payload.client,false),s=normalize(payload.server,true),v=version(),extended=index(lc(v),'extended')>=0;
+    if(c==null||s==null)return fail('invalid_compatibility_metadata');
     let checks=[],blocked=false,unknown=false;
     function add(capability,status,detail,next_step){push(checks,{capability,status,detail,next_step:next_step||''});if(status=='unsupported')blocked=true;if(status=='unknown')unknown=true;}
     if(!c.protocol||!s.protocol)add('metadata','unknown','Client or server metadata is missing.','Select the generated outbound and import redacted inbound metadata.');
     else{
+        if(s.ambiguous_client)add('server_client','unknown','Server inbound does not identify one selected client.','Supply normalized metadata for exactly the selected client.');
         for(let field in ['protocol','transport','flow','encryption','security']){
+            if(field=='flow'&&s.ambiguous_client)continue;
             if(c[field]!=s[field])add(field,'unsupported','Client and server settings differ.','Align this capability on the client and server, then repeat preflight.');
             else add(field,'matched','Client and server metadata agree.');
         }
         if(c.protocol!='vless')add('protocol_support','unknown','This protocol has no verified compatibility adapter.','Run a dedicated section probe and review the core documentation.');
-        if(index(['tcp','ws','grpc','http','httpupgrade'],c.transport)<0)add('transport_support',extended?'unknown':'unsupported','Transport requires a confirmed core capability.','Use a core that explicitly supports this transport and run preflight.');
+        if(index(['tcp','ws','grpc','httpupgrade'],c.transport)<0)add('transport_support',extended?'unknown':'unsupported','Transport requires a confirmed core capability.','Use a core that explicitly supports this transport and run preflight.');
+        if(index(['http','h2','h3','quic'],s.transport)>=0)add('server_transport','unsupported','This transport was removed from the current Xray capability profile.','Select a transport supported by both cores, then repeat preflight.');
+        if(s.security=='reality'&&index(['tcp','xhttp','grpc'],s.transport)<0)add('server_reality_transport','unsupported','Current Xray cannot use REALITY with this transport.','Use a supported REALITY transport on both sides.');
         if(index(['','xtls-rprx-vision'],c.flow)<0)add('flow_support',extended?'unknown':'unsupported','Flow is not in the stock VLESS capability set.','Check the selected core capability and run a dedicated section probe.');
         if(c.encryption!='none')add('encryption_support',extended?'unknown':'unsupported','Non-default VLESS encryption requires explicit client support.','Use a matching supported client core; preserve the server encryption settings.');
+        for(let side in [c,s])if(side.flow=='xtls-rprx-vision'&&side.encryption=='none'){
+            if(side.transport!='tcp'||index(['tls','reality'],side.security)<0)add('vision_transport','unsupported','Vision requires direct TLS or REALITY over RAW/TCP.','Select matching RAW/TCP with TLS or REALITY.');
+            if(side.security=='tls'&&index(['1.0','1.1','1.2'],side.tls_max_version)>=0)add('vision_tls_version','unsupported','Vision requires TLS 1.3, but metadata limits TLS below it.','Allow TLS 1.3 on both sides.');
+        }
         if(index(['tls','reality','none'],c.security)<0)add('security_support','unknown','Security capability is unknown.','Check current core documentation and repeat preflight.');
         if(c.insecure)add('certificate_validation','unsupported','Client disables certificate verification.','Enable certificate validation and use the correct server name.');
         if(c.security=='tls'||c.security=='reality'){
@@ -78,8 +132,11 @@ function check(payload){
             else add('sni','matched','Server name matches.');
         }
         if(c.security=='reality'){
+            let client_id=canonical_short_id(c.short_id),server_ids=[],invalid_id=client_id==null;
+            for(let id in s.short_ids){let normalized=canonical_short_id(id);if(normalized==null)invalid_id=true;else push(server_ids,normalized);}
             if(!c.public_key||length(s.short_ids)==0)add('reality','unknown','REALITY key or short ID evidence is incomplete.','Import a fresh client link from the configured inbound, then probe the section.');
-            else if(index(s.short_ids,c.short_id)<0)add('reality','unsupported','REALITY short ID does not match.','Refresh the client link from this inbound.');
+            else if(invalid_id)add('reality','unsupported','REALITY short ID encoding is invalid.','Use even-length hexadecimal short IDs of at most eight bytes.');
+            else if(index(server_ids,client_id)<0)add('reality','unsupported','REALITY short ID does not match.','Refresh the client link from this inbound.');
             else add('reality','matched','REALITY short ID matches; the key still needs a live handshake.');
         }
     }
