@@ -567,6 +567,11 @@ function normalize_utls_fingerprint(value) {
 }
 
 function add_tls(url, security, default_tls) {
+    security = lc(as_string(security));
+    // A typo must reject the node, never turn a requested secure link into
+    // plaintext. Retain the existing xtls alias and explicit none semantics.
+    if (index([ "", "none", "tls", "xtls", "reality" ], security) < 0)
+        return [null, false];
     let query = object_or_empty(url.query);
     let sni = query.sni || query.peer || "";
     let insecure = query.allowInsecure || query.insecure || "";

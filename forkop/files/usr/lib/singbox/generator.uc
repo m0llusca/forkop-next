@@ -1672,16 +1672,18 @@ function tls_alpn_array(value, transport) {
 
 function apply_link_tls(outbound, scheme, query) {
     query = object_or_empty(query);
-    let security = as_string(query.security || "");
-    if (security == "" && (scheme == "hysteria2" || scheme == "hy2"))
+    let security = lc(as_string(query.security || ""));
+    if (security == "xtls")
+        security = "tls";
+    // Trojan defaults to TLS; SNI also expresses TLS intent on a share link.
+    // An explicit none remains an intentional opt-out.
+    if (security == "" && (scheme == "trojan" || scheme == "hysteria2" || scheme == "hy2" || as_string(query.sni || "") != ""))
         security = "tls";
 
     if (security == "" || security == "none")
         return;
-    if (security != "tls" && security != "reality") {
-        warn("unknown manual proxy link security '", security, "' ignored\n");
-        return;
-    }
+    if (security != "tls" && security != "reality")
+        runtime_generate_unsupported("manual proxy link security is unsupported");
 
     let tls = { enabled: true };
     if (as_string(query.sni || "") != "")

@@ -17,6 +17,8 @@ live device, remote server or an untested future core release.
 | Explain route separately from network test | `test_route_explain.py`, `test_probe.py` | Unknown remote rules remain indeterminate; explanations do not claim reachability |
 | Persistent manual server choice | `test_manual_selection.py` | Identity survives renaming and process restart; automatic selection does not write flash |
 | Connection interruption and routing fixes | `test_routing_regressions.py`, upstream DNS/URLTest fixtures | Interrupt setting, source-DNS isolation, URLTest timing/exclusions, elapsed scheduler |
+| TProxy routing guards | `test_network_rule_guards.py` | Mark/table on the same universal rule; exact IPv4/IPv6 default route and loopback interface, with external ip command fixtures |
+| Share-link TLS intent | `test_manual_tls_guards.py` | Trojan default TLS, known mode normalization, unknown-node rejection, SNI intent and deliberate explicit none across manual/subscription inputs |
 | Bounded parallel latency | `test_parallel_latency.py` | Real local HTTP server verifies overlap, maximum four transfers, request timeouts and JSON-error handling |
 | Smart Detect suggestions | `test_smart_detect.py`, `test_next_policies.py` | Opt-in bounded log-candidate scan; repeated failures with alternate success; explicit transactional acceptance only |
 | 3x-ui/Xray update awareness | `test_compatibility.py` | Fixed official release endpoints, numeric comparison, bounded transport, unknown on insufficient evidence; no install |

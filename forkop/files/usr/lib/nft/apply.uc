@@ -1232,8 +1232,6 @@ function rule_line_has_fwmark(fields, expected_mark) {
 
 function has_tproxy_marking_rule_text(rule_list, table, mark) {
     let expected_mark = parse_mark_number(mark);
-    let has_lookup = false;
-    let has_fwmark = false;
 
     if (expected_mark == null)
         return false;
@@ -1243,12 +1241,27 @@ function has_tproxy_marking_rule_text(rule_list, table, mark) {
         if (length(fields) == 0)
             continue;
 
-        if (!has_lookup && rule_line_has_lookup_table(fields, table))
-            has_lookup = true;
-        if (!has_fwmark && rule_line_has_fwmark(fields, expected_mark))
-            has_fwmark = true;
-
-        if (has_lookup && has_fwmark)
+        // Both selectors must belong to one unconditional rule. A source,
+        // destination or interface restriction cannot serve all marked packets.
+        let universal = false, understood = true;
+        for (let i = 0; i < length(fields); i++) {
+            if (i == 0 && match(fields[i], /^[0-9]+:$/))
+                continue;
+            if (i + 1 >= length(fields)) {
+                understood = false;
+                break;
+            }
+            let key = fields[i], value = fields[i + 1];
+            if (key == "from" && value == "all")
+                universal = true;
+            else if (key != "fwmark" && key != "lookup" && key != "proto" && key != "protocol") {
+                understood = false;
+                break;
+            }
+            i++;
+        }
+        if (understood && universal && rule_line_has_lookup_table(fields, table) &&
+            rule_line_has_fwmark(fields, expected_mark))
             return true;
     }
 
@@ -1259,12 +1272,15 @@ function has_local_default_route_text(route_list, family) {
     family = int(family || 4);
 
     for (let line in split(as_string(route_list), "\n")) {
-        line = trim(replace(as_string(line), /\r/g, ""));
-        line = replace(line, /[[:space:]]+/g, " ");
-        if (family == 4 && index(line, "local default dev lo scope host") >= 0)
-            return true;
-        if (family == 6 && (index(line, "local ::") >= 0 || index(line, "local default") >= 0) && index(line, " dev lo") >= 0)
-            return true;
+        let fields = normalized_fields(line);
+        if (length(fields) < 4 || fields[0] != "local")
+            continue;
+        let destination = fields[1];
+        if (destination != "default" && destination != (family == 6 ? "::/0" : "0.0.0.0/0"))
+            continue;
+        for (let i = 2; i + 1 < length(fields); i++)
+            if (fields[i] == "dev" && fields[i + 1] == "lo")
+                return true;
     }
 
     return false;

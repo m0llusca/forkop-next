@@ -172,9 +172,11 @@ and `respond`, and converts remote rule-set `download_detour` into `http_client`
 without changing the chosen download outbound. Existing custom HTTP clients are
 preserved. Transforming an already migrated configuration is idempotent.
 
-Only the generated, understood logical AND bypass shape is rewritten. An arbitrary
-legacy address expression is rejected with `unsupported_dns_response_migration`
-instead of changing its routing semantics. Unknown runtime versions retain the
+The adapter rewrites the understood two-child logical AND shape: request/source
+conditions first, address filtering second, with a route action and server.
+The generator uses this shape for its inverted FakeIP bypass filter. OR rules,
+whole-rule inversion, request children with legacy address filtering, and other
+unhandled shapes fail with `unsupported_dns_response_migration`. Unknown runtime versions retain the
 legacy shape and must pass the actual core's mandatory configuration check before
 activation. No flag enables deprecated schemas or weakens transport security.
 Published sing-box 1.13.7 and 1.14.3 both passed actual configuration checks on the
