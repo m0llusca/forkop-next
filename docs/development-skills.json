@@ -1,0 +1,34 @@
+{
+  "schema": 1,
+  "reviewed_at": "2026-10-23",
+  "purpose": "Development and network correctness review of Forkop Next",
+  "skills": [
+    {
+      "name": "protocol-reverse-engineering",
+      "repository": "wshobson/agents",
+      "commit": "0874a27b17a22e2b7c2e2bcd725768e0803cad06",
+      "path": "plugins/reverse-engineering/skills/protocol-reverse-engineering",
+      "skill_sha256": "89e4f51f398554ce74dbe72a0f2090c3252ea99cc25b3c227a7a4f11bbd43384",
+      "application": "Network boundary review: TProxy policy rules, IPv6 default route, generated protocol settings and existing native handshake evidence"
+    },
+    {
+      "name": "sharp-edges",
+      "repository": "trailofbits/skills",
+      "commit": "196a9073ab10d35bacf111f945e02c00b2c6883a",
+      "path": "plugins/sharp-edges/skills/sharp-edges",
+      "skill_sha256": "3b69a709c2f8f0cfcf57d40a3186e166f307865cc8ed924be4098e549a121e9c",
+      "application": "TLS default and enum/error-path review; controller, mixed proxy, probe and update boundaries"
+    },
+    {
+      "name": "spec-to-code-compliance",
+      "repository": "trailofbits/skills",
+      "commit": "196a9073ab10d35bacf111f945e02c00b2c6883a",
+      "path": "plugins/spec-to-code-compliance/skills/spec-to-code-compliance",
+      "skill_sha256": "eb0d91b50a9c06f50baf8763d1e23566897b9fa3e7ffcf13134eee4e1ccaefe5",
+      "application": "Independent requirement check: source-aware DNS isolation and sing-box 1.13 to 1.14 migration"
+    }
+  ],
+  "existing_methods": ["test-driven-development", "systematic-debugging", "verification-before-completion", "property-based-testing", "variant-analysis", "independent-code-review"],
+  "execution_scope": "Isolated fixtures only; no live router/VPS capture or changes, no certificate-verification downgrade",
+  "provenance_note": "Skill instructions were read and matched by SHA256 before use; no external skill source is vendored into the product"
+}

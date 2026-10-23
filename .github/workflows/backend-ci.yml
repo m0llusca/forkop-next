@@ -1,0 +1,90 @@
+name: Backend CI
+
+on:
+  workflow_call:
+  pull_request:
+    paths:
+      - 'forkop/files/**'
+      - 'forkop/Makefile'
+      - 'build.sh'
+      - 'tests/**'
+      - 'tools/provision-test-cores.py'
+      - '.github/workflows/build.yml'
+      - '.github/workflows/backend-ci.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'forkop/files/**'
+      - 'forkop/Makefile'
+      - 'build.sh'
+      - 'tests/**'
+      - 'tools/provision-test-cores.py'
+      - '.github/workflows/build.yml'
+      - '.github/workflows/backend-ci.yml'
+
+jobs:
+  backend-checks:
+    name: Backend Runtime Checks
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5.0.0
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node for fixture assertions
+        uses: actions/setup-node@v5.0.0
+        with:
+          node-version: '22'
+
+      - name: Build ucode
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake git libjson-c-dev pkg-config openssl
+          git clone https://github.com/openwrt/libubox.git /tmp/libubox
+          git -C /tmp/libubox checkout da2d205a5cf3e877c45a2eec488218cbaf452e7d
+          cmake -S /tmp/libubox -B /tmp/libubox/build -DBUILD_LUA=OFF
+          cmake --build /tmp/libubox/build --parallel
+          sudo cmake --install /tmp/libubox/build
+          git clone https://github.com/openwrt/uci.git /tmp/uci
+          git -C /tmp/uci checkout 74f6277aabffc943d026f406df57c22595134c42
+          cmake -S /tmp/uci -B /tmp/uci/build -DBUILD_LUA=OFF
+          cmake --build /tmp/uci/build --parallel
+          sudo cmake --install /tmp/uci/build
+          sudo ldconfig
+          git clone --depth 1 --branch v0.0.20250529 https://github.com/jow-/ucode.git /tmp/ucode
+          cmake -S /tmp/ucode -B /tmp/ucode/build \
+            -DUBUS_SUPPORT=OFF \
+            -DUCI_SUPPORT=ON \
+            -DULOOP_SUPPORT=OFF
+          cmake --build /tmp/ucode/build --parallel
+          sudo cmake --install /tmp/ucode/build
+          sudo ldconfig
+          command -v ucode
+          ucode -e 'print("ucode ready\n")'
+
+      - name: Check ucode syntax
+        shell: bash
+        run: |
+          find forkop/files/usr/lib -name '*.uc' -print0 | xargs -0 -n1 ucode -c -o /dev/null
+          find forkop/files/usr/lib -name '*.uc' -print0 | xargs -0 -n1 ucode -S -c -o /dev/null
+
+      - name: Provision checksum-pinned published test cores
+        run: python3 tools/provision-test-cores.py
+
+      - name: Run backend tests
+        shell: bash
+        env:
+          FORKOP_REQUIRE_CURRENT_CORES: '1'
+        run: |
+          bash tests/run-backend.sh
+
+      - name: Preserve backend verification logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-verification
+          path: /tmp/forkop-test-report-*/

@@ -1,0 +1,61 @@
+{
+  "luci-app-forkop": {
+    "description": "Grant UCI and RPC access to LuCI app Forkop",
+    "read": {
+      "file": {
+        "/var/run/forkop/component-actions/*": [
+          "read"
+        ],
+        "/var/run/forkop/ui-state/*": [
+          "read"
+        ],
+        "/var/run/forkop/ui-state/service-actions/*": [
+          "read"
+        ],
+        "/var/run/forkop/ui-state/latency-actions/*": [
+          "read"
+        ]
+      },
+      "ubus": {
+        "luci-rpc": [
+          "getDHCPLeases",
+          "getHostHints"
+        ],
+        "network.interface": [
+          "dump"
+        ],
+        "service": [
+          "list"
+        ]
+      }
+    },
+    "write": {
+      "file": {
+        "/var/run/forkop/section-cache/*": [
+          "read"
+        ],
+        "/etc/init.d/forkop": [
+          "exec"
+        ],
+        "/usr/bin/forkop": [
+          "exec"
+        ],
+        "/var/run/forkop/ui-state/*": [
+          "write"
+        ],
+        "/var/run/forkop/ui-state/service-actions/*": [
+          "write"
+        ],
+        "/var/run/forkop/ui-state/latency-actions/*": [
+          "write"
+        ]
+      },
+      "uci": {
+        "forkop": [
+          "read",
+          "write"
+        ]
+      }
+    }
+  }
+}
