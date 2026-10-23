@@ -140,6 +140,86 @@ class CurrentCompatibilityTests(unittest.TestCase):
         result = self.probe(self.server)
         self.assertEqual(result['data']['status'], 'verified', result)
 
+    def test_current_xray_network_case_and_aliases_preserve_capabilities(self):
+        # TransportProtocol.Build lowercases the network before resolving aliases.
+        for network, local_transport in (
+                ('TCP', 'tcp'), ('RAW', 'tcp'), ('WebSocket', 'ws'),
+                ('WS', 'ws'), ('gRPC', 'grpc'), ('HTTPUpgrade', 'httpupgrade')):
+            with self.subTest(network=network):
+                self.configure(flow='', transport=local_transport, security='none')
+                server = {'protocol': 'vless',
+                          'settings': {'clients': [{'flow': ''}], 'decryption': 'none'},
+                          'streamSettings': {'network': network, 'security': 'none'}}
+                result = self.probe(server)
+                self.assertEqual(result['data']['status'], 'verified', result)
+
+    def test_current_xray_stream_method_overrides_network(self):
+        # StreamConfig.Build assigns Method to Network before building the transport.
+        for method, network, local_transport in (('raw', 'ws', 'tcp'), ('WebSocket', 'raw', 'ws')):
+            with self.subTest(method=method, network=network):
+                self.configure(flow='', transport=local_transport, security='none')
+                server = {'protocol': 'vless',
+                          'settings': {'clients': [{'flow': ''}], 'decryption': 'none'},
+                          'streamSettings': {'method': method, 'network': network, 'security': 'none'}}
+                result = self.probe(server)
+                self.assertEqual(result['data']['status'], 'verified', result)
+
+    def test_reality_short_id_hex_case_and_zero_padding_preserve_byte_identity(self):
+        # Xray decodes into an eight-byte zero-initialized buffer, not a variable string.
+        for local_sid, server_sid in (
+                ('aabb', 'AABB'), ('AABB', 'aabb'), ('aabb', 'aabb00'),
+                ('aabb00', 'aabb'), ('aabb', 'aabb000000000000'), ('', '0000000000000000')):
+            with self.subTest(local_sid=local_sid, server_sid=server_sid):
+                config = self.configure()
+                config['outbounds'][0]['tls']['reality']['short_id'] = local_sid
+                self.write_config(config)
+                server = copy.deepcopy(self.server)
+                server['short_ids'] = [server_sid]
+                result = self.probe(server)
+                self.assertEqual(result['data']['status'], 'verified', result)
+
+    def test_reality_malformed_equal_short_ids_cannot_be_certified(self):
+        # Agreement between two invalid strings is not valid REALITY evidence.
+        for short_id in ('zz', 'a', '001122334455667788'):
+            with self.subTest(short_id=short_id):
+                config = self.configure()
+                config['outbounds'][0]['tls']['reality']['short_id'] = short_id
+                self.write_config(config)
+                server = copy.deepcopy(self.server)
+                server['short_ids'] = [short_id]
+                result = self.probe(server)
+                self.assertNotEqual(result['data']['status'], 'verified', result)
+        self.assertFalse((self.d / 'curl.log').exists())
+
+    def test_vision_over_non_raw_transport_cannot_be_certified(self):
+        # With decryption none, Vision's inbound TCP path requires the direct TLS/REALITY connection.
+        for transport, security in (('ws', 'tls'), ('httpupgrade', 'tls'), ('grpc', 'reality')):
+            with self.subTest(transport=transport, security=security):
+                self.configure(transport=transport, security=security)
+                server = copy.deepcopy(self.server)
+                server['transport'] = transport
+                server['security'] = security
+                result = self.probe(server)
+                self.assertEqual(result['data']['status'], 'unsupported', result)
+        self.assertFalse((self.d / 'curl.log').exists())
+
+    def test_vision_with_tls_maximum_below_13_cannot_be_certified(self):
+        # Check both sides independently: either ceiling makes a TLS 1.3 Vision handshake impossible.
+        for limited_side in ('client', 'server'):
+            with self.subTest(limited_side=limited_side):
+                config = self.configure(security='tls')
+                server = copy.deepcopy(self.server)
+                server['security'] = 'tls'
+                server['streamSettings'] = {'network': 'raw', 'security': 'tls', 'tlsSettings': {}}
+                if limited_side == 'client':
+                    config['outbounds'][0]['tls']['max_version'] = '1.2'
+                    self.write_config(config)
+                else:
+                    server['streamSettings']['tlsSettings']['maxVersion'] = '1.2'
+                result = self.probe(server)
+                self.assertEqual(result['data']['status'], 'unsupported', result)
+        self.assertFalse((self.d / 'curl.log').exists())
+
 
 if __name__ == '__main__':
     unittest.main()
