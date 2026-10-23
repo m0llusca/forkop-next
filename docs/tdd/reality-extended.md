@@ -132,7 +132,16 @@ the intact failed-to-back-up library stays untouched. Complete both package
 backups before deleting a service or removing conflicting packages. The test
 harness mechanically extracts the new helper before installer callers. No
 file-preservation, mutation-boundary or authentication assertion is weakened.
-Fresh native GREEN and release packaging are pending.
+Native GREEN: 3acbce64, Backend CI 40017577242, 224 tests in 24.252 seconds,
+all pass; all 70 shell suites pass. The original three-Xray actual REALITY
+matrix, explicit legacy/hybrid-off controls and authentication/certificate
+negatives remain green. The six new test methods cover the missing marker,
+service recreation success/failure, early binary/library backup failures and
+the archive-without-library variant. Artifact SHA256:
+c0055073d12d6de95a8a74cca2ebc9707e44f9f35c153735a5654156fea67c47.
+A second independent immutable-patch review found no new concrete blocker.
+Final documentation commit reruns the full native/frontend/package gates;
+downloaded package and source identities are recorded in the output manifest.
 
 Independent local archive recheck verified all 54 official cached asset SHA256s
 and their extracted executable identities against the packaged manifest (30
