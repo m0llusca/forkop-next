@@ -606,6 +606,7 @@ const EntryPoint = {
     void loadUiCapabilities().catch(showCapabilityError);
 
     const rendered = await forkopMap.render();
+    main.mountForkopWorkspace(rendered);
     mapRendered = true;
     if (uiCapabilities.loaded)
       void initializeSettings().catch(showCapabilityError);

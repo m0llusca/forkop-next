@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { readFileSync } from 'node:fs';
 import { afterEach, expect, it, vi } from 'vitest';
+import { mountForkopWorkspace } from '../../workspace/render';
 const tick = async () => {
   for (let i = 0; i < 40; i++) await Promise.resolve();
 };
@@ -147,6 +148,7 @@ function setup(shell: Record<string, unknown>) {
     registerConfigurationReload: vi.fn(),
     coreService: vi.fn(),
     applyUiStateToStore: vi.fn(),
+    mountForkopWorkspace,
   };
   const feature = {
     createDiagnosticContent: vi.fn(),
@@ -206,6 +208,19 @@ function setup(shell: Record<string, unknown>) {
   );
   return { controller, maps, settings, server, section, main, settingsParse };
 }
+it('mounts workspace navigation on the real native render result and retains its native map', async () => {
+  const state = setup({ getUiCapabilities: () => new Promise(() => {}) });
+  const rendered: HTMLElement = await state.controller.render();
+  document.body.append(rendered);
+  expect(rendered.classList.contains('fkp-workspace')).toBe(true);
+  expect(rendered).toBe(state.maps[0].root);
+  rendered
+    .querySelector<HTMLButtonElement>('[data-workspace-section="servers"]')!
+    .click();
+  expect(rendered.querySelector('[data-tab="dashboard"]')?.className).toBe(
+    'cbi-tab',
+  );
+});
 it('renders the essential native page without waiting for pending capabilities and preserves settings on unrelated saves', async () => {
   const state = setup({ getUiCapabilities: () => new Promise(() => {}) });
   let rendered: HTMLElement | undefined;

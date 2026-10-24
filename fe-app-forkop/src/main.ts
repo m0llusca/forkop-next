@@ -40,6 +40,7 @@ export {
 } from './constants';
 
 export { renderNextPanel } from './forkop/next/render';
+export { mountForkopWorkspace } from './forkop/workspace/render';
 export {
   refreshRuntimeUiState,
   subscribeRuntimeUiState,
