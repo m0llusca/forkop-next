@@ -7777,6 +7777,9 @@ function createSectionContent(section) {
   o.modalonly = true;
   o.depends("action", "connection");
   o.renderWidget = function (sectionId) {
+    // GridSection clones options into a separate modal map. Read that live map
+    // (also while a child detaches it), without replacing saved source evidence.
+    extendedPreviewSectionRef = this.section;
     return mountExtendedPreview(sectionId);
   };
 

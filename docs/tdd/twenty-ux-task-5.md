@@ -200,3 +200,26 @@ ESLint, scoped Prettier check, `node --check` on authored section.js and
 `git diff --check` passed. One test-regex spacing lint issue was corrected before
 the clean scoped lint result. No backend, TypeScript product, or bundle change;
 root owns updated native-browser checkpoint and final integration checks.
+
+### Residual modal-map guard in the same native acceptance wave
+
+Root's actual native retest found initial preview working but newly typed/added
+source URLs ignored. Real LuCI `renderMoreOptionsModal` creates a new CBIMap and
+NamedSection; `cloneOptions` excludes each original option's map/section.
+`Map.lookupOption` searches only its own root. The preview retained the table's
+map, which has no modal-only source fields, so it returned saved fallbacks before
+examining the live widget. The same boundary affected parent filter drafts.
+
+Tests-only `667d475570723e12530e41d8df738fb722ebb695` observed RED: a valid pending
+source returned no unavailable reason instead of `source_draft_changed`. The
+fixture executes the actual preview renderWidget/snapshot code with distinct
+native table/modal roots, scoped option lookup, hidden items, pending input and
+DOM-backed form values. It also covers actual added sources, detached parent
+source/filter edits while child UI is open, child cancel and parent cancel/reopen.
+
+Minimal production fix binds the live section reference to the cloned option's
+`this.section` at preview renderWidget. It never calls baseline initialization or
+changes native ownership/save/cancel. Detached parent maps still retain their
+own field root and form values. Focused 4 files / 6 tests passed; TypeScript,
+scoped ESLint, Prettier, native `node --check` and diff check passed. No backend,
+TypeScript product or bundle changes. Root owns same-browser acceptance retest.
