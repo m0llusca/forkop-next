@@ -274,6 +274,29 @@ class ExtendedPreview(unittest.TestCase):
         self.assertTrue(result['success'],result)
         self.assertEqual(result['data']['requestId'],'revision-1')
 
+    def test_plain_credentials_in_node_group_and_level_names_are_never_projected(self):
+        secret='plainCredential731'
+        node=json.loads(self.data['section'][0]['outbound_jsons'][0])
+        node.update(tag=secret,password=secret)
+        self.data['section'][0]['outbound_jsons'][0]=json.dumps(node)
+        self.data['urltest'][0]['name']='URLTest '+secret
+        self.data['priority_group'][0]['name']=secret
+        self.data['priority_level'][0]['name']='Level '+secret
+        self.generate()
+        result=self.preview();self.assertTrue(result['success'],result)
+        self.assertNotIn(secret,json.dumps(result))
+        self.assertIn('Beta',[row['name'] for row in result['data']['candidates']])
+        self.assertEqual(result['data']['candidates'][0]['id'],'node_0')
+
+    def test_exclude_only_survivor_reason_does_not_claim_include_match(self):
+        self.data['urltest'][0].update(filter_mode='exclude',exclude_outbounds=['Beta'])
+        self.generate()
+        result=self.preview();self.assertTrue(result['success'],result)
+        group=next(g for g in result['data']['groups'] if g['id']=='u1')
+        decisions={row['member']:row for row in group['levels'][0]['decisions']}
+        self.assertEqual(decisions['node_0']['reasons'],['exclude_miss'])
+        self.assertEqual(decisions['node_1']['reasons'],['exclude_match'])
+
     def test_public_cli_sets_a_backend_process_time_budget(self):
         self.env['FORKOP_LIB']=str(LIB)
         self.generate()
