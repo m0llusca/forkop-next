@@ -50,6 +50,46 @@ it('waits for clipboard confirmation and restores the initiating focus', async (
   expect(document.querySelector('textarea')).toBeNull();
 });
 
+it('replaces its global manual fallback on repeated failures without disturbing other content or selection', async () => {
+  Object.defineProperty(navigator, 'clipboard', {
+    configurable: true,
+    value: undefined,
+  });
+  Object.defineProperty(document, 'execCommand', {
+    configurable: true,
+    value: () => false,
+  });
+  const unrelated = document.createElement('div');
+  unrelated.className = 'fkp-copy-feedback';
+  unrelated.textContent = 'Unrelated content';
+  const button = document.createElement('button');
+  const selected = document.createTextNode('Keep this selection');
+  document.body.append(unrelated, button, selected);
+  const range = document.createRange();
+  range.setStart(selected, 5);
+  range.setEnd(selected, 9);
+  window.getSelection()!.addRange(range);
+  button.focus();
+
+  expect(await copyToClipboard('FIRST_COPY')).toBe(false);
+  expect(await copyToClipboard('LATEST_COPY')).toBe(false);
+
+  expect(document.querySelectorAll('textarea')).toHaveLength(1);
+  expect(document.querySelector('textarea')!.value).toBe('LATEST_COPY');
+  expect(document.querySelectorAll('.fkp-copy-feedback')).toHaveLength(2);
+  expect(unrelated.textContent).toBe('Unrelated content');
+  expect(document.activeElement).toBe(button);
+  expect(window.getSelection()!.toString()).toBe('this');
+  const select = document.querySelector<HTMLButtonElement>(
+    '.fkp-copy-feedback button',
+  )!;
+  select.click();
+  const manual = document.querySelector('textarea')!;
+  expect(document.activeElement).toBe(manual);
+  expect(manual.selectionStart).toBe(0);
+  expect(manual.selectionEnd).toBe(11);
+});
+
 it('does not pull focus back after the user moves while clipboard confirmation is pending', async () => {
   let finish!: () => void;
   Object.defineProperty(navigator, 'clipboard', {
@@ -70,6 +110,28 @@ it('does not pull focus back after the user moves while clipboard confirmation i
   finish();
   await work;
   expect(document.activeElement).toBe(input);
+});
+
+it('keeps focus and the manual text selection when a global copy retry fails again', async () => {
+  Object.defineProperty(navigator, 'clipboard', {
+    configurable: true,
+    value: {
+      writeText: async () => {
+        throw Error('synthetic denial');
+      },
+    },
+  });
+  await copyToClipboard('SYNTHETIC_COPY');
+  const manual = document.querySelector('textarea')!;
+  manual.focus();
+  manual.setSelectionRange(2, 6);
+
+  expect(await copyToClipboard('SYNTHETIC_COPY')).toBe(false);
+
+  expect(document.querySelectorAll('textarea')).toHaveLength(1);
+  expect(document.activeElement).toBe(manual);
+  expect(manual.selectionStart).toBe(2);
+  expect(manual.selectionEnd).toBe(6);
 });
 
 it('announces ordinary status politely and errors urgently', () => {

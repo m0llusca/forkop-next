@@ -40,6 +40,7 @@ it('identifies configured routes in the trace and keeps unknown IDs as plain tex
   const root = renderAdvancedPanel(request, undefined, false, 'diagnostics');
   document.body.append(root);
   await tick();
+  root.querySelector<HTMLInputElement>('[name=domain]')!.value = 'example.org';
   click(root, 'Объяснить маршрут');
   await tick();
   expect(root.querySelector('strong')?.textContent).toContain('Рабочий VPN');

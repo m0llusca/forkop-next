@@ -1,5 +1,7 @@
 import { showToast } from './showToast';
 
+let globalFallback: HTMLElement | undefined;
+
 export async function copyToClipboard(
   text: string,
   feedback?: HTMLElement,
@@ -15,7 +17,7 @@ export async function copyToClipboard(
   let usedSelection = false;
   const manualText = () => {
     textarea ??= document.createElement('textarea');
-    textarea.value = text;
+    if (textarea.value !== text) textarea.value = text;
     textarea.readOnly = true;
     textarea.setAttribute('aria-label', _('Text to copy manually'));
     return textarea;
@@ -45,19 +47,31 @@ export async function copyToClipboard(
       _('Failed to copy! Select the text and copy manually, or retry.'),
       true,
     );
-    const host = feedback ?? document.createElement('div');
+    const host =
+      feedback ??
+      (globalFallback?.isConnected
+        ? globalFallback
+        : (globalFallback = document.createElement('div')));
     if (!feedback) {
       host.className = 'fkp-copy-feedback';
-      (previousFocus?.parentElement ?? document.body).append(host);
+      const manual = host.querySelector('textarea');
+      if (manual) {
+        textarea?.remove();
+        textarea = manual;
+      }
+      if (!host.isConnected)
+        (previousFocus?.parentElement ?? document.body).append(host);
     }
-    const select = document.createElement('button');
+    const select =
+      host.querySelector('button') ?? document.createElement('button');
     select.type = 'button';
     select.textContent = _('Select text');
     select.onclick = () => {
       textarea!.focus();
       textarea!.select();
     };
-    host.append(manualText(), select);
+    if (manualText().parentElement !== host) host.append(textarea!);
+    if (select.parentElement !== host) host.append(select);
     return false;
   } finally {
     if (usedSelection) previousFocus?.focus({ preventScroll: true });

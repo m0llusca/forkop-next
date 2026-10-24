@@ -440,8 +440,9 @@ const EntryPoint = {
     forkopMap.reset = function () {
       return Promise.resolve(originalReset.apply(this, arguments)).then(
         function (result) {
-          nativeDirty = false;
-          if (!pendingSaved) pendingBar.hidden = true;
+          nativeDirty = localChanges();
+          if (nativeDirty || pendingSaved) showPending();
+          else pendingBar.hidden = true;
           return result;
         },
       );

@@ -38,6 +38,27 @@ msgstr "✔ Работает"
 msgid "✘ Stopped"
 msgstr "✘ Остановлен"
 
+msgid "Выбран"
+msgstr "Выбран"
+
+msgid "Выбрать"
+msgstr "Выбрать"
+
+msgid "Выбрать сервер"
+msgstr "Выбрать сервер"
+
+msgid "Недоступен"
+msgstr "Недоступен"
+
+msgid "Переключаем…"
+msgstr "Переключаем…"
+
+msgid "Состав URLTest и Priority"
+msgstr "Состав URLTest и Priority"
+
+msgid "A secret key is required for YACD access from LAN or WAN. Without remote access, the controller stays private and LuCI uses its authenticated connection."
+msgstr "Для доступа к YACD из локальной сети или интернета нужен секретный ключ. Если этот доступ отключён, контроллер остаётся закрытым, а LuCI использует собственное защищённое подключение."
+
 msgid "Accept external proxy connections and route them with sing-box."
 msgstr "Принимает внешние прокси-подключения и маршрутизирует их через sing-box."
 
@@ -59,9 +80,6 @@ msgstr "Активные соединения"
 msgid "Active Main DNS"
 msgstr "Активный основной DNS"
 
-msgid "Add a section"
-msgstr "Добавить секцию"
-
 msgid "Add a server inbound"
 msgstr "Добавить серверный inbound"
 
@@ -71,20 +89,17 @@ msgstr "Добавьте хотя бы один DNS-сервер"
 msgid "Add prefix to nodes"
 msgstr "Добавлять префикс к узлам"
 
-msgid "Add URLs or local paths to .lst lists containing domains, IP addresses, or CIDR ranges. DNS actions ignore IP entries."
-msgstr "Добавьте URL или локальные пути к спискам .lst с доменами, IP-адресами или CIDR-подсетями. Для действия DNS записи IP игнорируются."
-
 msgid "Add URLs or local paths to .lst lists containing domains and subnets."
 msgstr "Добавьте URL или локальные пути к спискам .lst с доменами и подсетями."
 
 msgid "Add URLs or local paths to .lst lists containing domains. IP entries are ignored."
 msgstr "Добавьте URL или локальные пути к спискам .lst с доменами. IP игнорируются."
 
-msgid "Add URLs or local paths to .srs / .json lists. Subnets are ignored by default."
-msgstr "Добавьте URL или локальные пути к спискам .srs / .json. Подсети по умолчанию игнорируются."
-
 msgid "Add URLs or local paths to .srs / .json lists. Only domain rules are supported."
 msgstr "Добавьте URL или локальные пути к спискам .srs / .json. Поддерживаются только доменные правила."
+
+msgid "Add URLs or local paths to .srs / .json lists. Subnets are ignored by default."
+msgstr "Добавьте URL или локальные пути к спискам .srs / .json. Подсети по умолчанию игнорируются."
 
 msgid "Add URLTest / Priority group"
 msgstr "Добавить URLTest / Приоритет группу"
@@ -160,6 +175,12 @@ msgstr "Нужно указать хотя бы один корректный IP
 
 msgid "Auto refresh"
 msgstr "Автообновление"
+
+msgid "Auto refresh paused while this tab is hidden."
+msgstr "Автообновление приостановлено, пока эта вкладка скрыта."
+
+msgid "Auto refresh paused."
+msgstr "Автообновление приостановлено."
 
 msgid "Auto update"
 msgstr "Автообновление"
@@ -395,12 +416,6 @@ msgstr "Дашборд сейчас недоступен"
 msgid "Default address for checking server availability and latency. URLTest uses its own address."
 msgstr "Адрес по умолчанию для проверки доступности и задержки серверов. Для URLTest используется собственный адрес."
 
-msgid "Delay in milliseconds before reloading Forkop after interface UP"
-msgstr "Задержка в миллисекундах перед перезапуском Forkop после поднятия интерфейса"
-
-msgid "Delay value cannot be empty"
-msgstr "Значение задержки не может быть пустым"
-
 msgid "Delete"
 msgstr "Удалить"
 
@@ -632,6 +647,9 @@ msgstr "Введите отображаемое имя"
 msgid "Enter a level name"
 msgstr "Введите название уровня"
 
+msgid "Enter a secret key to enable remote YACD access."
+msgstr "Для доступа к YACD из сети задайте секретный ключ."
+
 msgid "Enter a valid DNS server address"
 msgstr "Укажите корректный адрес DNS-сервера"
 
@@ -674,9 +692,6 @@ msgstr "Исключить из этого уровня серверы с одн
 msgid "Exclude URLTest / Priority group"
 msgstr "Исключить URLTest / Приоритет группу"
 
-msgid "Expecting: %s"
-msgstr "Ожидается: %s"
-
 msgid "Expires"
 msgstr "Истекает"
 
@@ -697,6 +712,9 @@ msgstr "Не удалось закрыть подключения"
 
 msgid "Failed to copy!"
 msgstr "Не удалось скопировать!"
+
+msgid "Failed to copy! Select the text and copy manually, or retry."
+msgstr "Не удалось скопировать. Выделите текст и скопируйте вручную или повторите попытку."
 
 msgid "Failed to execute"
 msgstr "Не удалось выполнить"
@@ -965,6 +983,9 @@ msgstr "Неверный префикс CIDR"
 msgid "Invalid DNS server format. Examples: 8.8.8.8 or dns.example.com or dns.example.com/nicedns for DoH"
 msgstr "Неверный формат DNS-сервера. Примеры: 8.8.8.8, dns.example.com или dns.example.com/nicedns для DoH"
 
+msgid "Invalid DNS server port"
+msgstr "Неверный порт DNS-сервера"
+
 msgid "Invalid domain address"
 msgstr "Неверный домен"
 
@@ -1067,9 +1088,6 @@ msgstr "Неверный URL Shadowsocks: ошибка разбора"
 msgid "Invalid SOCKS URL: invalid host and port"
 msgstr "Некорректный SOCKS URL: некорректные хост и порт"
 
-msgid "Invalid SOCKS URL: invalid host format"
-msgstr "Неверный URL SOCKS: неверный формат хоста"
-
 msgid "Invalid SOCKS URL: invalid port number"
 msgstr "Неверный URL SOCKS: неверный номер порта"
 
@@ -1154,6 +1172,12 @@ msgstr "Путь к ключу"
 msgid "Keyword must not contain spaces or commas"
 msgstr "Ключевое слово не должно содержать пробелы или запятые"
 
+msgid "Known sensitive values hidden. Review before sharing."
+msgstr "Известные секретные значения скрыты. Проверьте текст перед отправкой."
+
+msgid "Last success:"
+msgstr "Последнее успешное обновление:"
+
 msgid "Latency test failed"
 msgstr "Проверка задержки не удалась"
 
@@ -1204,6 +1228,9 @@ msgstr "Основной DNS"
 
 msgid "Main DNS server. If multiple servers are selected, a timeout switches to a backup."
 msgstr "Основной DNS-сервер. Если выбрать несколько, то при таймауте произойдёт переключение на резервный."
+
+msgid "Masking failed. Safe copy and download are unavailable. Raw view may contain secrets."
+msgstr "Не удалось скрыть секреты. Безопасное копирование и скачивание недоступны. Исходный текст может содержать секреты."
 
 msgid "Match destination IPs or subnets"
 msgstr "Совпадение по IP-адресам или подсетям назначения"
@@ -1325,6 +1352,9 @@ msgstr "Ещё не реализовано"
 msgid "Not installed"
 msgstr "Не установлено"
 
+msgid "Not measured"
+msgstr "Не измерено"
+
 msgid "Not public"
 msgstr "Не публичный"
 
@@ -1368,7 +1398,7 @@ msgid "Only the specified servers."
 msgstr "Только указанные серверы."
 
 msgid "Open"
-msgstr ""
+msgstr "Открыть"
 
 msgid "Open priority settings and enter a display name"
 msgstr "Откройте настройки приоритета и укажите отображаемое имя"
@@ -1487,6 +1517,9 @@ msgstr "Публичный хост"
 msgid "QR code is too large"
 msgstr "QR-код слишком большой"
 
+msgid "Raw view — may contain passwords and other secrets. Copy and download include them."
+msgstr "Исходный текст может содержать пароли и другие секреты. Они попадут в скопированный или скачанный текст."
+
 msgid "Reality fake site"
 msgstr "Fake-сайт Reality"
 
@@ -1511,8 +1544,20 @@ msgstr "Reality short ID должен содержать 1-8 hex-символо�
 msgid "Refill"
 msgstr "Сброс"
 
+msgid "Refresh"
+msgstr "Обновить"
+
+msgid "Refresh failed. The last successful text is retained. Retry with Refresh."
+msgstr "Не удалось обновить. Сохранён последний успешно загруженный текст. Нажмите «Обновить», чтобы повторить попытку."
+
+msgid "Refreshing…"
+msgstr "Обновляем…"
+
 msgid "Regular expression must not contain spaces or commas"
 msgstr "Регулярное выражение не должно содержать пробелы или запятые"
+
+msgid "Remote YACD access is off without a secret key, including older configurations. LuCI continues to use its authenticated connection."
+msgstr "Доступ к YACD из сети отключён без секретного ключа, в том числе для старых конфигураций. LuCI использует собственное защищённое подключение."
 
 msgid "Remove"
 msgstr "Удалить"
@@ -1613,18 +1658,6 @@ msgstr "Поиск"
 msgid "Secret"
 msgstr "Секрет"
 
-msgid "Secret key for authenticating remote access to YACD when WAN access is enabled."
-msgstr "Секретный ключ для аутентификации удаленного доступа к YACD при включенном доступе через WAN."
-
-msgid "Section"
-msgstr "Секция"
-
-msgid "Section name"
-msgstr "Имя секции"
-
-msgid "Sections"
-msgstr "Секции"
-
 msgid "Security"
 msgstr "Защита"
 
@@ -1669,6 +1702,9 @@ msgstr "Выберите или введите путь к файлу кеша s
 
 msgid "Select path for sing-box config file. Change this ONLY if you know what you are doing"
 msgstr "Выберите путь к файлу конфигурации sing-box. Изменяйте это, ТОЛЬКО если вы знаете, что делаете"
+
+msgid "Select text"
+msgstr "Выделить текст"
 
 msgid "Select the fastest node"
 msgstr "Выбирать самый быстрый узел"
@@ -1874,9 +1910,6 @@ msgstr "Интервал обновления подписки"
 msgid "Subscription URL"
 msgstr "URL подписки"
 
-msgid "Subscription URL cannot be empty"
-msgstr "URL подписки не может быть пустым"
-
 msgid "Subscription URL settings"
 msgstr "Настройки URL подписки"
 
@@ -1928,6 +1961,9 @@ msgstr "Тестировать серверы, имена которых сов�
 msgid "Testing URL"
 msgstr "URL проверки"
 
+msgid "Text to copy manually"
+msgstr "Текст для ручного копирования"
+
 msgid "The desync fwmark is managed by Forkop for loop prevention and must not be overridden here."
 msgstr "Desync fwmark управляется Forkop для защиты от циклов и не должен переопределяться здесь."
 
@@ -1973,9 +2009,6 @@ msgstr "Этой опции требуется значение."
 msgid "Time"
 msgstr "Время"
 
-msgid "Time in seconds for DNS record caching (default: 60)"
-msgstr "Время в секундах для кэширования DNS записей (по умолчанию: 60)"
-
 msgid "Time skew tolerance"
 msgstr "Допуск расхождения времени"
 
@@ -2018,12 +2051,6 @@ msgstr "Устранение неполадок"
 msgid "Try compatible User-Agent profiles automatically when downloading this subscription"
 msgstr "Автоматически пробовать совместимые профили User-Agent при загрузке этой подписки"
 
-msgid "TTL must be a positive number"
-msgstr "TTL должно быть положительным числом"
-
-msgid "TTL value cannot be empty"
-msgstr "Значение TTL не может быть пустым"
-
 msgid "Type"
 msgstr "Тип"
 
@@ -2056,9 +2083,6 @@ msgstr "Обнаружен лишний NFQWS2 Forkop"
 
 msgid "Unexpected standalone token. Use explicit flags such as --name or --name=value."
 msgstr "Неожиданный отдельный токен. Используйте явные флаги вида --имя или --имя=значение."
-
-msgid "unique UCI identifier"
-msgstr "уникальный идентификатор UCI"
 
 msgid "unknown"
 msgstr "неизвестно"
@@ -2201,9 +2225,6 @@ msgstr "Через сервис country.is"
 msgid "View logs"
 msgstr "Посмотреть логи"
 
-msgid "Visible name of this section"
-msgstr "Видимое имя этой секции"
-
 msgid "VLESS flow"
 msgstr "VLESS flow"
 
@@ -2216,11 +2237,14 @@ msgstr "WAN"
 msgid "WAN public IP"
 msgstr "Публичный WAN IP"
 
-msgid "What Forkop should do when this section matches"
-msgstr "Что Forkop должен делать при совпадении этой секции"
-
 msgid "When switching to another level, test every server and select the fastest instead of the first working one."
 msgstr "При переходе на другой уровень тестировать все сервера и выбирать самый быстрый, а не первый работающий."
+
+msgid "Whole milliseconds, 0–2147483647 before reloading Forkop after interface UP (default: 2000). Zero adds no explicit delay; procd schedules the trigger with its minimum delay."
+msgstr "Целое число миллисекунд от 0 до 2147483647 до перезагрузки Forkop после поднятия интерфейса (по умолчанию 2000). Ноль не добавляет явной задержки; procd использует минимальную задержку триггера."
+
+msgid "Whole seconds, 0–4294967295 (default: 60). Zero rewrites the DNS response TTL to zero."
+msgstr "Целое число секунд от 0 до 4294967295 (по умолчанию 60). Ноль устанавливает TTL ответа DNS равным нулю."
 
 msgid "XHTTP mode"
 msgstr "Режим XHTTP"
@@ -2275,24 +2299,3 @@ msgstr "sing-box outbound для Zapret2 настроен"
 
 msgid "Zapret2 sing-box outbound is not configured"
 msgstr "sing-box outbound для Zapret2 не настроен"
-
-msgid "Name"
-msgstr "Название"
-
-msgid "Connection"
-msgstr "Подключение"
-
-msgid "Bypass"
-msgstr "Прямой доступ"
-
-msgid "Block"
-msgstr "Блокировка"
-
-msgid "Remote YACD access is off without a secret key, including older configurations. LuCI continues to use its authenticated connection."
-msgstr "Доступ к YACD из сети отключён без секретного ключа, в том числе для старых конфигураций. LuCI использует собственное защищённое подключение."
-
-msgid "Enter a secret key to enable remote YACD access."
-msgstr "Для доступа к YACD из сети задайте секретный ключ."
-
-msgid "A secret key is required for YACD access from LAN or WAN. Without remote access, the controller stays private and LuCI uses its authenticated connection."
-msgstr "Для доступа к YACD из локальной сети или интернета нужен секретный ключ. Если этот доступ отключён, контроллер остаётся закрытым, а LuCI использует собственное защищённое подключение."

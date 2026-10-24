@@ -3099,6 +3099,7 @@ function showToast(message, type, duration = 3e3) {
 }
 
 // src/helpers/copyToClipboard.ts
+var globalFallback;
 async function copyToClipboard(text, feedback) {
   const previousFocus = document.activeElement;
   const selection = window.getSelection();
@@ -3110,7 +3111,7 @@ async function copyToClipboard(text, feedback) {
   let usedSelection = false;
   const manualText = () => {
     textarea ?? (textarea = document.createElement("textarea"));
-    textarea.value = text;
+    if (textarea.value !== text) textarea.value = text;
     textarea.readOnly = true;
     textarea.setAttribute("aria-label", _("Text to copy manually"));
     return textarea;
@@ -3140,19 +3141,26 @@ async function copyToClipboard(text, feedback) {
       _("Failed to copy! Select the text and copy manually, or retry."),
       true
     );
-    const host = feedback ?? document.createElement("div");
+    const host = feedback ?? (globalFallback?.isConnected ? globalFallback : globalFallback = document.createElement("div"));
     if (!feedback) {
       host.className = "fkp-copy-feedback";
-      (previousFocus?.parentElement ?? document.body).append(host);
+      const manual = host.querySelector("textarea");
+      if (manual) {
+        textarea?.remove();
+        textarea = manual;
+      }
+      if (!host.isConnected)
+        (previousFocus?.parentElement ?? document.body).append(host);
     }
-    const select2 = document.createElement("button");
+    const select2 = host.querySelector("button") ?? document.createElement("button");
     select2.type = "button";
     select2.textContent = _("Select text");
     select2.onclick = () => {
       textarea.focus();
       textarea.select();
     };
-    host.append(manualText(), select2);
+    if (manualText().parentElement !== host) host.append(textarea);
+    if (select2.parentElement !== host) host.append(select2);
     return false;
   } finally {
     if (usedSelection) previousFocus?.focus({ preventScroll: true });
@@ -8541,6 +8549,316 @@ function render2() {
   ]);
 }
 
+// src/forkop/tabs/diagnostic/symptomGuide.ts
+var object = (value) => value && typeof value === "object" ? value : {};
+function renderSymptomGuide(read, openLogs) {
+  const root = document.createElement("section");
+  root.className = "fkp-next-panel";
+  const text = (tag, value) => {
+    const node = document.createElement(tag);
+    node.textContent = value;
+    return node;
+  };
+  const labelled = (label, node) => {
+    const wrap = text("label", label);
+    wrap.append(node);
+    return wrap;
+  };
+  const symptom = document.createElement("select");
+  symptom.name = "diagnostic_symptom";
+  for (const [value, label] of [
+    ["all", "\u041D\u0435 \u0440\u0430\u0431\u043E\u0442\u0430\u0435\u0442 \u0432\u0441\u0451"],
+    ["site", "\u041E\u0434\u0438\u043D \u0441\u0430\u0439\u0442"],
+    ["device", "\u041E\u0434\u043D\u043E \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u043E"],
+    ["source", "\u041D\u0435 \u043E\u0431\u043D\u043E\u0432\u043B\u044F\u0435\u0442\u0441\u044F \u043F\u043E\u0434\u043F\u0438\u0441\u043A\u0430"],
+    ["service", "\u041D\u0435 \u0437\u0430\u043F\u0443\u0441\u043A\u0430\u0435\u0442\u0441\u044F \u0441\u043B\u0443\u0436\u0431\u0430"]
+  ]) {
+    const option = text("option", label);
+    option.value = value;
+    symptom.append(option);
+  }
+  const domain = document.createElement("input");
+  domain.name = "symptom_domain";
+  domain.placeholder = "example.org";
+  const device = document.createElement("input");
+  device.name = "symptom_device";
+  const section = document.createElement("select");
+  section.name = "symptom_section";
+  const domainWrap = labelled("\u0421\u0430\u0439\u0442 \u0434\u043B\u044F \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0438 HTTPS / TCP / 443", domain);
+  const deviceWrap = labelled(
+    "IP \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430 (\u0430\u043D\u0430\u043B\u0438\u0437 \u043F\u0440\u0430\u0432\u0438\u043B, \u043D\u0435 \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0430 \u0441 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430)",
+    device
+  );
+  const sectionWrap = labelled("\u041F\u0440\u0430\u0432\u0438\u043B\u043E \u0441 \u043F\u043E\u0434\u043F\u0438\u0441\u043A\u043E\u0439", section);
+  const result = text(
+    "div",
+    "\u0412\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u0441\u0438\u043C\u043F\u0442\u043E\u043C. \u041F\u0440\u043E\u0432\u0435\u0440\u043A\u0438 \u0437\u0430\u043F\u0443\u0441\u043A\u0430\u044E\u0442\u0441\u044F \u0442\u043E\u043B\u044C\u043A\u043E \u043A\u043D\u043E\u043F\u043A\u043E\u0439 \u043D\u0438\u0436\u0435."
+  );
+  result.setAttribute("role", "status");
+  result.dataset.symptomResult = "";
+  const run = text("button", "\u041F\u0440\u043E\u0432\u0435\u0440\u0438\u0442\u044C \u0432\u044B\u0431\u0440\u0430\u043D\u043D\u044B\u0439 \u0441\u0446\u0435\u043D\u0430\u0440\u0438\u0439");
+  run.type = "button";
+  const logs = text("button", "\u0422\u0435\u0445\u043D\u0438\u0447\u0435\u0441\u043A\u0438\u0435 \u043B\u043E\u0433\u0438 \u0440\u044F\u0434\u043E\u043C");
+  logs.type = "button";
+  logs.onclick = () => openLogs ? openLogs() : root.dispatchEvent(
+    new CustomEvent("forkop:diagnostic-logs", { bubbles: true })
+  );
+  let generation = 0;
+  const key = () => JSON.stringify([symptom.value, domain.value, device.value, section.value]);
+  function invalidate() {
+    generation++;
+    run.disabled = false;
+    result.textContent = "\u041F\u0430\u0440\u0430\u043C\u0435\u0442\u0440\u044B \u0438\u0437\u043C\u0435\u043D\u0435\u043D\u044B \u2014 \u043F\u0440\u043E\u0432\u0435\u0440\u044C\u0442\u0435 \u0441\u043D\u043E\u0432\u0430";
+    domainWrap.hidden = !["site", "device"].includes(symptom.value);
+    deviceWrap.hidden = symptom.value !== "device";
+    sectionWrap.hidden = symptom.value !== "source";
+  }
+  symptom.onchange = invalidate;
+  domain.oninput = invalidate;
+  device.oninput = invalidate;
+  section.onchange = invalidate;
+  invalidate();
+  run.onclick = async () => {
+    const captured = key(), id = ++generation, scenario = symptom.value;
+    const target = ["site", "device"].includes(scenario) ? domain.value.trim() : "", address = scenario === "device" ? device.value.trim() : "", rule = scenario === "source" ? section.value : "";
+    if (["site", "device"].includes(scenario) && !target || scenario === "device" && !address || scenario === "source" && !rule) {
+      result.textContent = "\u0417\u0430\u043F\u043E\u043B\u043D\u0438\u0442\u0435 \u0442\u043E\u0447\u043D\u044B\u0439 \u043A\u043E\u043D\u0442\u0435\u043A\u0441\u0442: \u0441\u0430\u0439\u0442, \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u043E \u0438\u043B\u0438 \u043F\u0440\u0430\u0432\u0438\u043B\u043E \u0441 \u043F\u043E\u0434\u043F\u0438\u0441\u043A\u043E\u0439.";
+      return;
+    }
+    run.disabled = true;
+    const at = (/* @__PURE__ */ new Date()).toLocaleString();
+    const context = `\u0421\u0446\u0435\u043D\u0430\u0440\u0438\u0439: ${symptom.selectedOptions[0].textContent} \xB7 \u0423\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u043E: ${address || "\u043D\u0435 \u0437\u0430\u0434\u0430\u043D\u043E"} \xB7 \u0426\u0435\u043B\u044C: ${target || rule || (scenario === "service" ? "\u0440\u043E\u0443\u0442\u0435\u0440 \u2014 \u0441\u043B\u0443\u0436\u0431\u0430" : "\u0440\u043E\u0443\u0442\u0435\u0440 \u2014 \u0441\u043B\u0443\u0436\u0431\u0430 \u0438 DNS")} \xB7 \u0418\u0441\u0442\u043E\u0447\u043D\u0438\u043A \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0438: \u0440\u043E\u0443\u0442\u0435\u0440 \xB7 ${at}`;
+    const steps = [];
+    const current = () => generation === id && key() === captured;
+    const finish = (outcome, next) => {
+      if (!current()) return;
+      result.replaceChildren(
+        text("strong", outcome),
+        text("p", context),
+        text("p", `\u0421\u043B\u0435\u0434\u0443\u044E\u0449\u0438\u0439 \u0448\u0430\u0433: ${next}`)
+      );
+      const details = document.createElement("details");
+      details.append(
+        text("summary", "\u0422\u0435\u0445\u043D\u0438\u0447\u0435\u0441\u043A\u0438\u0435 \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442\u044B"),
+        text("p", steps.join(" \xB7 "))
+      );
+      result.append(details);
+    };
+    const check = async (action, payload = {}) => {
+      const response = await read(action, payload);
+      if (!current()) throw Error("obsolete");
+      steps.push(
+        `${action}: ${response.success ? "\u043E\u0442\u0432\u0435\u0442 \u043F\u043E\u043B\u0443\u0447\u0435\u043D" : "\u043D\u0435 \u0432\u044B\u043F\u043E\u043B\u043D\u0435\u043D\u043E"}`
+      );
+      if (!response.success) throw Error("unavailable");
+      return object(response.data);
+    };
+    result.textContent = `\u041F\u0440\u043E\u0432\u0435\u0440\u044F\u0435\u043C \u0432\u044B\u0431\u0440\u0430\u043D\u043D\u044B\u0439 \u0441\u0446\u0435\u043D\u0430\u0440\u0438\u0439\u2026 ${context}`;
+    try {
+      if (scenario === "source") {
+        const data = await check("source_evidence", { section: rule });
+        const sources = Array.isArray(data.sources) ? data.sources.map(object) : [];
+        for (const source of sources) {
+          const evidence = object(source.evidence);
+          const stamp = (value) => typeof value === "number" && Number.isFinite(value) && value >= 0 ? new Date(value * 1e3).toLocaleString() : "\u043D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043D\u043E";
+          steps.push(
+            `\u0418\u0441\u0442\u043E\u0447\u043D\u0438\u043A ${source.index || sources.indexOf(source) + 1}: \u043F\u043E\u0441\u043B\u0435\u0434\u043D\u044F\u044F \u043F\u043E\u043F\u044B\u0442\u043A\u0430: ${stamp(evidence.lastAttempt)}; \u041F\u043E\u0441\u043B\u0435\u0434\u043D\u0438\u0439 \u0443\u0441\u043F\u0435\u0448\u043D\u044B\u0439 \u0438\u043C\u043F\u043E\u0440\u0442: ${stamp(evidence.lastSuccess)}`
+          );
+        }
+        const failed2 = sources.some(
+          (source) => object(source.evidence).status === "failed"
+        );
+        const known = sources.length > 0 && sources.every(
+          (source) => object(source.evidence).status === "success"
+        );
+        finish(
+          failed2 ? "\u041F\u043E\u0441\u043B\u0435\u0434\u043D\u044F\u044F \u043F\u043E\u043F\u044B\u0442\u043A\u0430 \u043E\u0431\u043D\u043E\u0432\u043B\u0435\u043D\u0438\u044F \u0438\u0441\u0442\u043E\u0447\u043D\u0438\u043A\u0430 \u0437\u0430\u0432\u0435\u0440\u0448\u0438\u043B\u0430\u0441\u044C \u043E\u0448\u0438\u0431\u043A\u043E\u0439" : known ? "\u0418\u043C\u043F\u043E\u0440\u0442 \u0438\u0441\u0442\u043E\u0447\u043D\u0438\u043A\u043E\u0432 \u0437\u0430\u0432\u0435\u0440\u0448\u0430\u043B\u0441\u044F \u0443\u0441\u043F\u0435\u0448\u043D\u043E" : "\u0420\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442 \u043E\u0431\u043D\u043E\u0432\u043B\u0435\u043D\u0438\u044F \u0438\u0441\u0442\u043E\u0447\u043D\u0438\u043A\u0430 \u043D\u0435 \u043F\u043E\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0451\u043D",
+          failed2 ? "\u041E\u0442\u043A\u0440\u043E\u0439\u0442\u0435 \u0438\u0441\u0442\u043E\u0447\u043D\u0438\u043A \u0432 \u043F\u0440\u0430\u0432\u0438\u043B\u0435 \u0438 \u043F\u0440\u043E\u0432\u0435\u0440\u044C\u0442\u0435 \u0436\u0443\u0440\u043D\u0430\u043B \u043E\u0431\u043D\u043E\u0432\u043B\u0435\u043D\u0438\u044F. \u0421\u0435\u0442\u044C \u044D\u0442\u0438\u043C \u0447\u0442\u0435\u043D\u0438\u0435\u043C \u043D\u0435 \u043F\u0440\u043E\u0432\u0435\u0440\u044F\u043B\u0430\u0441\u044C." : "\u041F\u0440\u043E\u0432\u0435\u0440\u044C\u0442\u0435 \u043E\u0431\u043D\u043E\u0432\u043B\u0435\u043D\u0438\u0435 \u044F\u0432\u043D\u043E \u0432 \u043F\u0440\u0430\u0432\u0438\u043B\u0435. \u0418\u0441\u0442\u043E\u0440\u0438\u044F \u0438\u043C\u043F\u043E\u0440\u0442\u0430 \u043D\u0435 \u0434\u043E\u043A\u0430\u0437\u044B\u0432\u0430\u0435\u0442 \u0434\u043E\u0441\u0442\u0443\u043F\u043D\u043E\u0441\u0442\u044C \u0441\u0435\u0440\u0432\u0435\u0440\u043E\u0432."
+        );
+        return;
+      }
+      const service = await check("diagnostic_service");
+      if (service.sing_box_process_running === 0 || service.sing_box_installed === 0 || service.sing_box_ports_listening === 0) {
+        finish(
+          "\u0421\u043B\u0443\u0436\u0431\u0430 \u0438\u043B\u0438 \u0435\u0451 \u043B\u043E\u043A\u0430\u043B\u044C\u043D\u044B\u0439 \u0441\u043B\u0443\u0448\u0430\u0442\u0435\u043B\u044C \u043D\u0435 \u0433\u043E\u0442\u043E\u0432\u044B",
+          "\u041E\u0442\u043A\u0440\u043E\u0439\u0442\u0435 \u043B\u043E\u0433\u0438 \u0437\u0430\u043F\u0443\u0441\u043A\u0430 \u0438 \u0441\u043E\u0441\u0442\u043E\u044F\u043D\u0438\u0435 \u0441\u043B\u0443\u0436\u0431\u044B. \u041F\u0440\u0438\u0447\u0438\u043D\u0430 \u043E\u0441\u0442\u0430\u043D\u043E\u0432\u043A\u0438 \u043F\u043E\u043A\u0430 \u043D\u0435 \u0443\u0441\u0442\u0430\u043D\u043E\u0432\u043B\u0435\u043D\u0430."
+        );
+        return;
+      }
+      if (scenario === "service") {
+        finish(
+          service.sing_box_process_running === 1 && service.sing_box_ports_listening === 1 ? "\u041F\u0440\u043E\u0446\u0435\u0441\u0441 \u0438 \u043B\u043E\u043A\u0430\u043B\u044C\u043D\u044B\u0439 \u0441\u043B\u0443\u0448\u0430\u0442\u0435\u043B\u044C \u043E\u0431\u043D\u0430\u0440\u0443\u0436\u0435\u043D\u044B" : "\u0421\u043E\u0441\u0442\u043E\u044F\u043D\u0438\u0435 \u0441\u043B\u0443\u0436\u0431\u044B \u043D\u0435 \u043F\u043E\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043D\u043E",
+          "\u0421\u0432\u0435\u0440\u044C\u0442\u0435 \u0436\u0443\u0440\u043D\u0430\u043B \u0437\u0430\u043F\u0443\u0441\u043A\u0430. \u041D\u0430\u043B\u0438\u0447\u0438\u0435 \u043F\u0440\u043E\u0446\u0435\u0441\u0441\u0430 \u043D\u0435 \u043F\u043E\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0430\u0435\u0442 \u0441\u0435\u0442\u0435\u0432\u0443\u044E \u0434\u043E\u0441\u0442\u0443\u043F\u043D\u043E\u0441\u0442\u044C."
+        );
+        return;
+      }
+      const dns = await check("diagnostic_dns");
+      if (dns.dns_status === 0 || dns.dns_status === false || dns.bootstrap_dns_status === 0 || dns.bootstrap_dns_status === false) {
+        finish(
+          "\u041F\u0440\u043E\u0432\u0435\u0440\u043A\u0430 DNS \u0437\u0430\u0432\u0435\u0440\u0448\u0438\u043B\u0430\u0441\u044C \u043E\u0448\u0438\u0431\u043A\u043E\u0439",
+          "\u041F\u0440\u043E\u0432\u0435\u0440\u044C\u0442\u0435 DNS \u0438 Bootstrap DNS \u0432 \u043D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0430\u0445; \u044D\u0442\u043E \u043D\u0430\u0431\u043B\u044E\u0434\u0435\u043D\u0438\u0435, \u0430 \u043D\u0435 \u0434\u043E\u043A\u0430\u0437\u0430\u043D\u043D\u0430\u044F \u043F\u0440\u0438\u0447\u0438\u043D\u0430 \u0432\u0441\u0435\u0445 \u0441\u0431\u043E\u0435\u0432."
+        );
+        return;
+      }
+      if (![true, 1].includes(dns.dns_status) || ![true, 1].includes(dns.bootstrap_dns_status)) {
+        finish(
+          "DNS \u043D\u0435 \u043F\u043E\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0451\u043D",
+          "\u041F\u043E\u0432\u0442\u043E\u0440\u0438\u0442\u0435 \u043E\u0442\u0434\u0435\u043B\u044C\u043D\u0443\u044E \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0443 DNS. \u041E\u0442\u0441\u0443\u0442\u0441\u0442\u0432\u0438\u0435 \u0434\u0430\u043D\u043D\u044B\u0445 \u043D\u0435 \u043E\u0437\u043D\u0430\u0447\u0430\u0435\u0442 \u0443\u0441\u043F\u0435\u0448\u043D\u0443\u044E \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0443."
+        );
+        return;
+      }
+      if (scenario === "all") {
+        finish(
+          "\u041F\u0440\u043E\u0432\u0435\u0440\u0435\u043D\u044B \u0441\u043B\u0443\u0436\u0431\u0430 \u0438 DNS; \u0442\u043E\u0447\u043D\u0430\u044F \u043F\u0440\u0438\u0447\u0438\u043D\u0430 \u043D\u0435 \u043F\u043E\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043D\u0430",
+          "\u0412\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u043E\u0434\u0438\u043D \u0441\u0430\u0439\u0442 \u0438\u043B\u0438 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u043E \u0434\u043B\u044F \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0438 \u043F\u0440\u0430\u0432\u0438\u043B \u0438 \u043E\u0442\u0434\u0435\u043B\u044C\u043D\u043E\u0433\u043E \u0441\u0435\u0442\u0435\u0432\u043E\u0433\u043E \u0437\u0430\u043F\u0440\u043E\u0441\u0430."
+        );
+        return;
+      }
+      const route = await check("route_explain", {
+        domain: target,
+        ...address ? { device: address } : {},
+        protocol: "tcp",
+        port: 443
+      });
+      const decision = object(route.decision);
+      if (decision.status === "blocked" || decision.status === "indeterminate") {
+        finish(
+          decision.status === "blocked" ? "\u0421\u043E\u0445\u0440\u0430\u043D\u0451\u043D\u043D\u043E\u0435 \u043F\u0440\u0430\u0432\u0438\u043B\u043E \u0431\u043B\u043E\u043A\u0438\u0440\u0443\u0435\u0442 \u0437\u0430\u043F\u0440\u043E\u0441" : "\u041F\u0440\u0430\u0432\u0438\u043B\u043E \u043C\u0430\u0440\u0448\u0440\u0443\u0442\u0430 \u043D\u0435 \u043F\u043E\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043D\u043E",
+          "\u041E\u0442\u043A\u0440\u043E\u0439\u0442\u0435 \xAB\u041F\u0440\u043E\u0432\u0435\u0440\u043A\u0430 \u043C\u0430\u0440\u0448\u0440\u0443\u0442\u0430\xBB \u0441 \u0442\u0435\u043C \u0436\u0435 \u043A\u043E\u043D\u0442\u0435\u043A\u0441\u0442\u043E\u043C. \u041F\u0440\u0438\u043C\u0435\u043D\u0451\u043D\u043D\u0430\u044F \u043A\u043E\u043D\u0444\u0438\u0433\u0443\u0440\u0430\u0446\u0438\u044F \u0438 \u0442\u0440\u0430\u0444\u0438\u043A \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430 \u043D\u0435 \u043F\u043E\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043D\u044B."
+        );
+        return;
+      }
+      const probe = await check("probe", { domain: target });
+      finish(
+        probe.reachable === false ? "\u0421\u043E\u0435\u0434\u0438\u043D\u0435\u043D\u0438\u0435 \u0441 \u0441\u0430\u0439\u0442\u043E\u043C \u0441 \u0440\u043E\u0443\u0442\u0435\u0440\u0430 \u043D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C" : probe.reachable === true ? "\u0421\u0435\u0442\u0435\u0432\u043E\u0439 \u043E\u0442\u0432\u0435\u0442 \u0441 \u0440\u043E\u0443\u0442\u0435\u0440\u0430 \u043F\u043E\u043B\u0443\u0447\u0435\u043D" : "\u0421\u0435\u0442\u0435\u0432\u043E\u0439 \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442 \u043D\u0435 \u043F\u043E\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0451\u043D",
+        probe.reachable === true ? "\u041F\u0440\u043E\u0432\u0435\u0440\u044C\u0442\u0435 \u0441\u0430\u0439\u0442 \u043D\u0430 \u0441\u0430\u043C\u043E\u043C \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0435. \u0415\u0433\u043E Wi-Fi, DNS \u0438 \u0434\u043E\u0441\u0442\u0443\u043F \u043A \u0430\u043A\u043A\u0430\u0443\u043D\u0442\u0443 \u044D\u0442\u0438\u043C \u0442\u0435\u0441\u0442\u043E\u043C \u043D\u0435 \u043F\u0440\u043E\u0432\u0435\u0440\u044F\u044E\u0442\u0441\u044F." : "\u0421\u0440\u0430\u0432\u043D\u0438\u0442\u0435 \u0434\u0440\u0443\u0433\u043E\u0439 \u043C\u0430\u0440\u0448\u0440\u0443\u0442 \u043E\u0442\u0434\u0435\u043B\u044C\u043D\u043E\u0439 \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u043E\u0439. DNS, \u043F\u0440\u0430\u0432\u0438\u043B\u043E \u0438 \u0441\u0435\u0440\u0432\u0435\u0440 \u043C\u043E\u0433\u0443\u0442 \u0442\u0440\u0435\u0431\u043E\u0432\u0430\u0442\u044C \u0434\u043E\u043F\u043E\u043B\u043D\u0438\u0442\u0435\u043B\u044C\u043D\u044B\u0445 \u0434\u0430\u043D\u043D\u044B\u0445."
+      );
+    } catch (error) {
+      if (error instanceof Error && error.message === "obsolete") return;
+      finish(
+        "\u041D\u0435 \u043F\u043E\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043D\u043E: \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0430 \u043D\u0435 \u0432\u044B\u043F\u043E\u043B\u043D\u0435\u043D\u0430",
+        "\u041F\u0440\u043E\u0432\u0435\u0440\u044C\u0442\u0435 \u0441\u0432\u044F\u0437\u044C \u0441 \u0440\u043E\u0443\u0442\u0435\u0440\u043E\u043C \u0438 \u043F\u043E\u0432\u0442\u043E\u0440\u0438\u0442\u0435 \u0441\u0446\u0435\u043D\u0430\u0440\u0438\u0439; \u043E\u0442\u043A\u0440\u043E\u0439\u0442\u0435 \u0442\u0435\u0445\u043D\u0438\u0447\u0435\u0441\u043A\u0438\u0435 \u043B\u043E\u0433\u0438."
+      );
+    } finally {
+      if (current()) run.disabled = false;
+    }
+  };
+  root.append(
+    text("h3", "\u0427\u0442\u043E \u043D\u0435 \u0440\u0430\u0431\u043E\u0442\u0430\u0435\u0442?"),
+    labelled("\u0421\u0438\u043C\u043F\u0442\u043E\u043C", symptom),
+    domainWrap,
+    deviceWrap,
+    sectionWrap,
+    run,
+    result,
+    logs
+  );
+  void read("status").then((response) => {
+    if (!response.success) return;
+    const rows = object(response.data).sections;
+    for (const raw of Array.isArray(rows) ? rows : []) {
+      const row = object(raw);
+      if (typeof row.name !== "string") continue;
+      const option = text("option", String(row.label || row.name));
+      option.value = row.name;
+      section.append(option);
+    }
+  }).catch(() => {
+    result.textContent = "\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0437\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044C \u043F\u0440\u0430\u0432\u0438\u043B\u0430. \u041E\u0442\u043A\u0440\u043E\u0439\u0442\u0435 \u0434\u0438\u0430\u0433\u043D\u043E\u0441\u0442\u0438\u043A\u0443 \u043F\u043E\u0432\u0442\u043E\u0440\u043D\u043E; \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0438 \u043D\u0435 \u0437\u0430\u043F\u0443\u0441\u043A\u0430\u043B\u0438\u0441\u044C.";
+  });
+  return root;
+}
+
+// src/forkop/next/api.ts
+var configurationActions = /* @__PURE__ */ new Set([
+  "profile_apply",
+  "rollback",
+  "recover",
+  "device_set",
+  "gaming_apply",
+  "temporary_add",
+  "temporary_delete",
+  "recommendation_accept",
+  "smart_detect_configure"
+]);
+var configurationBusy = false;
+async function configurationEvent(name, action) {
+  const pending = [];
+  const event = new CustomEvent(name, {
+    cancelable: true,
+    detail: { action, waitUntil: (work) => pending.push(work) }
+  });
+  window.dispatchEvent(event);
+  await Promise.all(pending);
+  if (event.defaultPrevented) throw Error("native_pending_changes");
+}
+async function nextRequest(action, payload = {}) {
+  const mutation = configurationActions.has(action) && typeof window !== "undefined";
+  if (mutation) {
+    if (configurationBusy)
+      return { success: false, error: "native_mutation_busy" };
+    configurationBusy = true;
+    try {
+      await configurationEvent("forkop:configuration-changing", action);
+    } catch (error) {
+      window.dispatchEvent(
+        new CustomEvent("forkop:configuration-settled", { detail: { action } })
+      );
+      configurationBusy = false;
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "native_pending_changes"
+      };
+    }
+  }
+  try {
+    const response = await executeShellCommand({
+      command: "/usr/bin/forkop",
+      args: action === "route_explain" ? ["route_explain", JSON.stringify(payload)] : ["next", action, JSON.stringify(payload)],
+      timeout: 6e4,
+      operationName: `Forkop Next ${action}`
+    });
+    try {
+      const value = JSON.parse(response.stdout);
+      if (!value || typeof value.success !== "boolean")
+        return { success: false, error: "invalid_response" };
+      if ((response.code ?? 0) !== 0 && value.success)
+        return { success: false, error: response.stderr || "command_failed" };
+      if (value.success && mutation)
+        await configurationEvent("forkop:configuration-changed", action);
+      return value;
+    } catch {
+      return { success: false, error: response.stderr || "invalid_response" };
+    }
+  } finally {
+    if (mutation) {
+      configurationBusy = false;
+      window.dispatchEvent(
+        new CustomEvent("forkop:configuration-settled", { detail: { action } })
+      );
+    }
+  }
+}
+
+// src/forkop/tabs/diagnostic/symptomRead.ts
+async function diagnosticRead(action, payload = {}) {
+  if (action === "diagnostic_dns")
+    return ForkopShellMethods.checkDNSAvailable();
+  if (action === "diagnostic_service") return ForkopShellMethods.checkSingBox();
+  if (action !== "source_evidence") return nextRequest(action, payload);
+  const response = await executeShellCommand({
+    command: "/usr/bin/forkop",
+    args: ["source_evidence", String(payload.section || "")],
+    timeout: 15e3
+  });
+  try {
+    const value = JSON.parse(response.stdout);
+    return (response.code ?? 0) === 0 && typeof value.success === "boolean" ? value : { success: false, error: "invalid_response" };
+  } catch {
+    return { success: false, error: "invalid_response" };
+  }
+}
+
 // src/forkop/tabs/diagnostic/checks/updateCheckStore.ts
 function updateCheckStore(check, minified) {
   const diagnosticsChecks = store.get().diagnosticsChecks;
@@ -11589,7 +11907,22 @@ async function initController2() {
     return;
   }
   diagnosticControllerInitialized = true;
+  document.addEventListener(
+    "forkop:diagnostic-logs",
+    () => void handleViewLogs()
+  );
   onMount("diagnostic-status").then(() => {
+    const host = document.getElementById("diagnostic-status");
+    if (host && !document.querySelector("[data-native-symptom-guide]")) {
+      const guide = renderSymptomGuide(
+        diagnosticRead,
+        () => void handleViewLogs()
+      );
+      guide.dataset.nativeSymptomGuide = "";
+      (host.querySelector(".fkp_diagnostic-page__left-bar") || host).prepend(
+        guide
+      );
+    }
     logger.debug("[DIAGNOSTIC]", "initController", "onMount");
     registerLifecycleListeners2();
     if (store.get().tabService.current === "diagnostic" || isActiveLuciTab("diagnostic")) {
@@ -13786,6 +14119,114 @@ function render4() {
   ]);
 }
 
+// src/forkop/tabs/updates/componentImpact.ts
+var object2 = (value) => value && typeof value === "object" ? value : {};
+function showComponentImpact(options) {
+  const root = document.createElement("div");
+  const text = (tag, value) => {
+    const node = document.createElement(tag);
+    node.textContent = value;
+    return node;
+  };
+  const result = text("div", "\u0427\u0438\u0442\u0430\u0435\u043C \u0441\u0432\u0435\u0434\u0435\u043D\u0438\u044F \u043E \u0442\u0435\u043A\u0443\u0449\u0435\u0439 \u0443\u0441\u0442\u0430\u043D\u043E\u0432\u043A\u0435\u2026");
+  result.setAttribute("role", "status");
+  const start = text(
+    "button",
+    options.action === "remove" ? "\u0423\u0434\u0430\u043B\u0438\u0442\u044C \u043F\u043E\u0441\u043B\u0435 \u043F\u0440\u043E\u0441\u043C\u043E\u0442\u0440\u0430" : "\u0423\u0441\u0442\u0430\u043D\u043E\u0432\u0438\u0442\u044C \u043F\u043E\u0441\u043B\u0435 \u043F\u0440\u043E\u0441\u043C\u043E\u0442\u0440\u0430"
+  );
+  start.type = "button";
+  start.disabled = true;
+  const cancel = text("button", "\u041E\u0442\u043C\u0435\u043D\u0430");
+  cancel.type = "button";
+  let active = true;
+  cancel.onclick = () => {
+    active = false;
+    ui.hideModal();
+  };
+  start.onclick = () => {
+    if (!active || start.disabled) return;
+    if (!options.available()) {
+      result.append(
+        text(
+          "p",
+          "\u0421\u043E\u0441\u0442\u043E\u044F\u043D\u0438\u0435 \u0438\u0437\u043C\u0435\u043D\u0438\u043B\u043E\u0441\u044C. \u0414\u043E\u0436\u0434\u0438\u0442\u0435\u0441\u044C \u0437\u0430\u0432\u0435\u0440\u0448\u0435\u043D\u0438\u044F \u0434\u0440\u0443\u0433\u043E\u0439 \u043E\u043F\u0435\u0440\u0430\u0446\u0438\u0438 \u0438 \u043E\u0442\u043A\u0440\u043E\u0439\u0442\u0435 \u043F\u0440\u043E\u0441\u043C\u043E\u0442\u0440 \u0437\u0430\u043D\u043E\u0432\u043E."
+        )
+      );
+      start.disabled = true;
+      return;
+    }
+    active = false;
+    ui.hideModal();
+    options.proceed();
+  };
+  root.append(result, cancel, start);
+  ui.showModal("\u0412\u043B\u0438\u044F\u043D\u0438\u0435 \u0438\u0437\u043C\u0435\u043D\u0435\u043D\u0438\u044F \u043A\u043E\u043C\u043F\u043E\u043D\u0435\u043D\u0442\u0430", root);
+  void executeShellCommand({
+    command: "/usr/bin/forkop",
+    args: [
+      "component_preview",
+      JSON.stringify({ component: options.component, action: options.action })
+    ],
+    timeout: 15e3
+  }).then((response) => {
+    if (!active) return;
+    const parsed = object2(JSON.parse(response.stdout));
+    if ((response.code ?? 0) !== 0 || parsed.success !== true)
+      throw Error("unavailable");
+    const data = object2(parsed.data), current = object2(data.current), target = object2(data.target), required = object2(data.requirements);
+    if (data.component !== options.component || data.action !== options.action)
+      throw Error("mismatched");
+    const display = (value) => typeof value === "string" && value ? value : "\u043D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043D\u043E";
+    result.replaceChildren(
+      text(
+        "p",
+        `\u0423\u0441\u0442\u0430\u043D\u043E\u0432\u043B\u0435\u043D\u043E: ${display(current.version || options.currentVersion)} \u2192 \u0426\u0435\u043B\u044C: ${options.action === "remove" ? "\u0443\u0434\u0430\u043B\u0435\u043D\u0438\u0435" : display(options.latestVersion)}. ${options.latestVersion ? "\u0412\u0435\u0440\u0441\u0438\u044F \u0446\u0435\u043B\u0438 \u0438\u0437 \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0438 \u0440\u0435\u043B\u0438\u0437\u0430 \u0435\u0449\u0451 \u043D\u0435 \u043F\u043E\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0430\u0435\u0442 \u0437\u0430\u0433\u0440\u0443\u0436\u0435\u043D\u043D\u044B\u0439 \u0444\u0430\u0439\u043B." : "\u0412\u0435\u0440\u0441\u0438\u044F \u0432\u044B\u0431\u0440\u0430\u043D\u043D\u043E\u0439 \u0446\u0435\u043B\u0438 \u043D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043D\u0430: \u043D\u0435\u0442 \u0441\u0432\u0435\u0434\u0435\u043D\u0438\u0439, \u0441\u0432\u044F\u0437\u0430\u043D\u043D\u044B\u0445 \u0441 \u044D\u0442\u0438\u043C \u0432\u0430\u0440\u0438\u0430\u043D\u0442\u043E\u043C \u0438 \u0438\u0441\u0442\u043E\u0447\u043D\u0438\u043A\u043E\u043C."}`
+      ),
+      text(
+        "p",
+        `\u0412\u0430\u0440\u0438\u0430\u043D\u0442: ${display(current.variant)} \u2192 ${display(target.variant)} \xB7 \u041A\u0430\u043D\u0430\u043B \u043E\u0431\u043D\u043E\u0432\u043B\u0435\u043D\u0438\u044F: ${display(current.source)} \u2192 ${display(target.source)} \xB7 \u0414\u043E\u043F\u0443\u0449\u0435\u043D\u043D\u044B\u0439 \u0438\u0441\u0442\u043E\u0447\u043D\u0438\u043A \u0431\u0438\u043D\u0430\u0440\u043D\u043E\u0433\u043E \u0444\u0430\u0439\u043B\u0430: ${display(current.runtime_source)}`
+      ),
+      text(
+        "p",
+        current.admission === "admitted" ? `\u0422\u0435\u043A\u0443\u0449\u0435\u0435 \u044F\u0434\u0440\u043E \u0434\u043E\u043F\u0443\u0449\u0435\u043D\u043E \u043F\u043E \u0442\u043E\u0447\u043D\u043E\u043C\u0443 SHA256: ${display(current.sha256)}` : "\u0412\u043E\u0437\u043C\u043E\u0436\u043D\u043E\u0441\u0442\u0438 \u0442\u0435\u043A\u0443\u0449\u0435\u0433\u043E \u044F\u0434\u0440\u0430 \u043D\u0435 \u043F\u043E\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043D\u044B \u0442\u043E\u0447\u043D\u043E\u0439 \u0438\u0434\u0435\u043D\u0442\u0438\u0447\u043D\u043E\u0441\u0442\u044C\u044E."
+      ),
+      text(
+        "p",
+        "\u0412\u043E\u0437\u043C\u043E\u0436\u043D\u043E\u0441\u0442\u0438 \u0446\u0435\u043B\u0435\u0432\u043E\u0439 \u0441\u0431\u043E\u0440\u043A\u0438 \u043D\u0435 \u043F\u043E\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043D\u044B. \u0423\u0441\u0442\u0430\u043D\u043E\u0432\u0449\u0438\u043A \u043F\u0440\u043E\u0432\u0435\u0440\u0438\u0442 \u0438\u0441\u0442\u043E\u0447\u043D\u0438\u043A, \u043A\u043E\u043D\u0442\u0440\u043E\u043B\u044C\u043D\u0443\u044E \u0441\u0443\u043C\u043C\u0443 \u0438 \u043A\u043E\u043D\u0444\u0438\u0433\u0443\u0440\u0430\u0446\u0438\u044E \u0434\u043E \u0430\u043A\u0442\u0438\u0432\u0430\u0446\u0438\u0438. \u0412\u0435\u0440\u0441\u0438\u044F 3x-ui \u0438\u043B\u0438 Xray \u043D\u0435 \u0437\u0430\u043C\u0435\u043D\u044F\u0435\u0442 \u0441\u043E\u043F\u043E\u0441\u0442\u0430\u0432\u043B\u0435\u043D\u0438\u0435 \u043F\u0430\u0440\u0430\u043C\u0435\u0442\u0440\u043E\u0432 \u0438 \u0440\u0435\u0430\u043B\u044C\u043D\u044B\u0439 \u0442\u0435\u0441\u0442."
+      ),
+      text(
+        "p",
+        `\u0422\u0435\u043A\u0443\u0449\u0430\u044F \u0441\u0433\u0435\u043D\u0435\u0440\u0438\u0440\u043E\u0432\u0430\u043D\u043D\u0430\u044F \u043A\u043E\u043D\u0444\u0438\u0433\u0443\u0440\u0430\u0446\u0438\u044F: REALITY ${required.reality ?? "\u043D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043D\u043E"} \xB7 \u043F\u0430\u0440\u0430\u043C\u0435\u0442\u0440 record fragment ${required.record_fragment ?? "\u043D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043D\u043E"}. \u042D\u0442\u043E \u0442\u0440\u0435\u0431\u043E\u0432\u0430\u043D\u0438\u044F \u0444\u0430\u0439\u043B\u0430, \u043D\u0435 \u043F\u043E\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043D\u0438\u0435 \u043F\u0440\u0438\u043C\u0435\u043D\u0451\u043D\u043D\u043E\u0433\u043E \u0442\u0440\u0430\u0444\u0438\u043A\u0430.`
+      ),
+      text(
+        "p",
+        data.restart_expected === true ? "\u041E\u0436\u0438\u0434\u0430\u0435\u0442\u0441\u044F \u043F\u0435\u0440\u0435\u0437\u0430\u043F\u0443\u0441\u043A: \u0442\u0435\u043A\u0443\u0449\u0438\u0435 \u0441\u043E\u0435\u0434\u0438\u043D\u0435\u043D\u0438\u044F \u043C\u043E\u0433\u0443\u0442 \u043F\u0440\u0435\u0440\u0432\u0430\u0442\u044C\u0441\u044F." : "\u0412\u043B\u0438\u044F\u043D\u0438\u0435 \u043D\u0430 \u0441\u043B\u0443\u0436\u0431\u0443 \u0437\u0430\u0432\u0438\u0441\u0438\u0442 \u043E\u0442 \u043A\u043E\u043C\u043F\u043E\u043D\u0435\u043D\u0442\u0430; \u0442\u0435\u043A\u0443\u0449\u0438\u0435 \u0437\u0430\u0434\u0430\u0447\u0438 \u043C\u043E\u0433\u0443\u0442 \u043F\u0440\u0435\u0440\u0432\u0430\u0442\u044C\u0441\u044F."
+      ),
+      text(
+        "p",
+        data.recovery === "sing_box_transaction" ? "\u041F\u0440\u0438 \u043E\u0448\u0438\u0431\u043A\u0435 \u0443\u0441\u0442\u0430\u043D\u043E\u0432\u043A\u0438 \u044F\u0434\u0440\u0430 \u0441\u0443\u0449\u0435\u0441\u0442\u0432\u0443\u044E\u0449\u0438\u0439 \u0443\u0441\u0442\u0430\u043D\u043E\u0432\u0449\u0438\u043A \u043F\u044B\u0442\u0430\u0435\u0442\u0441\u044F \u0432\u043E\u0441\u0441\u0442\u0430\u043D\u043E\u0432\u0438\u0442\u044C \u043B\u043E\u043A\u0430\u043B\u044C\u043D\u044B\u0435 \u0444\u0430\u0439\u043B\u044B \u0438 \u0441\u043E\u0441\u0442\u043E\u044F\u043D\u0438\u0435 \u0432\u0430\u0440\u0438\u0430\u043D\u0442\u0430; \u0434\u043B\u044F \u043F\u0430\u043A\u0435\u0442\u043E\u0432 \u0432\u043E\u0437\u043C\u043E\u0436\u043D\u0430 \u043F\u043E\u0432\u0442\u043E\u0440\u043D\u0430\u044F \u0443\u0441\u0442\u0430\u043D\u043E\u0432\u043A\u0430 \u043F\u0440\u0435\u0436\u043D\u0435\u0433\u043E \u043F\u0430\u043A\u0435\u0442\u0430. \u0412\u043E\u0441\u0441\u0442\u0430\u043D\u043E\u0432\u043B\u0435\u043D\u0438\u0435 \u0431\u0430\u0437\u044B \u043F\u0430\u043A\u0435\u0442\u043E\u0432 \u0438 \u0432\u043D\u0435\u0448\u043D\u044F\u044F \u0440\u0435\u0437\u0435\u0440\u0432\u043D\u0430\u044F \u043A\u043E\u043F\u0438\u044F \u043D\u0435 \u0433\u0430\u0440\u0430\u043D\u0442\u0438\u0440\u0443\u044E\u0442\u0441\u044F." : "\u0410\u0432\u0442\u043E\u043C\u0430\u0442\u0438\u0447\u0435\u0441\u043A\u0438\u0439 \u043E\u0442\u043A\u0430\u0442 \u044D\u0442\u043E\u0433\u043E \u043A\u043E\u043C\u043F\u043E\u043D\u0435\u043D\u0442\u0430 \u043D\u0435 \u043F\u043E\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0451\u043D. \u041F\u043E\u0434\u0433\u043E\u0442\u043E\u0432\u044C\u0442\u0435 \u0440\u0435\u0437\u0435\u0440\u0432\u043D\u0443\u044E \u043A\u043E\u043F\u0438\u044E \u0438 \u043F\u0440\u0435\u0436\u043D\u0438\u0439 \u043F\u0430\u043A\u0435\u0442 \u0434\u043B\u044F \u0440\u0443\u0447\u043D\u043E\u0439 \u043F\u043E\u0432\u0442\u043E\u0440\u043D\u043E\u0439 \u0443\u0441\u0442\u0430\u043D\u043E\u0432\u043A\u0438."
+      ),
+      text(
+        "p",
+        "\u0421\u0435\u0442\u0435\u0432\u043E\u0439 \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442: \u043D\u0435 \u043F\u0440\u043E\u0432\u0435\u0440\u044F\u043B\u0441\u044F. \u041F\u043E\u0441\u043B\u0435 \u043E\u043F\u0435\u0440\u0430\u0446\u0438\u0438 \u043F\u0440\u043E\u0432\u0435\u0440\u044C\u0442\u0435 \u0441\u043B\u0443\u0436\u0431\u0443, \u0441\u043E\u043F\u043E\u0441\u0442\u0430\u0432\u044C\u0442\u0435 \u043F\u0430\u0440\u0430\u043C\u0435\u0442\u0440\u044B \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u044F \u0438 \u0437\u0430\u043F\u0443\u0441\u0442\u0438\u0442\u0435 \u043E\u0442\u0434\u0435\u043B\u044C\u043D\u044B\u0439 \u0441\u0435\u0442\u0435\u0432\u043E\u0439 \u0442\u0435\u0441\u0442."
+      )
+    );
+    const capabilities = object2(current.capabilities);
+    if (current.admission === "admitted")
+      result.append(
+        text(
+          "p",
+          `\u0414\u043E\u043F\u0443\u0449\u0435\u043D\u043D\u044B\u0435 \u0432\u043E\u0437\u043C\u043E\u0436\u043D\u043E\u0441\u0442\u0438: REALITY hybrid ${capabilities.reality_hybrid === true ? "\u0435\u0441\u0442\u044C" : "\u043D\u0435 \u043F\u043E\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043D\u043E"} \xB7 REALITY record fragment ${capabilities.reality_record_fragment === true ? "\u0435\u0441\u0442\u044C" : "\u043D\u0435 \u043F\u043E\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043D\u043E"}`
+        )
+      );
+    start.disabled = false;
+  }).catch(() => {
+    if (active)
+      result.textContent = "\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u043F\u0440\u043E\u0447\u0438\u0442\u0430\u0442\u044C \u0432\u043B\u0438\u044F\u043D\u0438\u0435 \u0438\u0437\u043C\u0435\u043D\u0435\u043D\u0438\u044F. \u0417\u0430\u043A\u0440\u043E\u0439\u0442\u0435 \u043F\u0440\u043E\u0441\u043C\u043E\u0442\u0440 \u0438 \u043F\u043E\u0432\u0442\u043E\u0440\u0438\u0442\u0435; \u0443\u0441\u0442\u0430\u043D\u043E\u0432\u043A\u0430 \u043D\u0435 \u0437\u0430\u043F\u0443\u0441\u043A\u0430\u043B\u0430\u0441\u044C.";
+  });
+  return root;
+}
+
 // src/forkop/tabs/updates/componentActionCompletion.ts
 function shouldApplyCompletedComponentActionResult(result, notify) {
   return result.action !== "check_update" || notify;
@@ -13831,6 +14272,7 @@ var componentActionStateUnsubscribe = null;
 var componentActionStateRefreshPromise = null;
 var followedComponentJobs = /* @__PURE__ */ new Set();
 var handledComponentJobs = /* @__PURE__ */ new Set();
+var componentOutcomes = /* @__PURE__ */ new Map();
 if (typeof window !== "undefined") {
   window.addEventListener("pagehide", () => {
     pageUnloading2 = true;
@@ -14110,6 +14552,19 @@ async function applyCompletedComponentAction({
   }
   patchSystemInfoAfterMutation(result);
   setActionLoading(key, false);
+  const outcome = {
+    version: result.action === "remove" ? "\u043A\u043E\u043C\u043F\u043E\u043D\u0435\u043D\u0442 \u0443\u0434\u0430\u043B\u0451\u043D" : result.current_version || result.latest_version || "\u043D\u0435 \u043F\u043E\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043D\u043E",
+    at: (/* @__PURE__ */ new Date()).toLocaleString(),
+    service: "\u043D\u0435 \u043F\u043E\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043D\u043E"
+  };
+  componentOutcomes.set(result.component, outcome);
+  renderUpdatesComponents();
+  void refreshRuntimeUiState({ force: true }).then((snapshot) => {
+    if (componentOutcomes.get(result.component) !== outcome) return;
+    const running = snapshot?.service?.forkop?.running;
+    outcome.service = running === 1 ? "\u0437\u0430\u043F\u0443\u0449\u0435\u043D\u0430" : running === 0 ? "\u043E\u0441\u0442\u0430\u043D\u043E\u0432\u043B\u0435\u043D\u0430" : "\u043D\u0435 \u043F\u043E\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043D\u043E";
+    if (updatesMounted) renderUpdatesComponents();
+  }).catch(() => void 0);
   if (result.component === "forkop" && result.action === "install") {
     if (notify && result.message) {
       showToast(result.message, "success", 1200);
@@ -14256,6 +14711,23 @@ function stopComponentActionStateWatcher() {
   }
   componentActionStateUnsubscribe();
   componentActionStateUnsubscribe = null;
+}
+function previewComponentAction(button) {
+  if (button.action === "check_update")
+    return void handleComponentAction(button);
+  const card = getComponentCards().find(
+    (item) => item.component === button.component
+  );
+  if (!card) return;
+  showComponentImpact({
+    component: button.component,
+    action: button.action,
+    currentVersion: card.version,
+    // The sing-box UI cache has no variant/source binding. It cannot name this target.
+    latestVersion: button.component === "sing_box" ? void 0 : card.latestVersion,
+    available: () => !isAnyActionLoading() && !isServiceRuntimeActionLoading() && !isSystemInfoLoading(),
+    proceed: () => void handleComponentAction(button)
+  });
 }
 async function handleComponentAction(button) {
   if (!beginComponentAction(button)) {
@@ -14512,6 +14984,15 @@ function renderComponentCard(card) {
     headerChildren
   );
   const detailsChildren = [];
+  const outcome = componentOutcomes.get(card.component);
+  if (outcome)
+    detailsChildren.push(
+      E(
+        "p",
+        { role: "status" },
+        `\u041F\u0440\u0438\u043C\u0435\u043D\u0451\u043D\u043D\u0430\u044F \u0432\u0435\u0440\u0441\u0438\u044F: ${outcome.version} \xB7 ${outcome.at}. \u0421\u043E\u0441\u0442\u043E\u044F\u043D\u0438\u0435 \u0441\u043B\u0443\u0436\u0431\u044B: ${outcome.service}. \u0421\u0435\u0442\u0435\u0432\u043E\u0439 \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442: \u043D\u0435 \u043F\u0440\u043E\u0432\u0435\u0440\u044F\u043B\u0441\u044F \u2014 \u0437\u0430\u043F\u0443\u0441\u0442\u0438\u0442\u0435 \u043E\u0442\u0434\u0435\u043B\u044C\u043D\u0443\u044E \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0443 \u0432 \u0434\u0438\u0430\u0433\u043D\u043E\u0441\u0442\u0438\u043A\u0435.`
+      )
+    );
   const checkResult = getVisibleCheckResult(card.component);
   if (checkResult && checkResult.status) {
     let labelText = "";
@@ -14612,7 +15093,7 @@ function renderComponentCard(card) {
       icon: action.icon,
       loading: loading2,
       disabled: systemInfoLoading || serviceRuntimeActionLoading || anyActionLoading && !loading2,
-      onClick: () => void handleComponentAction(action)
+      onClick: () => previewComponentAction(action)
     });
   });
   const dangerButtons = dangerActions.map((action) => {
@@ -14623,7 +15104,7 @@ function renderComponentCard(card) {
       icon: action.icon,
       loading: loading2,
       disabled: systemInfoLoading || serviceRuntimeActionLoading || anyActionLoading && !loading2,
-      onClick: () => void handleComponentAction(action)
+      onClick: () => previewComponentAction(action)
     });
   });
   if (primaryButtons.length > 0 || dangerButtons.length > 0) {
@@ -14642,7 +15123,7 @@ function renderComponentCard(card) {
         icon: action.icon,
         loading: loading2,
         disabled: systemInfoLoading || serviceRuntimeActionLoading || anyActionLoading && !loading2,
-        onClick: () => void handleComponentAction(action)
+        onClick: () => previewComponentAction(action)
       });
     });
     actionElements.push(
@@ -15130,77 +15611,6 @@ function injectGlobalStyles() {
         </style>
     `
   );
-}
-
-// src/forkop/next/api.ts
-var configurationActions = /* @__PURE__ */ new Set([
-  "profile_apply",
-  "rollback",
-  "recover",
-  "device_set",
-  "gaming_apply",
-  "temporary_add",
-  "temporary_delete",
-  "recommendation_accept",
-  "smart_detect_configure"
-]);
-var configurationBusy = false;
-async function configurationEvent(name, action) {
-  const pending = [];
-  const event = new CustomEvent(name, {
-    cancelable: true,
-    detail: { action, waitUntil: (work) => pending.push(work) }
-  });
-  window.dispatchEvent(event);
-  await Promise.all(pending);
-  if (event.defaultPrevented) throw Error("native_pending_changes");
-}
-async function nextRequest(action, payload = {}) {
-  const mutation = configurationActions.has(action) && typeof window !== "undefined";
-  if (mutation) {
-    if (configurationBusy)
-      return { success: false, error: "native_mutation_busy" };
-    configurationBusy = true;
-    try {
-      await configurationEvent("forkop:configuration-changing", action);
-    } catch (error) {
-      window.dispatchEvent(
-        new CustomEvent("forkop:configuration-settled", { detail: { action } })
-      );
-      configurationBusy = false;
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : "native_pending_changes"
-      };
-    }
-  }
-  try {
-    const response = await executeShellCommand({
-      command: "/usr/bin/forkop",
-      args: action === "route_explain" ? ["route_explain", JSON.stringify(payload)] : ["next", action, JSON.stringify(payload)],
-      timeout: 6e4,
-      operationName: `Forkop Next ${action}`
-    });
-    try {
-      const value = JSON.parse(response.stdout);
-      if (!value || typeof value.success !== "boolean")
-        return { success: false, error: "invalid_response" };
-      if ((response.code ?? 0) !== 0 && value.success)
-        return { success: false, error: response.stderr || "command_failed" };
-      if (value.success && mutation)
-        await configurationEvent("forkop:configuration-changed", action);
-      return value;
-    } catch {
-      return { success: false, error: response.stderr || "invalid_response" };
-    }
-  } finally {
-    if (mutation) {
-      configurationBusy = false;
-      window.dispatchEvent(
-        new CustomEvent("forkop:configuration-settled", { detail: { action } })
-      );
-    }
-  }
 }
 
 // src/forkop/next/traffic.ts
@@ -15691,7 +16101,7 @@ function renderDeviceProfileTools(request, initialRequest = request, area = "all
 }
 
 // src/forkop/next/compatibility.ts
-var object = (v) => v && typeof v === "object" ? v : {};
+var object3 = (v) => v && typeof v === "object" ? v : {};
 function renderCompatibilityPanel(request, initialRequest = request, showHeading = true) {
   const root = document.createElement("section");
   root.className = "fkp-next-panel";
@@ -15807,11 +16217,11 @@ function renderCompatibilityPanel(request, initialRequest = request, showHeading
       result.textContent = `\u041F\u0440\u043E\u0432\u0435\u0440\u043A\u0430 \u043D\u0435 \u0432\u044B\u043F\u043E\u043B\u043D\u0435\u043D\u0430: ${response.error || "\u043D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043D\u0430\u044F \u043E\u0448\u0438\u0431\u043A\u0430"}`;
       return;
     }
-    const data = object(response.data);
+    const data = object3(response.data);
     const oldOutbound = outbound.value;
     outbound.replaceChildren();
     for (const raw of Array.isArray(data.outbounds) ? data.outbounds : []) {
-      const item = object(raw);
+      const item = object3(raw);
       const option = text("option", String(item.label || item.outbound_tag));
       option.value = String(item.outbound_tag);
       outbound.append(option);
@@ -15828,7 +16238,7 @@ function renderCompatibilityPanel(request, initialRequest = request, showHeading
       text("strong", labels[status] || "\u0421\u043E\u0432\u043C\u0435\u0441\u0442\u0438\u043C\u043E\u0441\u0442\u044C \u043D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043D\u0430"),
       text("p", context)
     );
-    const versions = object(data.client), remote = object(data.server);
+    const versions = object3(data.client), remote = object3(data.server);
     result.append(
       text(
         "p",
@@ -15865,7 +16275,7 @@ function renderCompatibilityPanel(request, initialRequest = request, showHeading
       unknown: "\u041D\u0435 \u043F\u0440\u043E\u0432\u0435\u0440\u0435\u043D\u043E"
     };
     for (const raw of Array.isArray(data.checks) ? data.checks : []) {
-      const c = object(raw);
+      const c = object3(raw);
       checks.append(
         text(
           "li",
@@ -15884,7 +16294,7 @@ function renderCompatibilityPanel(request, initialRequest = request, showHeading
     );
     result.append(details);
     if (data.probe) {
-      const p = object(data.probe);
+      const p = object3(data.probe);
       result.append(
         text(
           "p",
@@ -15946,9 +16356,9 @@ function renderCompatibilityPanel(request, initialRequest = request, showHeading
         return;
       }
       updates.replaceChildren();
-      const d = object(response.data);
+      const d = object3(response.data);
       for (const raw of Array.isArray(d.updates) ? d.updates : []) {
-        const u = object(raw);
+        const u = object3(raw);
         const status = u.status === "update_available" ? "\u0414\u043E\u0441\u0442\u0443\u043F\u043D\u043E \u043E\u0431\u043D\u043E\u0432\u043B\u0435\u043D\u0438\u0435" : u.status === "current" ? "\u0423\u0441\u0442\u0430\u043D\u043E\u0432\u043B\u0435\u043D\u0430 \u0430\u043A\u0442\u0443\u0430\u043B\u044C\u043D\u0430\u044F \u0432\u0435\u0440\u0441\u0438\u044F" : "\u0421\u0442\u0430\u0442\u0443\u0441 \u043E\u0431\u043D\u043E\u0432\u043B\u0435\u043D\u0438\u044F \u043D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u0435\u043D";
         updates.append(
           text(
@@ -15992,9 +16402,9 @@ function renderCompatibilityPanel(request, initialRequest = request, showHeading
       }
       const previous = section.value;
       section.replaceChildren();
-      const sections = object(response.data).sections;
+      const sections = object3(response.data).sections;
       for (const raw of Array.isArray(sections) ? sections : []) {
-        const s = object(raw);
+        const s = object3(raw);
         const option = text("option", String(s.label || s.name));
         option.value = String(s.name);
         section.append(option);
@@ -16024,8 +16434,8 @@ function renderCompatibilityPanel(request, initialRequest = request, showHeading
 }
 
 // src/forkop/next/advanced.ts
-var object2 = (v) => v && typeof v === "object" ? v : {};
-var items = (v) => Array.isArray(object2(v).items) ? object2(v).items : [];
+var object4 = (v) => v && typeof v === "object" ? v : {};
+var items = (v) => Array.isArray(object4(v).items) ? object4(v).items : [];
 function el(tag, text = "", className = "") {
   const node = document.createElement(tag);
   node.textContent = text;
@@ -16051,7 +16461,7 @@ function select(label, choices) {
   wrap.append(node);
   return { wrap, node };
 }
-function renderAdvancedPanel(request = nextRequest, loadConnections, lazy = false, area = "all") {
+function renderAdvancedPanel(request = nextRequest, loadConnections, lazy = false, area = "all", readDiagnostic = diagnosticRead) {
   const includes = (part) => area === "all" || area === part;
   function sharedReads() {
     const reads = /* @__PURE__ */ new Map();
@@ -16129,6 +16539,12 @@ function renderAdvancedPanel(request = nextRequest, loadConnections, lazy = fals
   }
   const content = el("div", "", "fkp-next-content");
   root.append(content);
+  if (includes("diagnostics"))
+    content.append(
+      renderSymptomGuide(
+        (action2, payload) => action2 === "status" ? initialRequest(action2, payload) : readDiagnostic(action2, payload)
+      )
+    );
   let digest = "";
   let sections = [];
   const connectionLabel = (name, fallback = "\u2014") => sections.find(([id]) => id === name)?.[1] || String(name || fallback);
@@ -16177,7 +16593,7 @@ function renderAdvancedPanel(request = nextRequest, loadConnections, lazy = fals
       const result = await request(action2, payload);
       message.textContent = result.success ? "\u0413\u043E\u0442\u043E\u0432\u043E" : `\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0432\u044B\u043F\u043E\u043B\u043D\u0438\u0442\u044C \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u0435: ${result.error || "\u043D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043D\u0430\u044F \u043E\u0448\u0438\u0431\u043A\u0430"}`;
       if (output) {
-        const data = object2(result.data);
+        const data = object4(result.data);
         const changed = Array.isArray(data.changed) ? data.changed : null;
         const summaries = {
           profile_diff: changed ? changed.length ? `\u0418\u0437\u043C\u0435\u043D\u0451\u043D\u043D\u044B\u0445 \u043F\u0430\u0440\u0430\u043C\u0435\u0442\u0440\u043E\u0432: ${changed.length}. \u0417\u043D\u0430\u0447\u0435\u043D\u0438\u044F \u0441\u043A\u0440\u044B\u0442\u044B.` : "\u041F\u0440\u043E\u0444\u0438\u043B\u044C \u0441\u043E\u0432\u043F\u0430\u0434\u0430\u0435\u0442 \u0441 \u0442\u0435\u043A\u0443\u0449\u0435\u0439 \u043A\u043E\u043D\u0444\u0438\u0433\u0443\u0440\u0430\u0446\u0438\u0435\u0439." : "\u0421\u043F\u0438\u0441\u043E\u043A \u0438\u0437\u043C\u0435\u043D\u0435\u043D\u0438\u0439 \u043D\u0435 \u043F\u043E\u043B\u0443\u0447\u0435\u043D. \u041F\u0440\u043E\u0432\u0435\u0440\u044C\u0442\u0435 \u0442\u0435\u0445\u043D\u0438\u0447\u0435\u0441\u043A\u0438\u0435 \u043F\u043E\u0434\u0440\u043E\u0431\u043D\u043E\u0441\u0442\u0438.",
@@ -16192,6 +16608,29 @@ function renderAdvancedPanel(request = nextRequest, loadConnections, lazy = fals
             result.success ? summaries[action2] || "\u0414\u0435\u0439\u0441\u0442\u0432\u0438\u0435 \u0432\u044B\u043F\u043E\u043B\u043D\u0435\u043D\u043E." : `\u0414\u0435\u0439\u0441\u0442\u0432\u0438\u0435 \u043D\u0435 \u0432\u044B\u043F\u043E\u043B\u043D\u0435\u043D\u043E: ${result.error || "\u043D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043D\u0430\u044F \u043E\u0448\u0438\u0431\u043A\u0430"}`
           )
         );
+        if (result.success && action2 === "profile_diff" && changed) {
+          const counts = { rules: 0, devices: 0, dns: 0, other: 0 };
+          for (const raw of changed) {
+            const key = String(raw).split(".").pop() || "";
+            if (/fully_routed_ips|source_ip|device/.test(key)) counts.devices++;
+            else if (/dns|fakeip/.test(key)) counts.dns++;
+            else if (/^(domain.*|ip_cidr.*|ports.*|enabled|action|proxy_config_type|outbound.*|interface|rule_set.*|community_lists|priority.*|urltest.*)$/.test(
+              key
+            ))
+              counts.rules++;
+            else counts.other++;
+          }
+          output.append(
+            el(
+              "p",
+              `\u041F\u0440\u0430\u0432\u0438\u043B\u0430 \u0438 \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u044F: ${counts.rules} \xB7 \u0423\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430: ${counts.devices} \xB7 DNS: ${counts.dns} \xB7 \u041F\u0440\u043E\u0447\u0438\u0435 \u043F\u0430\u0440\u0430\u043C\u0435\u0442\u0440\u044B: ${counts.other}`
+            ),
+            el(
+              "p",
+              "\u042D\u0442\u043E \u0447\u0438\u0441\u043B\u043E \u0438\u0437\u043C\u0435\u043D\u0451\u043D\u043D\u044B\u0445 \u043F\u0430\u0440\u0430\u043C\u0435\u0442\u0440\u043E\u0432, \u0430 \u043D\u0435 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432. \u041F\u043E\u0441\u043B\u0435 \u043F\u0440\u0438\u043C\u0435\u043D\u0435\u043D\u0438\u044F \u043C\u0430\u0440\u0448\u0440\u0443\u0442\u044B \u0438 DNS \u043C\u043E\u0433\u0443\u0442 \u0438\u0437\u043C\u0435\u043D\u0438\u0442\u044C\u0441\u044F; \u0441\u043E\u0435\u0434\u0438\u043D\u0435\u043D\u0438\u044F \u043C\u043E\u0433\u0443\u0442 \u043F\u0440\u0435\u0440\u0432\u0430\u0442\u044C\u0441\u044F. \u0417\u043D\u0430\u0447\u0435\u043D\u0438\u044F \u0441\u043A\u0440\u044B\u0442\u044B."
+            )
+          );
+        }
         const details = el("details");
         details.append(el("summary", "\u0422\u0435\u0445\u043D\u0438\u0447\u0435\u0441\u043A\u0438\u0435 \u043F\u043E\u0434\u0440\u043E\u0431\u043D\u043E\u0441\u0442\u0438"));
         if (result.success && action2 === "profile_diff" && changed?.length) {
@@ -16202,7 +16641,15 @@ function renderAdvancedPanel(request = nextRequest, loadConnections, lazy = fals
         details.append(
           el(
             "pre",
-            JSON.stringify(result.data ?? { error: result.error }, null, 2)
+            JSON.stringify(
+              action2 === "profile_diff" ? {
+                changed,
+                current_digest: data.current_digest,
+                profile_digest: data.profile_digest
+              } : result.data ?? { error: result.error },
+              null,
+              2
+            )
           )
         );
         output.append(details);
@@ -16233,40 +16680,73 @@ function renderAdvancedPanel(request = nextRequest, loadConnections, lazy = fals
     "\u041F\u0440\u043E\u0432\u0435\u0440\u043A\u0430 \u043F\u0440\u0430\u0432\u0438\u043B \u043E\u0431\u044A\u044F\u0441\u043D\u044F\u0435\u0442 \u043C\u0430\u0440\u0448\u0440\u0443\u0442. \u0414\u043E\u0441\u0442\u0443\u043F\u043D\u043E\u0441\u0442\u044C \u043F\u0440\u043E\u0432\u0435\u0440\u044F\u0435\u0442\u0441\u044F \u043E\u0442\u0434\u0435\u043B\u044C\u043D\u044B\u043C \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u0435\u043C.",
     "diagnostics"
   );
-  const domain = input("domain", "\u0414\u043E\u043C\u0435\u043D");
+  const domain = input("domain", "\u0414\u043E\u043C\u0435\u043D \u0438\u043B\u0438 IP \u0446\u0435\u043B\u0438");
   domain.node.placeholder = "example.org";
   const device = input("device", "IP \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430 (\u043D\u0435\u043E\u0431\u044F\u0437\u0430\u0442\u0435\u043B\u044C\u043D\u043E)");
+  const protocol = select("\u041F\u0440\u043E\u0442\u043E\u043A\u043E\u043B", [
+    ["tcp", "TCP"],
+    ["udp", "UDP"],
+    ["quic", "QUIC"],
+    ["dns", "DNS"]
+  ]);
+  protocol.node.name = "route_protocol";
+  const port = input("route_port", "\u041F\u043E\u0440\u0442", "443");
+  port.node.inputMode = "numeric";
+  const parameters = el("details");
+  parameters.append(
+    el("summary", "\u041F\u0430\u0440\u0430\u043C\u0435\u0442\u0440\u044B \u0437\u0430\u043F\u0440\u043E\u0441\u0430 \xB7 \u043F\u043E \u0443\u043C\u043E\u043B\u0447\u0430\u043D\u0438\u044E HTTPS / TCP / 443"),
+    protocol.wrap,
+    port.wrap
+  );
+  const basis = el(
+    "p",
+    "\u0421\u043E\u0445\u0440\u0430\u043D\u0451\u043D\u043D\u0430\u044F \u043A\u043E\u043D\u0444\u0438\u0433\u0443\u0440\u0430\u0446\u0438\u044F \u043D\u0430 \u0440\u043E\u0443\u0442\u0435\u0440\u0435. \u0427\u0435\u0440\u043D\u043E\u0432\u0438\u043A LuCI \u0438 \u0444\u0430\u043A\u0442\u0438\u0447\u0435\u0441\u043A\u0438 \u043F\u0440\u0438\u043C\u0435\u043D\u0451\u043D\u043D\u044B\u0439 \u043C\u0430\u0440\u0448\u0440\u0443\u0442 \u043D\u0435 \u043F\u043E\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043D\u044B \u044D\u0442\u043E\u0439 \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u043E\u0439."
+  );
   const routeResult = el("div", "", "fkp-next-result");
   let routeGeneration = 0;
   let probeGeneration = 0;
-  const routeKey = () => JSON.stringify([domain.node.value, device.node.value]);
+  const routeKey = () => JSON.stringify([
+    domain.node.value,
+    device.node.value,
+    protocol.node.value,
+    port.node.value
+  ]);
   const probeKey = () => JSON.stringify([domain.node.value, probeSection.node.value]);
   routeResult.setAttribute("aria-live", "polite");
   route.append(
     domain.wrap,
     device.wrap,
+    parameters,
+    basis,
     action("\u041E\u0431\u044A\u044F\u0441\u043D\u0438\u0442\u044C \u043C\u0430\u0440\u0448\u0440\u0443\u0442", async () => {
       const generation = ++routeGeneration;
       const key = routeKey();
       const capturedDomain = domain.node.value.trim();
       const capturedDevice = device.node.value.trim();
       const capturedAt = (/* @__PURE__ */ new Date()).toLocaleString();
+      const capturedProtocol = protocol.node.value;
+      const capturedPort = port.node.value;
+      if (!capturedDomain || !/^\d+$/.test(capturedPort) || Number(capturedPort) < 1 || Number(capturedPort) > 65535) {
+        routeResult.textContent = "\u0423\u043A\u0430\u0436\u0438\u0442\u0435 \u0434\u043E\u043C\u0435\u043D/IP \u0438 \u0446\u0435\u043B\u044B\u0439 \u043F\u043E\u0440\u0442 \u043E\u0442 1 \u0434\u043E 65535.";
+        return;
+      }
+      const target = capturedDomain.includes(":") || /^\d+\.\d+\.\d+\.\d+$/.test(capturedDomain) ? { destination_ip: capturedDomain } : { domain: capturedDomain };
       const r = await invoke("route_explain", {
-        domain: domain.node.value.trim(),
-        device: device.node.value.trim(),
-        port: 443,
-        protocol: "tcp"
+        ...target,
+        ...capturedDevice ? { device: capturedDevice } : {},
+        port: Number(capturedPort),
+        protocol: capturedProtocol
       });
       if (generation !== routeGeneration || key !== routeKey()) return;
       routeResult.replaceChildren();
       if (!r.success) return;
-      const data = object2(r.data);
-      const decision = object2(data.decision);
+      const data = object4(r.data);
+      const decision = object4(data.decision);
       const decisionLabels = {
         matched: "\u041F\u0440\u0430\u0432\u0438\u043B\u043E \u043D\u0430\u0439\u0434\u0435\u043D\u043E",
         direct: "\u041D\u0430\u043F\u0440\u044F\u043C\u0443\u044E",
         blocked: "\u0417\u0430\u0431\u043B\u043E\u043A\u0438\u0440\u043E\u0432\u0430\u043D\u043E",
-        indeterminate: "\u041C\u0430\u0440\u0448\u0440\u0443\u0442 \u0442\u0440\u0435\u0431\u0443\u0435\u0442 \u0443\u0442\u043E\u0447\u043D\u0435\u043D\u0438\u044F"
+        indeterminate: "\u041D\u0435 \u043F\u043E\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043D\u043E"
       };
       routeResult.append(
         el(
@@ -16276,18 +16756,62 @@ function renderAdvancedPanel(request = nextRequest, loadConnections, lazy = fals
         el("p", "\u0414\u043E\u0441\u0442\u0443\u043F\u043D\u043E\u0441\u0442\u044C \u0441\u0430\u0439\u0442\u0430 \u043D\u0435 \u043F\u0440\u043E\u0432\u0435\u0440\u044F\u043B\u0430\u0441\u044C"),
         el(
           "p",
-          `\u0426\u0435\u043B\u044C: ${capturedDomain} \xB7 \u0423\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u043E: ${capturedDevice || "\u043D\u0435 \u0443\u043A\u0430\u0437\u0430\u043D\u043E"} \xB7 \u0418\u0441\u0442\u043E\u0447\u043D\u0438\u043A \u043F\u0440\u0430\u0432\u0438\u043B: \u0440\u043E\u0443\u0442\u0435\u0440 \xB7 ${capturedAt}`
+          `\u0423\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u043E: ${capturedDevice || "\u043D\u0435 \u0443\u043A\u0430\u0437\u0430\u043D\u043E"} \u2192 \u0426\u0435\u043B\u044C: ${capturedDomain} \u2192 ${capturedProtocol.toUpperCase()}/${capturedPort} \xB7 \u0421\u043E\u0445\u0440\u0430\u043D\u0451\u043D\u043D\u0430\u044F \u043A\u043E\u043D\u0444\u0438\u0433\u0443\u0440\u0430\u0446\u0438\u044F \xB7 \u0418\u0441\u0442\u043E\u0447\u043D\u0438\u043A \u043F\u0440\u0430\u0432\u0438\u043B: \u0440\u043E\u0443\u0442\u0435\u0440 \xB7 ${capturedAt}`
         )
       );
+      const reasons = {
+        section_conditions: "\u0423\u0441\u043B\u043E\u0432\u0438\u044F \u043F\u0440\u0430\u0432\u0438\u043B\u0430",
+        fully_routed_ips: "\u041D\u0430\u0437\u043D\u0430\u0447\u0435\u043D\u0438\u0435 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430",
+        expired: "\u0421\u0440\u043E\u043A \u043F\u0440\u0430\u0432\u0438\u043B\u0430 \u0438\u0441\u0442\u0451\u043A",
+        exclude_ntp: "\u0418\u0441\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435 NTP",
+        hijack_dns: "\u041E\u0431\u0440\u0430\u0431\u043E\u0442\u043A\u0430 DNS",
+        disable_quic: "QUIC \u043E\u0442\u043A\u043B\u044E\u0447\u0451\u043D",
+        service_ip_check: "\u0421\u043B\u0443\u0436\u0435\u0431\u043D\u0430\u044F \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0430 \u0430\u0434\u0440\u0435\u0441\u0430"
+      };
+      const winner = (Array.isArray(data.trace) ? data.trace : []).map(object4).reverse().find((row) => row.match === "yes");
+      if (winner && decision.status !== "indeterminate")
+        routeResult.append(
+          el(
+            "p",
+            `\u041F\u0440\u0438\u0447\u0438\u043D\u0430: ${reasons[String(winner.reason)] || "\u0423\u0441\u043B\u043E\u0432\u0438\u0435 \u0438\u0437 \u0441\u043E\u0445\u0440\u0430\u043D\u0451\u043D\u043D\u044B\u0445 \u043F\u0440\u0430\u0432\u0438\u043B"}`
+          )
+        );
+      if (decision.status === "indeterminate") {
+        const missing = {
+          rule_set: "\u0441\u043E\u0434\u0435\u0440\u0436\u0438\u043C\u043E\u0435 \u043D\u0430\u0431\u043E\u0440\u0430 \u043F\u0440\u0430\u0432\u0438\u043B",
+          device: "\u0430\u0434\u0440\u0435\u0441 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430",
+          port: "\u043F\u043E\u0440\u0442",
+          destination: "\u0443\u0441\u043B\u043E\u0432\u0438\u0435 \u043D\u0430\u0437\u043D\u0430\u0447\u0435\u043D\u0438\u044F",
+          unsupported_action: "\u043F\u043E\u0434\u0434\u0435\u0440\u0436\u043A\u0430 \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u044F",
+          evaluation_limit: "\u043F\u0440\u0435\u0434\u0435\u043B \u0430\u043D\u0430\u043B\u0438\u0437\u0430"
+        };
+        routeResult.append(
+          el(
+            "p",
+            `\u041D\u0435 \u0445\u0432\u0430\u0442\u0430\u0435\u0442 \u0434\u0430\u043D\u043D\u044B\u0445: ${(Array.isArray(data.missing) ? data.missing : []).map((value) => missing[String(value)] || "\u043D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043D\u043E\u0435 \u0443\u0441\u043B\u043E\u0432\u0438\u0435").join(", ") || "\u0443\u0441\u043B\u043E\u0432\u0438\u044F \u043F\u0440\u0430\u0432\u0438\u043B\u0430"}.`
+          )
+        );
+      } else if (typeof decision.section === "string" && decision.section) {
+        routeResult.append(
+          action("\u041E\u0442\u043A\u0440\u044B\u0442\u044C \u043F\u0440\u0430\u0432\u0438\u043B\u043E", async () => {
+            if (!navigateToRule(root, {
+              kind: "edit",
+              section: String(decision.section),
+              option: "domain"
+            }))
+              message.textContent = "\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u043E\u0442\u043A\u0440\u044B\u0442\u044C \u0442\u043E\u0447\u043D\u043E\u0435 \u043F\u0440\u0430\u0432\u0438\u043B\u043E. \u041E\u0442\u043A\u0440\u043E\u0439\u0442\u0435 \u0440\u0430\u0437\u0434\u0435\u043B \u043F\u0440\u0430\u0432\u0438\u043B \u0438 \u043F\u043E\u0432\u0442\u043E\u0440\u0438\u0442\u0435.";
+          })
+        );
+      }
       const trace = el("ol");
       trace.dataset.detail = "true";
       trace.hidden = root.dataset.mode !== "detailed";
       for (const step of Array.isArray(data.trace) ? data.trace : []) {
-        const row = object2(step);
+        const row = object4(step);
         trace.append(
           el(
             "li",
-            `${connectionLabel(row.section, "")}: ${row.reason || row.match || ""}`
+            `${connectionLabel(row.section, "")}: ${reasons[String(row.reason)] || row.reason || "\u0414\u043E\u043F\u043E\u043B\u043D\u0438\u0442\u0435\u043B\u044C\u043D\u043E\u0435 \u0443\u0441\u043B\u043E\u0432\u0438\u0435"} \xB7 ${row.match === "yes" ? "\u0441\u043E\u0432\u043F\u0430\u043B\u043E" : row.match === "no" ? "\u043D\u0435 \u0441\u043E\u0432\u043F\u0430\u043B\u043E" : "\u043D\u0435 \u043F\u043E\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043D\u043E"}`
           )
         );
       }
@@ -16316,7 +16840,7 @@ function renderAdvancedPanel(request = nextRequest, loadConnections, lazy = fals
       probeResult.textContent = `\u041F\u0440\u043E\u0432\u0435\u0440\u043A\u0430 \u043D\u0435 \u0432\u044B\u043F\u043E\u043B\u043D\u0435\u043D\u0430: ${r.error}. ${context}`;
       return;
     }
-    const d = object2(r.data);
+    const d = object4(r.data);
     probeResult.textContent = `${d.reachable === true ? "\u0421\u0430\u0439\u0442 \u0434\u043E\u0441\u0442\u0443\u043F\u0435\u043D" : d.reachable === false ? "\u0421\u0430\u0439\u0442 \u043D\u0435\u0434\u043E\u0441\u0442\u0443\u043F\u0435\u043D" : "\u0414\u043E\u0441\u0442\u0443\u043F\u043D\u043E\u0441\u0442\u044C \u043D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043D\u0430"} \xB7 HTTP ${d.http_status || "\u2014"} \xB7 ${d.duration_ms ?? "\u2014"} \u043C\u0441. ${context}. \u041F\u0440\u043E\u0432\u0435\u0440\u0435\u043D \u0441\u0435\u0442\u0435\u0432\u043E\u0439 \u0434\u043E\u0441\u0442\u0443\u043F \u0441 \u0440\u043E\u0443\u0442\u0435\u0440\u0430; \u0432\u0445\u043E\u0434 \u0432 \u0441\u0435\u0440\u0432\u0438\u0441 \u043D\u0435 \u043F\u0440\u043E\u0432\u0435\u0440\u044F\u0435\u0442\u0441\u044F.`;
   });
   function invalidateProbe() {
@@ -16333,6 +16857,8 @@ function renderAdvancedPanel(request = nextRequest, loadConnections, lazy = fals
     invalidateProbe();
   };
   device.node.oninput = invalidateRoute;
+  protocol.node.onchange = invalidateRoute;
+  port.node.oninput = invalidateRoute;
   probeSection.node.onchange = invalidateProbe;
   const probeSettings = el("div");
   route.append(probeSection.wrap, probeAction, probeResult, probeSettings);
@@ -16376,7 +16902,7 @@ function renderAdvancedPanel(request = nextRequest, loadConnections, lazy = fals
         { name: requestedName },
         profileResult
       );
-      const data = object2(r.data);
+      const data = object4(r.data);
       if (r.success && requestedName === profile.node.value && generation === previewGeneration && data.current_digest && data.profile_digest) {
         previewName = requestedName;
         previewDigest = String(data.current_digest);
@@ -16502,8 +17028,8 @@ function renderAdvancedPanel(request = nextRequest, loadConnections, lazy = fals
     });
     if (generation !== scanGeneration || key !== scanKey()) return;
     if (r.success) {
-      const data = object2(r.data);
-      const current = object2(data.current), target = object2(data.section);
+      const data = object4(r.data);
+      const current = object4(data.current), target = object4(data.section);
       scanResult.textContent = `\u0422\u0435\u043A\u0443\u0449\u0438\u0439 \u043C\u0430\u0440\u0448\u0440\u0443\u0442: ${current.reachable === true ? "\u0435\u0441\u0442\u044C \u0441\u0435\u0442\u0435\u0432\u043E\u0439 \u043E\u0442\u0432\u0435\u0442" : current.reachable === false ? "\u043D\u0435\u0442 \u043E\u0442\u0432\u0435\u0442\u0430" : "\u0441\u043C. \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442\u044B \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0438"}. \u0412\u044B\u0431\u0440\u0430\u043D\u043D\u043E\u0435 \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435: ${target.reachable === true ? "\u0435\u0441\u0442\u044C \u0441\u0435\u0442\u0435\u0432\u043E\u0439 \u043E\u0442\u0432\u0435\u0442" : target.reachable === false ? "\u043D\u0435\u0442 \u043E\u0442\u0432\u0435\u0442\u0430" : "\u0441\u043C. \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442\u044B \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0438"}. ${context}. \u0420\u0435\u043A\u043E\u043C\u0435\u043D\u0434\u0430\u0446\u0438\u044F \u043F\u043E\u044F\u0432\u043B\u044F\u0435\u0442\u0441\u044F \u043F\u043E\u0441\u043B\u0435 \u043F\u043E\u0432\u0442\u043E\u0440\u043D\u044B\u0445 \u043D\u0430\u0431\u043B\u044E\u0434\u0435\u043D\u0438\u0439; \u043F\u0440\u0430\u0432\u0438\u043B\u0430 \u0430\u0432\u0442\u043E\u043C\u0430\u0442\u0438\u0447\u0435\u0441\u043A\u0438 \u043D\u0435 \u043F\u0440\u0438\u043C\u0435\u043D\u044F\u044E\u0442\u0441\u044F.`;
       await refreshRecommendations();
     } else
@@ -16548,8 +17074,8 @@ function renderAdvancedPanel(request = nextRequest, loadConnections, lazy = fals
       status.textContent = "\u0421\u043E\u0441\u0442\u043E\u044F\u043D\u0438\u0435 \u043D\u0435\u0434\u043E\u0441\u0442\u0443\u043F\u043D\u043E. \u041E\u0431\u043D\u043E\u0432\u0438\u0442\u0435 \u0441\u0442\u0440\u0430\u043D\u0438\u0446\u0443 \u0438\u043B\u0438 \u043F\u0440\u043E\u0432\u0435\u0440\u044C\u0442\u0435 \u0441\u0435\u0440\u0432\u0438\u0441.";
       return;
     }
-    const d = object2(r.data);
-    const smart = object2(d.smart_detect);
+    const d = object4(r.data);
+    const smart = object4(d.smart_detect);
     autoDetect.node.checked = smart.enabled === true;
     const refreshedDigest = String(d.digest || "");
     if (digest && refreshedDigest !== digest) {
@@ -16559,7 +17085,7 @@ function renderAdvancedPanel(request = nextRequest, loadConnections, lazy = fals
     }
     if (previewName && refreshedDigest !== previewDigest) invalidatePreview();
     digest = refreshedDigest;
-    const versions = object2(d.versions);
+    const versions = object4(d.versions);
     status.textContent = area === "all" ? `Forkop ${versions.forkop || "\u2014"} \xB7 sing-box ${versions.sing_box || "\u2014"}${d.recovery_pending ? " \xB7 \u0422\u0440\u0435\u0431\u0443\u0435\u0442\u0441\u044F \u0432\u043E\u0441\u0441\u0442\u0430\u043D\u043E\u0432\u043B\u0435\u043D\u0438\u0435" : ""}` : d.recovery_pending ? "\u0422\u0440\u0435\u0431\u0443\u0435\u0442\u0441\u044F \u0432\u043E\u0441\u0441\u0442\u0430\u043D\u043E\u0432\u043B\u0435\u043D\u0438\u0435" : "";
     status.hidden = !status.textContent;
     rollback.disabled = !d.previous_available || d.recovery_pending === true;
@@ -16568,14 +17094,14 @@ function renderAdvancedPanel(request = nextRequest, loadConnections, lazy = fals
     recover.disabled = d.recovery_pending !== true;
     sections = (Array.isArray(d.sections) ? d.sections : []).map(
       (s) => {
-        const o = object2(s);
+        const o = object4(s);
         return [String(o.name), String(o.label || o.name)];
       }
     );
     if (temporaryItems) showTemporary();
     const capabilities = workflowContext(root).targets || [];
     const targets = (Array.isArray(d.sections) ? d.sections : []).map((raw) => {
-      const row = object2(raw);
+      const row = object4(raw);
       return {
         name: String(row.name),
         label: String(row.label || row.name),
@@ -17126,10 +17652,11 @@ function renderNextPanel(request = nextRequest, loadConnections, adapters = {}) 
               const outbound = group.outbounds.find((o) => o.selected);
               const host = group === primary ? selected : routesOutput;
               const row = el2("div", "", "fkp-next-route");
+              const prefix = group === primary && group.displayName === serverHeading.textContent ? "" : `${group.displayName}: `;
               row.append(
                 el2(
                   "p",
-                  `${group.displayName}: ${outbound?.displayName || "\u0441\u0435\u0440\u0432\u0435\u0440 \u043D\u0435 \u0432\u044B\u0431\u0440\u0430\u043D"}`,
+                  `${prefix}${outbound?.displayName || "\u0441\u0435\u0440\u0432\u0435\u0440 \u043D\u0435 \u0432\u044B\u0431\u0440\u0430\u043D"}`,
                   group === primary ? "fkp-next-selected-name" : ""
                 )
               );
@@ -18180,6 +18707,7 @@ var reasonText = {
   include_match: "\u0421\u043E\u0432\u043F\u0430\u0434\u0430\u0435\u0442 \u0441 \u0432\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435\u043C",
   include_miss: "\u041D\u0435\u0442 \u0441\u043E\u0432\u043F\u0430\u0434\u0435\u043D\u0438\u044F \u0441 \u0432\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435\u043C",
   exclude_match: "\u0421\u043E\u0432\u043F\u0430\u0434\u0430\u0435\u0442 \u0441 \u0438\u0441\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435\u043C",
+  exclude_miss: "\u041D\u0435 \u0441\u043E\u0432\u043F\u0430\u0434\u0430\u0435\u0442 \u0441 \u0438\u0441\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435\u043C",
   pool_excluded: "\u0418\u0441\u043A\u043B\u044E\u0447\u0451\u043D \u0438\u0437 \u043E\u0431\u0449\u0435\u0433\u043E \u043D\u0430\u0431\u043E\u0440\u0430",
   earlier_level: "\u0423\u0436\u0435 \u043D\u0430\u0437\u043D\u0430\u0447\u0435\u043D \u0431\u043E\u043B\u0435\u0435 \u0432\u044B\u0441\u043E\u043A\u043E\u043C\u0443 \u0443\u0440\u043E\u0432\u043D\u044E",
   direct_level: "\u041F\u0440\u044F\u043C\u043E\u0439 \u0432\u044B\u0445\u043E\u0434"

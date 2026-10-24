@@ -417,10 +417,15 @@ export function renderNextPanel(
               const outbound = group.outbounds.find((o) => o.selected);
               const host = group === primary ? selected : routesOutput;
               const row = el('div', '', 'fkp-next-route');
+              const prefix =
+                group === primary &&
+                group.displayName === serverHeading.textContent
+                  ? ''
+                  : `${group.displayName}: `;
               row.append(
                 el(
                   'p',
-                  `${group.displayName}: ${outbound?.displayName || 'сервер не выбран'}`,
+                  `${prefix}${outbound?.displayName || 'сервер не выбран'}`,
                   group === primary ? 'fkp-next-selected-name' : '',
                 ),
               );

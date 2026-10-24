@@ -2,6 +2,12 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+Execution update: the user's acceleration instruction authorized isolated parallel
+Task 5/6 file ownership and one integrated final gate. Task 7's scoped quality
+check and the whole-branch review use one final whole-branch review; repeat only
+checks affected by a new fix or failure. Individual workers retain their assigned
+scope and do not publish, merge or deploy.
+
 **Goal:** Deliver all 20 approved research improvements with Extended preserved and verified UI/build.
 
 **Architecture:** Extend the existing native section model with direct task adapters and shared trustworthy results. Add narrow, secret-free read APIs only for authoritative previews and capability evidence; keep existing writes transactional.
@@ -18,7 +24,7 @@
 - Native drafts survive navigation and immediate actions; do not silently reload them away. Show saved versus applied meaning.
 - API projections and previews omit credentials. Reuse authoritative backend resolvers for Extended preview. Do not approximate unsupported rules as confirmed.
 - Behavioral TDD: observe RED, implement GREEN, record commands/results in docs/tdd. Do not fabricate unavailable router, Linux packaging or screen-reader checks.
-- This task develops and verifies a reviewable branch; no router/VPS deployment is part of this implementation request.
+- Implementation workers develop and verify local source only. The user later authorized root to merge, release 1.2.0 and install it on the router after all twenty improvements and final debug/review/gates pass. Public artifacts exclude private infrastructure/account/endpoint facts; public dependency support, checksums, licensing and provenance remain intact.
 
 ## Review Focus
 
@@ -187,3 +193,14 @@
 - [ ] Run focused tests GREEN, full frontend suite, format/type checks as applicable; self-review.
 - [ ] Record RED/GREEN commands, limitations and file ownership in docs/tdd/twenty-ux-task-7.md, commit only own files, then independent task review.
 
+### Task 8: Final release and branch integration — root-owned
+
+- [ ] Inspect relevant branch deltas and integrate all approved project work without losing unrelated changes; keep the selected 1.2.0 version and sanitized notes fixed before the final immutable gate.
+- [ ] Complete the single independent whole-branch review, final browser/native checks and exact-tree frontend/backend/package CI; resolve meaningful failures with behavioral RED/GREEN and rerun affected gates.
+- [ ] Merge the reviewed source to main, publish the release and six verified IPK/APK assets with SHA256SUMS and source/workflow identity. Keep private test/deployment evidence outside public git and artifacts.
+
+### Task 9: Safe router installation — root-owned
+
+- [ ] Discover existing authorized access without exposing credentials; collect a read-only baseline and verify configuration/package/core recovery backups.
+- [ ] Prepare an independent delayed rollback before network-affecting installation. Stage the verified published packages without an unrelated VPS/control-panel/core upgrade.
+- [ ] Observe service, DNS, HTTPS, IPv4/IPv6, selected routes and UI health; disarm rollback only after healthy access is confirmed. Retain private backup and deployment evidence separately.

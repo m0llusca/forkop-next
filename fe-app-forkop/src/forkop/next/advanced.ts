@@ -8,6 +8,8 @@ import {
 import { renderDeviceProfileTools } from './tools';
 import { renderCompatibilityPanel } from './compatibility';
 import { nextRequest, type NextResponse } from './api';
+import { renderSymptomGuide } from '../tabs/diagnostic/symptomGuide';
+import { diagnosticRead } from '../tabs/diagnostic/symptomRead';
 type Obj = Record<string, unknown>;
 export type Request = (action: string, payload?: Obj) => Promise<NextResponse>;
 export type ToolArea = 'all' | 'rules' | 'diagnostics' | 'settings' | 'devices';
@@ -64,6 +66,7 @@ export function renderAdvancedPanel(
   loadConnections?: ConnectionLoader,
   lazy = false,
   area: ToolArea = 'all',
+  readDiagnostic: Request = diagnosticRead,
 ): HTMLElement {
   const includes = (part: ToolArea) => area === 'all' || area === part;
   // Share one read per refresh wave, never across explicit refreshes or actions.
@@ -146,6 +149,14 @@ export function renderAdvancedPanel(
   }
   const content = el('div', '', 'fkp-next-content');
   root.append(content);
+  if (includes('diagnostics'))
+    content.append(
+      renderSymptomGuide((action, payload) =>
+        action === 'status'
+          ? initialRequest(action, payload)
+          : readDiagnostic(action, payload),
+      ),
+    );
   let digest = '';
   let sections: [string, string][] = [];
   const connectionLabel = (name: unknown, fallback = '—') =>
@@ -231,6 +242,31 @@ export function renderAdvancedPanel(
               : `Действие не выполнено: ${result.error || 'неизвестная ошибка'}`,
           ),
         );
+        if (result.success && action === 'profile_diff' && changed) {
+          const counts = { rules: 0, devices: 0, dns: 0, other: 0 };
+          for (const raw of changed) {
+            const key = String(raw).split('.').pop() || '';
+            if (/fully_routed_ips|source_ip|device/.test(key)) counts.devices++;
+            else if (/dns|fakeip/.test(key)) counts.dns++;
+            else if (
+              /^(domain.*|ip_cidr.*|ports.*|enabled|action|proxy_config_type|outbound.*|interface|rule_set.*|community_lists|priority.*|urltest.*)$/.test(
+                key,
+              )
+            )
+              counts.rules++;
+            else counts.other++;
+          }
+          output.append(
+            el(
+              'p',
+              `Правила и подключения: ${counts.rules} · Устройства: ${counts.devices} · DNS: ${counts.dns} · Прочие параметры: ${counts.other}`,
+            ),
+            el(
+              'p',
+              'Это число изменённых параметров, а не устройств. После применения маршруты и DNS могут измениться; соединения могут прерваться. Значения скрыты.',
+            ),
+          );
+        }
         const details = el('details');
         details.append(el('summary', 'Технические подробности'));
         if (result.success && action === 'profile_diff' && changed?.length) {
@@ -241,7 +277,17 @@ export function renderAdvancedPanel(
         details.append(
           el(
             'pre',
-            JSON.stringify(result.data ?? { error: result.error }, null, 2),
+            JSON.stringify(
+              action === 'profile_diff'
+                ? {
+                    changed,
+                    current_digest: data.current_digest,
+                    profile_digest: data.profile_digest,
+                  }
+                : (result.data ?? { error: result.error }),
+              null,
+              2,
+            ),
           ),
         );
         output.append(details);
@@ -273,30 +319,74 @@ export function renderAdvancedPanel(
     'Проверка правил объясняет маршрут. Доступность проверяется отдельным действием.',
     'diagnostics',
   );
-  const domain = input('domain', 'Домен');
+  const domain = input('domain', 'Домен или IP цели');
   domain.node.placeholder = 'example.org';
   const device = input('device', 'IP устройства (необязательно)');
+  const protocol = select('Протокол', [
+    ['tcp', 'TCP'],
+    ['udp', 'UDP'],
+    ['quic', 'QUIC'],
+    ['dns', 'DNS'],
+  ]);
+  protocol.node.name = 'route_protocol';
+  const port = input('route_port', 'Порт', '443');
+  port.node.inputMode = 'numeric';
+  const parameters = el('details');
+  parameters.append(
+    el('summary', 'Параметры запроса · по умолчанию HTTPS / TCP / 443'),
+    protocol.wrap,
+    port.wrap,
+  );
+  const basis = el(
+    'p',
+    'Сохранённая конфигурация на роутере. Черновик LuCI и фактически применённый маршрут не подтверждены этой проверкой.',
+  );
   const routeResult = el('div', '', 'fkp-next-result');
   let routeGeneration = 0;
   let probeGeneration = 0;
-  const routeKey = () => JSON.stringify([domain.node.value, device.node.value]);
+  const routeKey = () =>
+    JSON.stringify([
+      domain.node.value,
+      device.node.value,
+      protocol.node.value,
+      port.node.value,
+    ]);
   const probeKey = () =>
     JSON.stringify([domain.node.value, probeSection.node.value]);
   routeResult.setAttribute('aria-live', 'polite');
   route.append(
     domain.wrap,
     device.wrap,
+    parameters,
+    basis,
     action('Объяснить маршрут', async () => {
       const generation = ++routeGeneration;
       const key = routeKey();
       const capturedDomain = domain.node.value.trim();
       const capturedDevice = device.node.value.trim();
       const capturedAt = new Date().toLocaleString();
+      const capturedProtocol = protocol.node.value;
+      const capturedPort = port.node.value;
+      if (
+        !capturedDomain ||
+        !/^\d+$/.test(capturedPort) ||
+        Number(capturedPort) < 1 ||
+        Number(capturedPort) > 65535
+      ) {
+        routeResult.textContent =
+          'Укажите домен/IP и целый порт от 1 до 65535.';
+        return;
+      }
+      const target =
+        capturedDomain.includes(':') ||
+        /^\d+\.\d+\.\d+\.\d+$/.test(capturedDomain)
+          ? { destination_ip: capturedDomain }
+          : { domain: capturedDomain };
       const r = await invoke('route_explain', {
-        domain: domain.node.value.trim(),
-        device: device.node.value.trim(),
-        port: 443,
-        protocol: 'tcp',
+        ...target,
+        ...(capturedDevice ? { device: capturedDevice } : {}),
+        port: Number(capturedPort),
+        protocol: capturedProtocol,
       });
       if (generation !== routeGeneration || key !== routeKey()) return;
       routeResult.replaceChildren();
@@ -307,7 +397,7 @@ export function renderAdvancedPanel(
         matched: 'Правило найдено',
         direct: 'Напрямую',
         blocked: 'Заблокировано',
-        indeterminate: 'Маршрут требует уточнения',
+        indeterminate: 'Не подтверждено',
       };
       routeResult.append(
         el(
@@ -317,9 +407,59 @@ export function renderAdvancedPanel(
         el('p', 'Доступность сайта не проверялась'),
         el(
           'p',
-          `Цель: ${capturedDomain} · Устройство: ${capturedDevice || 'не указано'} · Источник правил: роутер · ${capturedAt}`,
+          `Устройство: ${capturedDevice || 'не указано'} → Цель: ${capturedDomain} → ${capturedProtocol.toUpperCase()}/${capturedPort} · Сохранённая конфигурация · Источник правил: роутер · ${capturedAt}`,
         ),
       );
+      const reasons: Record<string, string> = {
+        section_conditions: 'Условия правила',
+        fully_routed_ips: 'Назначение устройства',
+        expired: 'Срок правила истёк',
+        exclude_ntp: 'Исключение NTP',
+        hijack_dns: 'Обработка DNS',
+        disable_quic: 'QUIC отключён',
+        service_ip_check: 'Служебная проверка адреса',
+      };
+      const winner = (Array.isArray(data.trace) ? data.trace : [])
+        .map(object)
+        .reverse()
+        .find((row) => row.match === 'yes');
+      if (winner && decision.status !== 'indeterminate')
+        routeResult.append(
+          el(
+            'p',
+            `Причина: ${reasons[String(winner.reason)] || 'Условие из сохранённых правил'}`,
+          ),
+        );
+      if (decision.status === 'indeterminate') {
+        const missing: Record<string, string> = {
+          rule_set: 'содержимое набора правил',
+          device: 'адрес устройства',
+          port: 'порт',
+          destination: 'условие назначения',
+          unsupported_action: 'поддержка действия',
+          evaluation_limit: 'предел анализа',
+        };
+        routeResult.append(
+          el(
+            'p',
+            `Не хватает данных: ${(Array.isArray(data.missing) ? data.missing : []).map((value) => missing[String(value)] || 'неизвестное условие').join(', ') || 'условия правила'}.`,
+          ),
+        );
+      } else if (typeof decision.section === 'string' && decision.section) {
+        routeResult.append(
+          action('Открыть правило', async () => {
+            if (
+              !navigateToRule(root, {
+                kind: 'edit',
+                section: String(decision.section),
+                option: 'domain',
+              })
+            )
+              message.textContent =
+                'Не удалось открыть точное правило. Откройте раздел правил и повторите.';
+          }),
+        );
+      }
       const trace = el('ol');
       trace.dataset.detail = 'true';
       trace.hidden = root.dataset.mode !== 'detailed';
@@ -328,7 +468,7 @@ export function renderAdvancedPanel(
         trace.append(
           el(
             'li',
-            `${connectionLabel(row.section, '')}: ${row.reason || row.match || ''}`,
+            `${connectionLabel(row.section, '')}: ${reasons[String(row.reason)] || row.reason || 'Дополнительное условие'} · ${row.match === 'yes' ? 'совпало' : row.match === 'no' ? 'не совпало' : 'не подтверждено'}`,
           ),
         );
       }
@@ -376,6 +516,8 @@ export function renderAdvancedPanel(
     invalidateProbe();
   };
   device.node.oninput = invalidateRoute;
+  protocol.node.onchange = invalidateRoute;
+  port.node.oninput = invalidateRoute;
   probeSection.node.onchange = invalidateProbe;
   const probeSettings = el('div');
   route.append(probeSection.wrap, probeAction, probeResult, probeSettings);

@@ -18,7 +18,8 @@ Implement direct workflows over the existing section model, not a new independen
 - Native drafts survive navigation and immediate actions; do not silently reload them away. Show saved versus applied meaning.
 - API projections and previews omit credentials. Reuse authoritative backend resolvers for Extended preview. Do not approximate unsupported rules as confirmed.
 - Behavioral TDD: observe RED, implement GREEN, record commands/results in docs/tdd. Do not fabricate unavailable router, Linux packaging or screen-reader checks.
-- This task develops and verifies a reviewable branch; no router/VPS deployment is part of this implementation request.
+- Implementation workers develop and verify local source only. The user's later authorization extends the root workflow to merge the reviewed project work, publish version 1.2.0 and install it on the router after all twenty items, final debug, independent review and immutable frontend/backend/package/browser gates pass.
+- Before a network-affecting install, root verifies backup and recovery files and an independent delayed rollback; it removes rollback only after observing healthy access and network/UI checks. No VPS or server-core upgrade is implied. Public release material excludes private infrastructure/account/endpoint evidence while retaining public compatibility fixtures, checksums, license and provenance.
 
 ## F01: Результат проверки должен принадлежать конкретным параметрам
 
@@ -219,4 +220,3 @@ Implement direct workflows over the existing section model, not a new independen
 **Dependency:** Оркестрация существующих проверок; дополнительные объяснения и runtime evidence по мере появления.
 
 **Research locations:** Скриншоты 09,10; текущие панели Diagnostics и route_explain
-

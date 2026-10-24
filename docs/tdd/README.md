@@ -1,5 +1,11 @@
 # Verification scope
 
+The prepared 1.2.0 frontend gate passed 910 tests in 88 files, full source
+types/lint/format checks, generated LuCI execution smoke and native syntax.
+[Task 7](twenty-ux-task-7.md) records exact source/bundle identities and the
+F01–F20 matrix. Final integrated backend/package CI, whole-branch review,
+browser acceptance and device installation are still separate pending gates.
+
 Forkop Next 1.1.4 has behavioral regression coverage for configuration transactions,
 recovery, routing explanations, TLS intent, network guards, core updates and UI.
 The preceding release verification passed 243 backend tests without skips,

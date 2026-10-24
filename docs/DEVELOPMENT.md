@@ -38,7 +38,7 @@ pnpm run build
 ## Пакеты
 
 ```sh
-bash build.sh 1.1.4
+bash build.sh 1.2.0
 ```
 
 По умолчанию шесть пакетов появляются в `dist/release-final`. Сборка требует
@@ -54,7 +54,7 @@ SDK OpenWrt проверяются по SHA256; инструмент перев�
 2. Дождаться зелёной сборки PR с backend/frontend gates и ShellCheck;
    слить проверенный head в `m0llusca/forkop-next/main`, сохранив новые записи регрессионных проверок.
 3. В Actions → Build packages запустить workflow на **main** с
-   `release_tag=1.1.4` и описанием выпуска из документа выше.
+   `release_tag=1.2.0` и описанием выпуска из документа выше.
    Dispatch публикует релиз автоматически после gates и сборки;
    простой push в main пакетный релиз не создаёт. Push тега тоже публикует релиз.
 4. Убедиться, что head workflow, тег и main указывают на выбранный коммит.

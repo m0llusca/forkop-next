@@ -459,7 +459,64 @@ it('lets native reset explicitly discard a DOM draft before retrying an immediat
   });
   expect((await nextRequest('recover')).error).toBe('native_pending_changes');
   await state.maps[0].reset();
+  expect(root.querySelector<HTMLElement>('.fkp-next-notice')!.hidden).toBe(
+    true,
+  );
   expect((await nextRequest('recover')).success).toBe(true);
+});
+it('keeps a native cached reorder unsaved after Reset discards only the DOM draft', async () => {
+  const entries = {
+    main: { '.name': 'main', '.index': 0 },
+    games: { '.name': 'games', '.index': 1 },
+  };
+  const source = readFileSync(
+    'src/forkop/workspace/tests/fixtures/nativeUciMove.js',
+    'utf8',
+  );
+  const move = new Function(`const native = ${source}; return native.move;`)();
+  const unload = vi.fn();
+  const cache = {
+    state: { reorder: {} as Record<string, boolean> },
+    sections: () =>
+      Object.values(entries).sort((a, b) => a['.index'] - b['.index']),
+    get: (_config: string, id: keyof typeof entries) => entries[id],
+    resolveSID: (_config: string, id: string) => id,
+    move,
+    changes: async () => ({}),
+    unload,
+  };
+  const state = setup(
+    { getUiCapabilities: () => new Promise(() => {}) },
+    cache,
+  );
+  const root: HTMLElement = await state.controller.render();
+  document.body.append(root);
+  await tick();
+  cache.move('forkop', 'main', 'games', true);
+  const draft = root.querySelector<HTMLInputElement>('[name=native-settings]')!;
+  draft.value = 'unsaved DNS';
+  draft.dispatchEvent(new Event('input', { bubbles: true }));
+
+  // Native Map.reset rerenders from the UCI cache; it never unloads it.
+  await state.maps[0].reset();
+
+  expect(
+    root.querySelector<HTMLInputElement>('[name=native-settings]')!.value,
+  ).toBe('saved');
+  expect(cache.sections().map((entry) => entry['.name'])).toEqual([
+    'games',
+    'main',
+  ]);
+  expect(cache.state.reorder.forkop).toBe(true);
+  expect(unload).not.toHaveBeenCalled();
+  const pending = root.querySelector<HTMLElement>('.fkp-next-notice')!;
+  expect(pending.hidden).toBe(false);
+  expect(pending.textContent).toContain('Есть несохранённые изменения');
+  expect(pending.textContent).not.toContain(
+    'Изменения сохранены, но ещё не применены',
+  );
+  vi.stubGlobal('fs', { exec: vi.fn() });
+  expect((await nextRequest('recover')).error).toBe('native_pending_changes');
 });
 it('appends focused pure UI sections after original native IDs and exposes all six primary areas', async () => {
   const state = setup({ getUiCapabilities: () => new Promise(() => {}) });

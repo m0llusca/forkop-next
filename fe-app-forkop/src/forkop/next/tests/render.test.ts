@@ -267,10 +267,7 @@ describe('Next control panel', () => {
     button('Объяснить маршрут').click();
     await tick();
     expect(calls.filter(([a]) => a === 'route_explain')).toEqual([
-      [
-        'route_explain',
-        { domain: 'example.org', device: '', port: 443, protocol: 'tcp' },
-      ],
+      ['route_explain', { domain: 'example.org', port: 443, protocol: 'tcp' }],
     ]);
     expect(calls.some(([a]) => a.includes('probe'))).toBe(false);
     expect(document.body.textContent).toContain(
