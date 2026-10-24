@@ -1,0 +1,799 @@
+diff --git a/option/tls.go b/option/tls.go
+--- a/option/tls.go
++++ b/option/tls.go
+@@ -254,4 +254,5 @@
+ 	PublicKey             string `json:"public_key,omitempty"`
+ 	ShortID               string `json:"short_id,omitempty"`
+ 	SupportX25519MLKEM768 bool   `json:"support_x25519mlkem768,omitempty"`
+-}
++	RecordFragmentSize    uint16 `json:"record_fragment_size,omitempty"`
++}
+diff --git a/common/tls/reality_client.go b/common/tls/reality_client.go
+--- a/common/tls/reality_client.go
++++ b/common/tls/reality_client.go
+@@ -28,6 +28,7 @@
+ 	"unsafe"
+ 
+ 	"github.com/sagernet/sing-box/adapter"
++	tf "github.com/sagernet/sing-box/common/tlsfragment"
+ 	C "github.com/sagernet/sing-box/constant"
+ 	"github.com/sagernet/sing-box/option"
+ 	"github.com/sagernet/sing/common"
+@@ -50,6 +51,7 @@
+ 	publicKey             []byte
+ 	shortID               [8]byte
+ 	supportX25519MLKEM768 bool
++	recordFragmentSize    uint16
+ }
+ 
+ func NewRealityClient(ctx context.Context, logger logger.ContextLogger, serverAddress string, options option.OutboundTLSOptions) (Config, error) {
+@@ -57,6 +59,9 @@
+ }
+ 
+ func newRealityClient(ctx context.Context, logger logger.ContextLogger, serverAddress string, options option.OutboundTLSOptions, allowEmptyServerName bool) (Config, error) {
++	if options.Reality.RecordFragmentSize > 16384 {
++		return nil, E.New("reality record_fragment_size must be 0 or between 1 and 16384")
++	}
+ 	if options.UTLS == nil || !options.UTLS.Enabled {
+ 		return nil, E.New("uTLS is required by reality client")
+ 	}
+@@ -85,7 +90,7 @@
+ 		return nil, E.New("invalid short_id")
+ 	}
+ 
+-	var config Config = &RealityClientConfig{ctx, uClient.(*UTLSClientConfig), publicKey, shortID, options.Reality.SupportX25519MLKEM768}
++	var config Config = &RealityClientConfig{ctx: ctx, uClient: uClient.(*UTLSClientConfig), publicKey: publicKey, shortID: shortID, supportX25519MLKEM768: options.Reality.SupportX25519MLKEM768, recordFragmentSize: options.Reality.RecordFragmentSize}
+ 	if options.KernelRx || options.KernelTx {
+ 		if !C.IsLinux {
+ 			return nil, E.New("kTLS is only supported on Linux")
+@@ -133,6 +138,13 @@
+ }
+ 
+ func (e *RealityClientConfig) ClientHandshake(ctx context.Context, conn net.Conn) (aTLS.Conn, error) {
++	if e.recordFragmentSize != 0 {
++		var err error
++		conn, err = tf.NewRecordConn(conn, e.recordFragmentSize)
++		if err != nil {
++			return nil, err
++		}
++	}
+ 	verifier := &realityVerifier{
+ 		serverName: e.uClient.ServerName(),
+ 	}
+@@ -270,11 +282,12 @@
+ 
+ func (e *RealityClientConfig) Clone() Config {
+ 	return &RealityClientConfig{
+-		e.ctx,
+-		e.uClient.Clone().(*UTLSClientConfig),
+-		e.publicKey,
+-		e.shortID,
+-		e.supportX25519MLKEM768,
++		ctx:                   e.ctx,
++		uClient:               e.uClient.Clone().(*UTLSClientConfig),
++		publicKey:             e.publicKey,
++		shortID:               e.shortID,
++		supportX25519MLKEM768: e.supportX25519MLKEM768,
++		recordFragmentSize:    e.recordFragmentSize,
+ 	}
+ }
+ 
+diff --git a/common/tlsfragment/record_conn.go b/common/tlsfragment/record_conn.go
+new file mode 100644
+--- /dev/null
++++ b/common/tlsfragment/record_conn.go
+@@ -0,0 +1,142 @@
++package tf
++
++import (
++	"encoding/binary"
++	"errors"
++	"io"
++	"net"
++	"sync"
++	"sync/atomic"
++)
++
++// RecordConn reframes only the first complete plaintext ClientHello record.
++// Buffered bytes are acknowledged as accepted input, including on a triggering
++// Write that subsequently fails to flush. Any such error is terminal: callers
++// must close the connection, not replay input. At most 5+16384 bytes are buffered.
++// Close and deadlines never acquire the write mutex, so they can interrupt Write.
++type RecordConn struct {
++	net.Conn
++	size        int
++	mu          sync.Mutex
++	first       []byte
++	done        bool
++	terminal    error
++	replaceable atomic.Bool
++	closed      atomic.Bool
++}
++
++func NewRecordConn(conn net.Conn, size uint16) (*RecordConn, error) {
++	if size == 0 || size > 16384 {
++		return nil, errors.New("record fragment size must be between 1 and 16384")
++	}
++	return &RecordConn{Conn: conn, size: int(size)}, nil
++}
++
++func (c *RecordConn) fail(err error) error {
++	c.terminal = err
++	c.first = nil
++	c.replaceable.Store(false)
++	return err
++}
++
++func (c *RecordConn) writeAll(p []byte) error {
++	for len(p) > 0 {
++		n, err := c.Conn.Write(p)
++		if n < 0 || n > len(p) {
++			return io.ErrShortWrite
++		}
++		p = p[n:]
++		if err != nil {
++			return err
++		}
++		if n == 0 {
++			return io.ErrShortWrite
++		}
++	}
++	return nil
++}
++
++func (c *RecordConn) Write(p []byte) (int, error) {
++	c.mu.Lock()
++	defer c.mu.Unlock()
++	if c.closed.Load() {
++		return 0, net.ErrClosed
++	}
++	if c.terminal != nil {
++		return 0, c.terminal
++	}
++	if len(p) == 0 {
++		return 0, nil
++	}
++	if c.done {
++		return c.Conn.Write(p)
++	}
++	accepted := 0
++	for !c.done {
++		needed := 5
++		if len(c.first) >= 5 {
++			header := c.first[:5]
++			length := int(binary.BigEndian.Uint16(header[3:5]))
++			if header[0] != 22 || header[1] != 3 || header[2] < 1 || header[2] > 3 || length < 4 || length > 16384 {
++				return accepted, c.fail(errors.New("invalid first TLS ClientHello record header"))
++			}
++			needed += length
++		}
++		if len(c.first) < needed {
++			n := min(needed-len(c.first), len(p))
++			if cap(c.first) < needed {
++				buffer := make([]byte, len(c.first), needed)
++				copy(buffer, c.first)
++				c.first = buffer
++			}
++			c.first = append(c.first, p[:n]...)
++			p = p[n:]
++			accepted += n
++			if len(c.first) < needed {
++				return accepted, nil
++			}
++			if needed == 5 {
++				continue
++			}
++		}
++		payload := c.first[5:]
++		if payload[0] != 1 || int(payload[1])<<16|int(payload[2])<<8|int(payload[3]) != len(payload)-4 {
++			return accepted, c.fail(errors.New("first TLS record must contain one complete ClientHello"))
++		}
++		// Build once and flush with short-write handling; no packet timing changes.
++		wire := make([]byte, 0, len(c.first)+5*((len(payload)-1)/c.size))
++		for len(payload) > 0 {
++			n := min(c.size, len(payload))
++			wire = append(wire, c.first[:3]...)
++			wire = append(wire, byte(n>>8), byte(n))
++			wire = append(wire, payload[:n]...)
++			payload = payload[n:]
++		}
++		if err := c.writeAll(wire); err != nil {
++			return accepted, c.fail(err)
++		}
++		c.first = nil
++		c.done = true
++	}
++	if len(p) > 0 {
++		n, err := c.Conn.Write(p)
++		accepted += n
++		if err != nil {
++			return accepted, c.fail(err)
++		}
++		if n != len(p) {
++			return accepted, c.fail(io.ErrShortWrite)
++		}
++	}
++	c.replaceable.Store(true)
++	return accepted, nil
++}
++
++func (c *RecordConn) Close() error {
++	c.closed.Store(true)
++	return c.Conn.Close()
++}
++
++func (c *RecordConn) WriterReplaceable() bool { return c.replaceable.Load() && !c.closed.Load() }
++func (c *RecordConn) ReaderReplaceable() bool { return true }
++func (c *RecordConn) Upstream() any           { return c.Conn }
+diff --git a/common/tlsfragment/record_conn_test.go b/common/tlsfragment/record_conn_test.go
+new file mode 100644
+--- /dev/null
++++ b/common/tlsfragment/record_conn_test.go
+@@ -0,0 +1,287 @@
++package tf
++
++import (
++	"bytes"
++	"encoding/binary"
++	"errors"
++	"io"
++	"net"
++	"sync"
++	"testing"
++	"time"
++)
++
++func recordHello(size int) []byte {
++	p := make([]byte, size)
++	p[0] = 1
++	p[1], p[2], p[3] = byte((size-4)>>16), byte((size-4)>>8), byte(size-4)
++	for i := 4; i < size; i++ {
++		p[i] = byte(i % 251)
++	}
++	return append([]byte{22, 3, 1, byte(size >> 8), byte(size)}, p...)
++}
++
++func recordPayloads(t *testing.T, wire []byte) ([][]byte, []byte) {
++	t.Helper()
++	var parts [][]byte
++	var joined []byte
++	for len(wire) > 0 {
++		if len(wire) < 5 {
++			t.Fatal("short record header")
++		}
++		n := int(binary.BigEndian.Uint16(wire[3:5]))
++		if len(wire) < 5+n {
++			t.Fatal("short record payload")
++		}
++		parts = append(parts, append([]byte(nil), wire[5:5+n]...))
++		joined = append(joined, wire[5:5+n]...)
++		wire = wire[5+n:]
++	}
++	return parts, joined
++}
++
++type recordCapture struct {
++	bytes.Buffer
++	limit   int
++	failAt  int
++	failure error
++	zero    bool
++}
++
++type recordWriteSignalConn struct {
++	net.Conn
++	entered chan struct{}
++	once    sync.Once
++}
++
++func (c *recordWriteSignalConn) Write(p []byte) (int, error) {
++	c.once.Do(func() { close(c.entered) })
++	return c.Conn.Write(p)
++}
++
++func (c *recordCapture) Write(p []byte) (int, error) {
++	if c.zero {
++		return 0, nil
++	}
++	if c.failure != nil && c.Len() >= c.failAt {
++		return 0, c.failure
++	}
++	n := len(p)
++	if c.limit > 0 && n > c.limit {
++		n = c.limit
++	}
++	if c.failure != nil && c.Len()+n > c.failAt {
++		n = c.failAt - c.Len()
++	}
++	return c.Buffer.Write(p[:n])
++}
++func (c *recordCapture) Read(p []byte) (int, error)       { return 0, io.EOF }
++func (c *recordCapture) Close() error                     { return nil }
++func (c *recordCapture) LocalAddr() net.Addr              { return nil }
++func (c *recordCapture) RemoteAddr() net.Addr             { return nil }
++func (c *recordCapture) SetDeadline(time.Time) error      { return nil }
++func (c *recordCapture) SetReadDeadline(time.Time) error  { return nil }
++func (c *recordCapture) SetWriteDeadline(time.Time) error { return nil }
++
++func TestRecordConnPreservesHandshakeAndTail(t *testing.T) {
++	hello := recordHello(1024)
++	tail := []byte{20, 3, 3, 0, 1, 1, 23, 3, 3, 0, 3, 1, 2, 3}
++	capture := &recordCapture{}
++	c, err := NewRecordConn(capture, 256)
++	if err != nil {
++		t.Fatal(err)
++	}
++	input := append(append([]byte(nil), hello...), tail...)
++	n, err := c.Write(input)
++	if n != len(input) || err != nil {
++		t.Fatalf("write = %d, %v", n, err)
++	}
++	wire := capture.Bytes()
++	if !bytes.HasSuffix(wire, tail) {
++		t.Fatal("tail changed")
++	}
++	parts, joined := recordPayloads(t, wire[:len(wire)-len(tail)])
++	if len(parts) != 4 {
++		t.Fatalf("want four records, got %d", len(parts))
++	}
++	for _, p := range parts {
++		if len(p) != 256 {
++			t.Fatal("wrong record size")
++		}
++	}
++	if !bytes.Equal(joined, hello[5:]) {
++		t.Fatal("handshake changed")
++	}
++	capture.Reset()
++	if n, err = c.Write(hello); n != len(hello) || err != nil || !bytes.Equal(capture.Bytes(), hello) {
++		t.Fatal("later write changed")
++	}
++}
++
++func TestRecordConnStreamingBoundaries(t *testing.T) {
++	for _, size := range []int{4, 255, 256, 257, 1024, 16384} {
++		input := recordHello(size)
++		for cut := 0; cut <= len(input); cut++ {
++			capture := &recordCapture{}
++			c, err := NewRecordConn(capture, 256)
++			if err != nil {
++				t.Fatal(err)
++			}
++			for _, chunk := range [][]byte{input[:cut], nil, input[cut:]} {
++				n, e := c.Write(chunk)
++				if n != len(chunk) || e != nil {
++					t.Fatalf("size %d cut %d: %d %v", size, cut, n, e)
++				}
++			}
++			parts, joined := recordPayloads(t, capture.Bytes())
++			if !bytes.Equal(joined, input[5:]) {
++				t.Fatalf("size %d cut %d payload changed", size, cut)
++			}
++			for _, p := range parts {
++				if len(p) > 256 {
++					t.Fatal("oversize")
++				}
++			}
++		}
++	}
++}
++
++func TestRecordConnLimitsAndMalformed(t *testing.T) {
++	for _, size := range []uint16{0, 16385, 65535} {
++		if _, err := NewRecordConn(&recordCapture{}, size); err == nil {
++			t.Fatalf("accepted size %d", size)
++		}
++	}
++	for _, size := range []uint16{1, 256, 16384} {
++		capture := &recordCapture{}
++		c, err := NewRecordConn(capture, size)
++		if err != nil {
++			t.Fatal(err)
++		}
++		if _, err = c.Write(recordHello(257)); err != nil {
++			t.Fatal(err)
++		}
++		parts, _ := recordPayloads(t, capture.Bytes())
++		for _, p := range parts {
++			if len(p) > int(size) {
++				t.Fatal("oversize")
++			}
++		}
++	}
++	good := recordHello(257)
++	cases := [][]byte{{23, 3, 1, 0, 4, 1, 0, 0, 0}, {22, 2, 1, 0, 4, 1, 0, 0, 0}, {22, 3, 4, 0, 4, 1, 0, 0, 0}, {22, 3, 1, 0, 0}, {22, 3, 1, 64, 1}, append(append([]byte(nil), good[:5]...), append([]byte{2}, good[6:]...)...)}
++	badLen := append([]byte(nil), good...)
++	badLen[8]++
++	cases = append(cases, badLen)
++	for _, input := range cases {
++		capture := &recordCapture{}
++		c, _ := NewRecordConn(capture, 256)
++		if _, err := c.Write(input); err == nil {
++			t.Fatal("accepted malformed first record")
++		}
++		if capture.Len() != 0 {
++			t.Fatal("malformed data escaped")
++		}
++		if n, err := c.Write(good); n != 0 || err == nil {
++			t.Fatal("malformed error not terminal")
++		}
++		if c.WriterReplaceable() {
++			t.Fatal("terminal wrapper can be bypassed")
++		}
++	}
++}
++
++func TestRecordConnShortAndFailedWrites(t *testing.T) {
++	input := recordHello(1024)
++	short := &recordCapture{limit: 3}
++	c, _ := NewRecordConn(short, 256)
++	if n, err := c.Write(input); n != len(input) || err != nil {
++		t.Fatalf("short write not completed: %d %v", n, err)
++	}
++	_, joined := recordPayloads(t, short.Bytes())
++	if !bytes.Equal(joined, input[5:]) {
++		t.Fatal("short writes changed payload")
++	}
++	boom := errors.New("fixture failure")
++	for _, at := range []int{0, 1, 4, 5, 100, 260, 261, 500} {
++		capture := &recordCapture{failAt: at, failure: boom}
++		c, _ := NewRecordConn(capture, 256)
++		n, err := c.Write(input)
++		if n != len(input) || !errors.Is(err, boom) {
++			t.Fatalf("at%d count%d err%v", at, n, err)
++		}
++		written := capture.Len()
++		if written != at {
++			t.Fatalf("want %d wire bytes got%d", at, written)
++		}
++		if n, err = c.Write(input); n != 0 || !errors.Is(err, boom) || capture.Len() != written {
++			t.Fatal("terminal failure duplicated output")
++		}
++		if c.WriterReplaceable() {
++			t.Fatal("failed wrapper bypassable")
++		}
++	}
++	zero := &recordCapture{zero: true}
++	c, _ = NewRecordConn(zero, 256)
++	if _, err := c.Write(input); !errors.Is(err, io.ErrShortWrite) {
++		t.Fatalf("zero write: %v", err)
++	}
++}
++
++func TestRecordConnCloseAndDeadlineReleaseWrite(t *testing.T) {
++	for _, closeIt := range []bool{true, false} {
++		client, server := net.Pipe()
++		signaled := &recordWriteSignalConn{Conn: client, entered: make(chan struct{})}
++		c, _ := NewRecordConn(signaled, 256)
++		finished := make(chan error, 1)
++		go func() { _, err := c.Write(recordHello(1024)); finished <- err }()
++		select {
++		case <-signaled.entered:
++		case <-time.After(time.Second):
++			t.Fatal("did not enter underlying Write")
++		}
++		if closeIt {
++			c.Close()
++		} else {
++			c.SetWriteDeadline(time.Now().Add(10 * time.Millisecond))
++		}
++		select {
++		case err := <-finished:
++			if err == nil {
++				t.Fatal("blocked write unexpectedly succeeded")
++			}
++		case <-time.After(time.Second):
++			t.Fatal("Close/deadline blocked by write mutex")
++		}
++		c.Close()
++		server.Close()
++	}
++}
++
++func TestRecordConnTruncatedBufferAndOptimization(t *testing.T) {
++	capture := &recordCapture{}
++	c, _ := NewRecordConn(capture, 256)
++	if c.WriterReplaceable() {
++		t.Fatal("wrapper bypassable before first record")
++	}
++	if !c.ReaderReplaceable() || c.Upstream() != capture {
++		t.Fatal("reader/upstream contract changed")
++	}
++	input := recordHello(1024)
++	if n, err := c.Write(input[:7]); n != 7 || err != nil {
++		t.Fatal("partial header/payload not accepted")
++	}
++	if capture.Len() != 0 || c.WriterReplaceable() {
++		t.Fatal("truncated record escaped/bypassable")
++	}
++	c.Close()
++	if n, err := c.Write(input[7:8]); n != 0 || !errors.Is(err, net.ErrClosed) {
++		t.Fatal("closed wrapper accepted more truncated data")
++	}
++	complete := &recordCapture{}
++	c, _ = NewRecordConn(complete, 256)
++	c.Write(input)
++	if !c.WriterReplaceable() {
++		t.Fatal("completed record still hides transparent writer")
++	}
++}
+diff --git a/common/tls/reality_record_test.go b/common/tls/reality_record_test.go
+new file mode 100644
+--- /dev/null
++++ b/common/tls/reality_record_test.go
+@@ -0,0 +1,275 @@
++//go:build with_utls
++
++package tls
++
++import (
++	"bytes"
++	"context"
++	"crypto/aes"
++	"crypto/cipher"
++	"crypto/ecdh"
++	"crypto/rand"
++	"crypto/sha256"
++	"encoding/base64"
++	"encoding/binary"
++	"encoding/json"
++	"io"
++	"net"
++	"sync"
++	"testing"
++	"time"
++
++	"github.com/sagernet/sing-box/option"
++	"github.com/sagernet/sing/common/logger"
++	"golang.org/x/crypto/hkdf"
++)
++
++type realityCaptureConn struct {
++	bytes.Buffer
++	writes int
++}
++
++type realityWriteSignalConn struct {
++	net.Conn
++	entered chan struct{}
++	once    sync.Once
++}
++
++func (c *realityWriteSignalConn) Write(p []byte) (int, error) {
++	c.once.Do(func() { close(c.entered) })
++	return c.Conn.Write(p)
++}
++
++func (c *realityCaptureConn) Write(p []byte) (int, error)      { c.writes++; return c.Buffer.Write(p) }
++func (c *realityCaptureConn) Read(p []byte) (int, error)       { return 0, io.EOF }
++func (c *realityCaptureConn) Close() error                     { return nil }
++func (c *realityCaptureConn) LocalAddr() net.Addr              { return nil }
++func (c *realityCaptureConn) RemoteAddr() net.Addr             { return nil }
++func (c *realityCaptureConn) SetDeadline(time.Time) error      { return nil }
++func (c *realityCaptureConn) SetReadDeadline(time.Time) error  { return nil }
++func (c *realityCaptureConn) SetWriteDeadline(time.Time) error { return nil }
++
++func realityRecordOptions(t *testing.T, size uint16) (option.OutboundTLSOptions, *ecdh.PrivateKey) {
++	t.Helper()
++	key, err := ecdh.X25519().GenerateKey(rand.Reader)
++	if err != nil {
++		t.Fatal(err)
++	}
++	return option.OutboundTLSOptions{Enabled: true, ServerName: "fixture.invalid",
++		UTLS:    &option.OutboundUTLSOptions{Enabled: true, Fingerprint: "chrome"},
++		Reality: &option.OutboundRealityOptions{Enabled: true, PublicKey: base64.RawURLEncoding.EncodeToString(key.PublicKey().Bytes()), ShortID: "aabb", SupportX25519MLKEM768: true, RecordFragmentSize: size}}, key
++}
++
++func TestRealityRecordValidationAndClone(t *testing.T) {
++	for _, size := range []uint16{0, 1, 256, 16384, 16385, 65535} {
++		opts, _ := realityRecordOptions(t, size)
++		config, err := newRealityClient(context.Background(), logger.NOP(), "", opts, false)
++		if size > 16384 {
++			if err == nil {
++				t.Fatalf("accepted size%d", size)
++			}
++			continue
++		}
++		if err != nil {
++			t.Fatal(err)
++		}
++		reality := config.(*RealityClientConfig)
++		clone := reality.Clone().(*RealityClientConfig)
++		if clone.recordFragmentSize != size || clone.supportX25519MLKEM768 != reality.supportX25519MLKEM768 || clone.shortID != reality.shortID || !bytes.Equal(clone.publicKey, reality.publicKey) {
++			t.Fatal("Clone lost security/fragment options")
++		}
++		if clone.uClient == reality.uClient {
++			t.Fatal("Clone shares mutable uTLS config")
++		}
++	}
++}
++
++func TestRealityRecordOptionJSON(t *testing.T) {
++	encoded, err := json.Marshal(option.OutboundRealityOptions{Enabled: true})
++	if err != nil || bytes.Contains(encoded, []byte("record_fragment_size")) {
++		t.Fatal("default option changed serialized config")
++	}
++	var options option.OutboundRealityOptions
++	if err = json.Unmarshal([]byte(`{"record_fragment_size":256}`), &options); err != nil || options.RecordFragmentSize != 256 {
++		t.Fatal("opt-in option did not decode")
++	}
++	for _, input := range []string{`{"record_fragment_size":-1}`, `{"record_fragment_size":65536}`, `{"record_fragment_size":1.5}`} {
++		if json.Unmarshal([]byte(input), &options) == nil {
++			t.Fatal("invalid integer option accepted")
++		}
++	}
++}
++
++func TestRealityRecordActualAuthenticatedClientHello(t *testing.T) {
++	for _, size := range []uint16{0, 256} {
++		opts, key := realityRecordOptions(t, size)
++		config, err := newRealityClient(context.Background(), logger.NOP(), "", opts, false)
++		if err != nil {
++			t.Fatal(err)
++		}
++		capture := &realityCaptureConn{}
++		_, err = config.(*RealityClientConfig).ClientHandshake(context.Background(), capture)
++		if err == nil {
++			t.Fatal("EOF peer unexpectedly authenticated")
++		}
++		wire := capture.Bytes()
++		var hello []byte
++		records := 0
++		for len(wire) > 0 {
++			if len(wire) < 5 || wire[0] != 22 {
++				t.Fatal("expected plaintext handshake records only")
++			}
++			n := int(binary.BigEndian.Uint16(wire[3:5]))
++			if n == 0 || len(wire) < 5+n {
++				t.Fatal("invalid output record")
++			}
++			if size != 0 && n > int(size) {
++				t.Fatalf("wiring ignored size%d: record%d", size, n)
++			}
++			hello = append(hello, wire[5:5+n]...)
++			wire = wire[5+n:]
++			records++
++		}
++		if size == 0 && (records != 1 || capture.writes != 1) {
++			t.Fatal("default wire record/write shape changed")
++		}
++		if size != 0 && records < 2 {
++			t.Fatal("opt-in did not split actual ClientHello")
++		}
++		plain, err := decryptRealityHello(hello, key)
++		if err != nil {
++			t.Fatalf("reassembled ClientHello authentication failed: %v", err)
++		}
++		if !bytes.Equal(plain[8:16], []byte{0xaa, 0xbb, 0, 0, 0, 0, 0, 0}) {
++			t.Fatal("short ID changed")
++		}
++		if !bytes.Equal(plain[:3], []byte{26, 7, 11}) {
++			t.Fatal("REALITY client version changed")
++		}
++		wrongKey, err := ecdh.X25519().GenerateKey(rand.Reader)
++		if err != nil {
++			t.Fatal(err)
++		}
++		if _, err = decryptRealityHello(hello, wrongKey); err == nil {
++			t.Fatal("wrong server key authenticated")
++		}
++		mutated := append([]byte(nil), hello...)
++		mutated[45] ^= 1
++		if _, err = decryptRealityHello(mutated, key); err == nil {
++			t.Fatal("modified authentication bytes accepted")
++		}
++		mutated = append([]byte(nil), hello...)
++		mutated[len(mutated)-1] ^= 1
++		if _, err = decryptRealityHello(mutated, key); err == nil {
++			t.Fatal("modified ClientHello authenticated data accepted")
++		}
++	}
++}
++
++func TestRealityRecordHandshakeCancellationReleasesBlockedWrite(t *testing.T) {
++	opts, _ := realityRecordOptions(t, 256)
++	config, err := newRealityClient(context.Background(), logger.NOP(), "", opts, false)
++	if err != nil {
++		t.Fatal(err)
++	}
++	client, server := net.Pipe()
++	defer client.Close()
++	defer server.Close()
++	ctx, cancel := context.WithCancel(context.Background())
++	defer cancel()
++	finished := make(chan error, 1)
++	signaled := &realityWriteSignalConn{Conn: client, entered: make(chan struct{})}
++	go func() { _, err := config.(*RealityClientConfig).ClientHandshake(ctx, signaled); finished <- err }()
++	select {
++	case <-signaled.entered:
++	case <-time.After(time.Second):
++		t.Fatal("handshake did not enter underlying Write")
++	}
++	cancel()
++	select {
++	case err := <-finished:
++		if err == nil {
++			t.Fatal("canceled handshake succeeded")
++		}
++	case <-time.After(time.Second):
++		t.Fatal("canceled handshake left blocked record write")
++	}
++}
++
++// Decrypt exactly the authenticated session ID as the REALITY peer would. This
++// validates the actual emitted hello, not a separate synthetic TLS constructor.
++func decryptRealityHello(hello []byte, key *ecdh.PrivateKey) ([]byte, error) {
++	if len(hello) < 75 || hello[0] != 1 || hello[38] != 32 {
++		return nil, io.ErrUnexpectedEOF
++	}
++	i := 39 + int(hello[38])
++	if i+2 > len(hello) {
++		return nil, io.ErrUnexpectedEOF
++	}
++	i += 2 + int(binary.BigEndian.Uint16(hello[i:i+2]))
++	if i >= len(hello) {
++		return nil, io.ErrUnexpectedEOF
++	}
++	i += 1 + int(hello[i])
++	if i+2 > len(hello) {
++		return nil, io.ErrUnexpectedEOF
++	}
++	end := i + 2 + int(binary.BigEndian.Uint16(hello[i:i+2]))
++	i += 2
++	if end != len(hello) {
++		return nil, io.ErrUnexpectedEOF
++	}
++	var peer []byte
++	for i+4 <= end {
++		kind := binary.BigEndian.Uint16(hello[i : i+2])
++		n := int(binary.BigEndian.Uint16(hello[i+2 : i+4]))
++		i += 4
++		if i+n > end {
++			return nil, io.ErrUnexpectedEOF
++		}
++		if kind == 51 {
++			if n < 2 {
++				return nil, io.ErrUnexpectedEOF
++			}
++			for j := i + 2; j+4 <= i+n; {
++				group := binary.BigEndian.Uint16(hello[j : j+2])
++				length := int(binary.BigEndian.Uint16(hello[j+2 : j+4]))
++				j += 4
++				if j+length > i+n {
++					return nil, io.ErrUnexpectedEOF
++				}
++				if group == 29 && length == 32 {
++					peer = hello[j : j+length]
++				}
++				j += length
++			}
++		}
++		i += n
++	}
++	if peer == nil {
++		return nil, io.ErrUnexpectedEOF
++	}
++	public, err := ecdh.X25519().NewPublicKey(peer)
++	if err != nil {
++		return nil, err
++	}
++	shared, err := key.ECDH(public)
++	if err != nil {
++		return nil, err
++	}
++	auth := make([]byte, 32)
++	if _, err = hkdf.New(sha256.New, shared, hello[6:26], []byte("REALITY")).Read(auth); err != nil {
++		return nil, err
++	}
++	block, err := aes.NewCipher(auth)
++	if err != nil {
++		return nil, err
++	}
++	gcm, err := cipher.NewGCM(block)
++	if err != nil {
++		return nil, err
++	}
++	aad := append([]byte(nil), hello...)
++	clear(aad[39:71])
++	return gcm.Open(nil, hello[26:38], hello[39:71], aad)
++}
