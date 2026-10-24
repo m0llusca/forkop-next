@@ -3400,6 +3400,306 @@ function pendingChildSettings(option, section_id, value, defaults) {
   return store[value];
 }
 
+// Extended preview native snapshot begin
+const extendedPreviewModalStack = [];
+const extendedPreviewBaselines = new Map();
+let extendedPreviewSectionRef = null;
+const extendedPreviewFilterKeys = [
+  "filter_mode",
+  "detect_server_country",
+  "include_countries",
+  "include_outbounds",
+  "include_regex",
+  "include_proxy_parameters",
+  "include_protocols",
+  "include_transports",
+  "include_securities",
+  "exclude_countries",
+  "exclude_outbounds",
+  "exclude_regex",
+  "exclude_proxy_parameters",
+  "exclude_protocols",
+  "exclude_transports",
+  "exclude_securities",
+];
+const extendedPreviewParentKeys = [
+  "urltest_enabled",
+  "detect_server_country",
+  "dashboard_include_groups",
+  "dashboard_exclude_groups",
+  ...["dashboard_", "urltest_"].flatMap((prefix) =>
+    extendedPreviewFilterKeys.map((key) => prefix + key),
+  ),
+];
+const extendedPreviewSourceKeys = [
+  "action",
+  "selector_proxy_links",
+  "subscription_urls",
+  "subscription_url",
+  "interfaces",
+  "interface",
+  "outbound_jsons",
+  "outbound_json",
+  "outbound_detour_enabled",
+  "outbound_detour_section",
+  "subscription_user_agent",
+  "subscription_hwid",
+  "subscription_download_section",
+];
+
+function previewClone(value) {
+  return value == null ? value : JSON.parse(JSON.stringify(value));
+}
+function previewOptionValue(map, sid, key, fallback) {
+  const option =
+    map && typeof map.lookupOption === "function"
+      ? (map.lookupOption(key, sid) || [])[0]
+      : null;
+  if (!option) return previewClone(fallback);
+  if (typeof option.cbid === "function") {
+    const widget = document.getElementById(option.cbid(sid));
+    if (widget && widget.querySelector(".add-item")) {
+      const values = Array.from(
+        widget.querySelectorAll('.item > input[type="hidden"]'),
+      ).map((input) => input.value);
+      const pending = widget.querySelector('.add-item > input[type="text"]');
+      if (
+        pending &&
+        pending.value.trim() &&
+        !pending.classList.contains("cbi-input-invalid")
+      )
+        values.push(pending.value.trim());
+      return values;
+    }
+  }
+  try {
+    const value = option.formvalue(sid);
+    return previewClone(value == null ? fallback : value);
+  } catch (_error) {
+    return previewClone(fallback);
+  }
+}
+function previewSourceSnapshot(sectionId, live) {
+  const row = uci.get(UCI_PACKAGE, sectionId) || {};
+  const parent = {};
+  extendedPreviewSourceKeys.forEach((key) => {
+    let saved = row[key];
+    if (key === "subscription_url")
+      saved = getChildItemIds(sectionId, "subscription_url");
+    if (key === "interfaces") {
+      const children = getChildItemIds(sectionId, "section_interface");
+      if (children.length) saved = children;
+    }
+    if (key === "outbound_detour_enabled") saved = saved || "0";
+    const value = live
+      ? previewOptionValue(
+          extendedPreviewSectionRef?.map,
+          sectionId,
+          key,
+          saved,
+        )
+      : saved;
+    parent[key] = value == null || value === "" ? [] : previewClone(value);
+  });
+  return {
+    parent,
+    children: ["subscription_url", "section_interface"].flatMap((type) =>
+      uci
+        .sections(UCI_PACKAGE, type)
+        .filter((child) => child.section === sectionId)
+        .map(previewClone),
+    ),
+  };
+}
+function rememberExtendedPreviewContext(sectionRef) {
+  extendedPreviewSectionRef = sectionRef;
+  uci.sections(UCI_PACKAGE, "section").forEach((row) => {
+    if (!extendedPreviewBaselines.has(row[".name"]))
+      extendedPreviewBaselines.set(
+        row[".name"],
+        previewSourceSnapshot(row[".name"], false),
+      );
+  });
+}
+function captureExtendedPreviewDraft(sectionId) {
+  const unavailable = (reason) => ({
+    unavailableReason: reason,
+    revision: "unavailable",
+  });
+  const baseline = extendedPreviewBaselines.get(sectionId);
+  if (!baseline) return unavailable("source_draft_changed");
+  const current = previewSourceSnapshot(sectionId, true);
+  if (JSON.stringify(baseline) !== JSON.stringify(current)) {
+    return unavailable(
+      ["outbound_detour_enabled", "outbound_detour_section"].some(
+        (key) =>
+          JSON.stringify(baseline.parent[key]) !==
+          JSON.stringify(current.parent[key]),
+      )
+        ? "cascade_draft_changed"
+        : "source_draft_changed",
+    );
+  }
+  for (const option of outboundNameSourceOptions.values()) {
+    if (Object.keys(option.pendingChildSettings?.[sectionId] || {}).length)
+      return unavailable("source_draft_changed");
+  }
+  const draft = {
+    section: {},
+    urltest: [],
+    priority_group: [],
+    priority_level: [],
+  };
+  extendedPreviewParentKeys.forEach((key) => {
+    const value = previewOptionValue(
+      extendedPreviewSectionRef?.map,
+      sectionId,
+      key,
+      uci.get(UCI_PACKAGE, sectionId, key),
+    );
+    if (value != null) draft.section[key] = value;
+  });
+  const specs = {
+    urltest: urlTestSettingsKeys(),
+    priority_group: priorityGroupSettingsKeys(),
+    priority_level: priorityLevelSettingsKeys(),
+  };
+  const publicKeys = (type) =>
+    specs[type].filter(
+      (key) =>
+        key === "name" ||
+        key === "order" ||
+        key === "direct" ||
+        [
+          "country",
+          "server_name",
+          "regex",
+          "interrupt_exist_connections",
+          "pin_dashboard",
+          "pick_fastest",
+          "switch_to_faster_same_priority",
+        ].includes(key) ||
+        extendedPreviewFilterKeys.includes(key),
+    );
+  let incomplete = false;
+  const appendRows = (type, owner, values, option, groupId) => {
+    const ownerKey = type === "priority_level" ? "group" : "section";
+    const rows = [];
+    values.forEach((value, index) => {
+      const saved = uci.get(UCI_PACKAGE, value);
+      const existing =
+        saved && saved[".type"] === type && saved[ownerKey] === owner;
+      const active = extendedPreviewModalStack.findLast(
+        (item) =>
+          item.typeName === type &&
+          item.ownerId === owner &&
+          item.itemId === value,
+      );
+      const pending = option?.pendingChildSettings?.[owner]?.[value];
+      if (!existing && !active && !pending) {
+        incomplete = true;
+        return;
+      }
+      const source = existing ? saved : pending || active.initial || {};
+      const id = existing ? value : `preview_${type}_${draft[type].length}`;
+      const row = { ".name": id, ".type": type, [ownerKey]: groupId || owner };
+      publicKeys(type).forEach((key) => {
+        const raw = active
+          ? previewOptionValue(active.map, "settings", key, source[key])
+          : source[key];
+        if (raw != null) row[key] = previewClone(raw);
+      });
+      draft[type].push(row);
+      rows.push({ value, id, active });
+    });
+    return rows;
+  };
+  const valuesFor = (type) => {
+    const values = currentSectionGroupValues(sectionId, type).slice();
+    extendedPreviewModalStack
+      .filter((item) => item.typeName === type && item.ownerId === sectionId)
+      .forEach((item) => {
+        if (!values.includes(item.itemId)) values.push(item.itemId);
+      });
+    return values;
+  };
+  appendRows(
+    "urltest",
+    sectionId,
+    valuesFor("urltest"),
+    sectionGroupSourceOptions.get("urltest"),
+  );
+  const groups = appendRows(
+    "priority_group",
+    sectionId,
+    valuesFor("priority_group"),
+    sectionGroupSourceOptions.get("priority_group"),
+  );
+  groups.forEach((group) => {
+    const levelOption = group.active?.map?.lookupOption(
+      "priority_level",
+      "settings",
+    )?.[0];
+    let values =
+      previewOptionValue(
+        group.active?.map,
+        "settings",
+        "priority_level",
+        getChildItemIds(group.value, "priority_level", "group"),
+      ) || [];
+    values = Array.isArray(values) ? values.slice() : [values];
+    extendedPreviewModalStack
+      .filter(
+        (item) =>
+          item.typeName === "priority_level" && item.ownerId === group.value,
+      )
+      .forEach((item) => {
+        if (!values.includes(item.itemId)) values.push(item.itemId);
+      });
+    appendRows("priority_level", group.value, values, levelOption, group.id);
+  });
+  if (incomplete) return unavailable("pending_child_incomplete");
+  return { draft, revision: JSON.stringify(draft) };
+}
+// Extended preview native snapshot end
+
+let extendedPreviewEventsInstalled = false;
+function mountExtendedPreview(sectionId, host) {
+  if (!extendedPreviewEventsInstalled) {
+    extendedPreviewEventsInstalled = true;
+    const invalidateAll = () =>
+      document
+        .querySelectorAll(".fkp-extended-preview")
+        .forEach((node) =>
+          node.dispatchEvent(new CustomEvent("forkop:preview-invalidated")),
+        );
+    document.addEventListener("input", (event) => {
+      if (event.target.closest(".cbi-map")) invalidateAll();
+    });
+    document.addEventListener("change", (event) => {
+      if (event.target.closest(".cbi-map")) invalidateAll();
+    });
+    window.addEventListener("forkop:configuration-changed", invalidateAll);
+    window.addEventListener("forkop:source-pool-changed", invalidateAll);
+  }
+  const node = main.renderExtendedPreview(sectionId, () =>
+    captureExtendedPreviewDraft(sectionId),
+  );
+  const invalidate = () =>
+    node.dispatchEvent(new CustomEvent("forkop:preview-invalidated"));
+  if (host) {
+    host.addEventListener("input", invalidate);
+    host.addEventListener("change", invalidate);
+  }
+  node.disposePreview = () => {
+    if (host) {
+      host.removeEventListener("input", invalidate);
+      host.removeEventListener("change", invalidate);
+    }
+  };
+  return node;
+}
+
 function renderStackedJsonSettingsModal(title, map, onSave) {
   const modal = document.querySelector("#modal_overlay > .modal.cbi-modal");
   const activeMap = modal ? modal.querySelector(".cbi-map:not(.hidden)") : null;
@@ -3417,6 +3717,13 @@ function renderStackedJsonSettingsModal(title, map, onSave) {
     let closed = false;
     let saveButton;
     let validationSummary;
+    const previewContext = map.forkopPreviewContext;
+    let previewNode;
+    if (previewContext) {
+      extendedPreviewModalStack.push(previewContext);
+      previewNode = mountExtendedPreview(previewContext.sectionId, nodes);
+      nodes.appendChild(previewNode);
+    }
 
     const clearValidationSummary = () => {
       if (validationSummary && validationSummary.parentNode) {
@@ -3462,6 +3769,16 @@ function renderStackedJsonSettingsModal(title, map, onSave) {
       }
 
       closed = true;
+      if (previewContext) {
+        const index = extendedPreviewModalStack.indexOf(previewContext);
+        if (index >= 0) extendedPreviewModalStack.splice(index, 1);
+        previewNode.disposePreview();
+        modal
+          .querySelectorAll(".fkp-extended-preview")
+          .forEach((node) =>
+            node.dispatchEvent(new CustomEvent("forkop:preview-invalidated")),
+          );
+      }
       clearValidationSummary();
 
       if (nodes.parentNode) {
@@ -3551,6 +3868,25 @@ function showChildItemSettingsModal(section_id, itemValue, option, settings) {
     settings: Object.assign({}, initialSettings),
   };
   const map = new form.JSONMap(data);
+  if (
+    ["urltest", "priority_group", "priority_level"].includes(settings.typeName)
+  ) {
+    const parent =
+      settings.typeName === "priority_level"
+        ? extendedPreviewModalStack.findLast(
+            (item) =>
+              item.typeName === "priority_group" && item.itemId === section_id,
+          )?.sectionId || uci.get(UCI_PACKAGE, section_id, "section")
+        : section_id;
+    map.forkopPreviewContext = {
+      sectionId: parent,
+      ownerId: section_id,
+      itemId: value,
+      typeName: settings.typeName,
+      map,
+      initial: initialSettings,
+    };
+  }
   const itemSection = map.section(form.NamedSection, "settings");
   itemSection.anonymous = true;
   itemSection.addremove = false;
@@ -6937,6 +7273,7 @@ function writeDnsRulesetReferences(section_id, values) {
 }
 
 function createSectionContent(section) {
+  rememberExtendedPreviewContext(section);
   let o;
 
   section.tab("settings", _("Settings"));
@@ -7425,6 +7762,18 @@ function createSectionContent(section) {
   };
   o.onListChange = refreshDashboardFilterChoiceWidgets;
   sectionGroupSourceOptions.set("priority_group", o);
+
+  o = section.taboption(
+    "settings",
+    form.DummyValue,
+    "_extended_preview",
+    _("Состав URLTest и Priority"),
+  );
+  o.modalonly = true;
+  o.depends("action", "connection");
+  o.renderWidget = function (sectionId) {
+    return mountExtendedPreview(sectionId);
+  };
 
   o = section.taboption(
     "settings",

@@ -25,6 +25,7 @@ class ExtendedPreview(unittest.TestCase):
         self.env = dict(os.environ, FORKOP_PREVIEW_CONFIG_FIXTURE=str(self.fixture),
                         FORKOP_SECTION_CACHE_DIR=str(self.output) + '.section-cache',
                         TMP_SUBSCRIPTION_FOLDER=str(self.d / 'subscriptions'),
+                        FORKOP_PERSISTENT_SUBSCRIPTION_CACHE_DIR=str(self.d / 'persistent'),
                         FORKOP_SOURCE_EVIDENCE_DIR=str(self.d / 'source-evidence'))
         self.data = {'settings': {'.name': 'settings', '.type': 'settings'},
                      'section': [{'.name': 'main', '.type': 'section', 'enabled': '1',
@@ -221,12 +222,15 @@ class ExtendedPreview(unittest.TestCase):
 
     def test_captured_subscription_and_core_changes_invalidate_without_commands_or_writes(self):
         directory=self.d/'subscriptions';directory.mkdir()
+        persistent=self.d/'persistent';persistent.mkdir()
         url='https://user:SOURCE_SECRET@example.invalid/list?token=SOURCE_SECRET'
         self.data['section'][0]['subscription_urls']=[url]
         subscription={'outbounds':[{'type':'socks','tag':'https://user:NAME_SECRET@example.invalid',
                         'server':'127.0.0.1','server_port':1080,'password':'SOURCE_SECRET'}]}
         for suffix,content in {'.url':url,'.user_agent':'', '.hwid':'', '.json':json.dumps(subscription)}.items():
             (directory/('main-subscription-1'+suffix)).write_text(content)
+        for suffix in ('.url','.user_agent'):
+            (persistent/('main-subscription-1'+suffix)).write_text('')
         core=self.d/'sing-box';core.write_text('fixture core bytes');self.env['FORKOP_SINGBOX_BINARY']=str(core)
         self.generate()
         commands=self.d/'commands';commands.mkdir()
@@ -238,7 +242,8 @@ class ExtendedPreview(unittest.TestCase):
         self.assertNotIn('SECRET',json.dumps(result))
         self.assertEqual(before,{str(p):p.read_bytes() for p in self.d.rglob('*') if p.is_file()})
         for path in [core, directory/'main-subscription-1.json',directory/'main-subscription-1.url',
-                     directory/'main-subscription-1.user_agent',directory/'main-subscription-1.hwid']:
+                     directory/'main-subscription-1.user_agent',directory/'main-subscription-1.hwid',
+                     persistent/'main-subscription-1.url',persistent/'main-subscription-1.user_agent']:
             original=path.read_bytes();path.write_bytes(original+b'changed')
             self.assertEqual(self.preview()['error'],'preview_unavailable',str(path))
             path.write_bytes(original)

@@ -60,6 +60,7 @@ export {
 export { registerConfigurationReload } from './forkop/next/configReload';
 
 export { getDashboardSections } from './forkop/methods/custom/getDashboardSections';
+export { renderExtendedPreview } from './forkop/next/extendedPreview';
 
 export {
   navigateToRule,

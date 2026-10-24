@@ -9,6 +9,34 @@ import { isCopyableProxyLink, svgEl } from '../../../../helpers';
 import { prettyBytes } from '../../../../helpers/prettyBytes';
 import { Forkop } from '../../../types';
 import { renderFlagEmojis } from './renderFlagEmojis';
+import { renderSourceEvidence } from './sourceEvidence';
+
+// Only the mounted dashboard session owns this display preference. It is never
+// written to UCI or used to choose URLTest members or latency targets.
+const localSearch = new Map<string, string>();
+
+export function replaceSectionsPreservingSearch(
+  container: HTMLElement,
+  nodes: HTMLElement[],
+) {
+  const active =
+    document.activeElement instanceof HTMLInputElement &&
+    container.contains(document.activeElement)
+      ? document.activeElement
+      : null;
+  const section = active?.dataset.nodeSearch;
+  const start = active?.selectionStart,
+    end = active?.selectionEnd;
+  container.replaceChildren(...nodes);
+  if (section) {
+    const replacement = [
+      ...container.querySelectorAll<HTMLInputElement>('[data-node-search]'),
+    ].find((input) => input.dataset.nodeSearch === section);
+    replacement?.focus({ preventScroll: true });
+    if (replacement && start != null && end != null)
+      replacement.setSelectionRange(start, end);
+  }
+}
 
 interface IRenderSectionsProps {
   loading: boolean;
@@ -344,7 +372,7 @@ function renderDefaultState({
     ]
       .filter(Boolean)
       .join(' ');
-    return E(
+    const node = E(
       'div',
       {
         class: className,
@@ -467,6 +495,8 @@ function renderDefaultState({
         ...(section.withTagSelect ? [selectionButton] : []),
       ],
     );
+    node.setAttribute('data-outbound-row', outbound.code);
+    return node;
   }
 
   const metadataNodes = (section.subscriptionMetadata || [])
@@ -477,6 +507,50 @@ function renderDefaultState({
     subscriptionUpdating,
     onUpdateSubscription,
   );
+
+  const rows = [...section.outbounds]
+    .sort((a, b) => Number(b.selected) - Number(a.selected))
+    .map((outbound) => ({ outbound, node: renderOutbound(outbound) }));
+  const count = E('span', { role: 'status' });
+  count.setAttribute('aria-live', 'polite');
+  const pinned = E('span', {}, 'Выбранный узел закреплён');
+  const search = E('input', {
+    type: 'search',
+    'aria-label': `Поиск узлов: ${section.displayName}`,
+    placeholder: 'Имя, страна или тип',
+  }) as HTMLInputElement;
+  search.setAttribute('data-node-search', section.sectionName);
+  search.value = localSearch.get(section.sectionName) || '';
+  const updateSearch = () => {
+    const query = search.value.trim().toLocaleLowerCase();
+    let found = 0;
+    let selectedOutsideSearch = false;
+    for (const { outbound, node } of rows) {
+      const matches = [outbound.displayName, outbound.country, outbound.type]
+        .filter(Boolean)
+        .join(' ')
+        .toLocaleLowerCase()
+        .includes(query);
+      if (matches) found++;
+      node.hidden = !matches && !outbound.selected;
+      if (!matches && outbound.selected) selectedOutsideSearch = true;
+    }
+    count.textContent = `Найдено ${found} из ${rows.length}`;
+    pinned.hidden = !selectedOutsideSearch;
+    localSearch.set(section.sectionName, search.value);
+  };
+  search.addEventListener('input', updateSearch);
+  updateSearch();
+  const searchControls = E('div', { class: 'fkp-node-search' }, [
+    search,
+    count,
+    pinned,
+    E(
+      'small',
+      {},
+      'Поиск меняет только список на экране. Состав URLTest сохраняется.',
+    ),
+  ]);
 
   return E(
     'div',
@@ -577,9 +651,19 @@ function renderDefaultState({
           ),
         ],
       ),
+      searchControls,
+      ...(section.subscriptionSourceCount
+        ? [
+            renderSourceEvidence(
+              section.sectionName,
+              section.subscriptionSourceCount,
+              section.sourceEvidence,
+            ),
+          ]
+        : []),
       E('div', { class: 'fkp_dashboard-page__outbound-grid' }, [
         ...metadataNodes,
-        ...section.outbounds.map((outbound) => renderOutbound(outbound)),
+        ...rows.map(({ node }) => node),
       ]),
     ],
   );

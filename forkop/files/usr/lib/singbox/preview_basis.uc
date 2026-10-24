@@ -50,10 +50,14 @@ function stamp(snapshot, core, supports_xhttp) {
 function verify(basis,snapshot) {
     if(type(basis)!='object'||basis.schema!=1||basis.resolverSchema!=1||basis.complete!==true) return false;
     if(basis.configDigest!=sha(sprintf('%J',snapshot.data))||basis.rawDigest!=snapshot.rawDigest||basis.coreDigest!=core_identity()) return false;
-    let folder=getenv('TMP_SUBSCRIPTION_FOLDER') || '/tmp/sing-box/subscriptions';
+    let folders=[getenv('TMP_SUBSCRIPTION_FOLDER') || '/tmp/sing-box/subscriptions',
+        getenv('FORKOP_PERSISTENT_SUBSCRIPTION_CACHE_DIR') || '/etc/forkop/subscription-cache'];
     for(let record in common.array_or_empty(basis.sourceFiles)) {
         // Never accept caller-selected paths. Cache paths remain backend-private.
-        if(index(record.path,folder+'/')!=0||match(substr(record.path,length(folder)+1),/^[A-Za-z0-9_-]+\.(json|url|user_agent|hwid)$/)==null) return false;
+        let allowed=false;
+        for(let folder in folders)
+            if(index(record.path,folder+'/')==0&&match(substr(record.path,length(folder)+1),/^[A-Za-z0-9_-]+\.(json|url|user_agent|hwid)$/)!=null) allowed=true;
+        if(!allowed) return false;
         if(record.digest!=digest(fs.readfile(record.path))) return false;
     }
     return true;

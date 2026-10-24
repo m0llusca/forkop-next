@@ -212,6 +212,8 @@ function run_spec(command, spec, user_args) {
     }
 
     let args = [ "ucode", "-L", LIB_DIR, module, spec[1] ];
+    if (command == "extended_preview")
+        args = [ "timeout", "10", "ucode", "-L", LIB_DIR, module, spec[1] ];
     let count = int(spec[2] || 0);
     for (let i = 0; i < count; i++)
         push(args, user_args[i] || "");

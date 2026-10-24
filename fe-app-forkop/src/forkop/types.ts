@@ -175,6 +175,7 @@ export namespace Forkop {
     latencyTestTimeout?: string;
     proxyConfigType?: ProxyConfigType;
     subscriptionSourceCount?: number;
+    sourceEvidence?: import('./tabs/dashboard/partials/sourceEvidence').SourceEvidence[];
     subscriptionMetadata?: SubscriptionMetadata[];
     outbounds: Outbound[];
   }

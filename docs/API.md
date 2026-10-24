@@ -279,10 +279,14 @@ Task 2 evidence semantics remain unchanged.
 CLI operation implemented by `service/extended_preview.uc`. It never imports the
 executable generator, fetches subscriptions, resolves countries, tests connections,
 changes UCI, generates config or starts/stops services. Maximum request: 128 KiB;
-maximum 64 groups, 128 levels, 2,000 captured candidates, 128 filter values and
+maximum 64 groups of each kind, 128 levels, 2,000 captured candidates, 128 filter values and
 256 bytes per regex. Invalid fields, enums, regexes and foreign native ownership
 fail with `invalid_request`; missing or unverifiable source evidence returns
 `preview_unavailable`. The existing broad write ACL remains required.
+The public CLI runs this read in a 10-second `timeout` process budget; transport
+failure or expiry is unavailable, never an unbounded retry. Provenance checks
+accept only strict source filenames within backend-configured temporary or
+persistent subscription cache roots, and compare every recorded byte digest.
 
 Request: `{schema:1, section, requestId, expectedCapture?, draft}`. `draft` contains
 `section` (only dashboard/legacy URLTest filter options), `urltest`,

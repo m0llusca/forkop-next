@@ -2332,7 +2332,88 @@ function prettyBytes(n) {
   return n + " " + unit;
 }
 
+// src/forkop/tabs/dashboard/partials/sourceEvidence.ts
+async function loadSourceEvidence(section) {
+  const result = await executeShellCommand({
+    command: "/usr/bin/forkop",
+    args: ["source_evidence", section],
+    timeout: 1e4,
+    operationName: "\u0418\u0441\u0442\u043E\u0440\u0438\u044F \u0438\u0441\u0442\u043E\u0447\u043D\u0438\u043A\u043E\u0432"
+  });
+  try {
+    const value = JSON.parse(result.stdout);
+    return value.success && value.data?.section === section && Array.isArray(value.data.sources) ? value.data.sources : void 0;
+  } catch {
+    return void 0;
+  }
+}
+function renderSourceEvidence(section, count, sources) {
+  const root = document.createElement("details");
+  root.className = "fkp-source-evidence";
+  const title = document.createElement("summary");
+  title.textContent = `\u0418\u0441\u0442\u043E\u0447\u043D\u0438\u043A\u0438 \u0438 \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442 \u0438\u043C\u043F\u043E\u0440\u0442\u0430 (${count})`;
+  root.append(title);
+  const line = (text) => {
+    const p = document.createElement("p");
+    p.textContent = text;
+    root.append(p);
+  };
+  const date = (value) => typeof value === "number" && value > 0 ? new Date(value * 1e3).toLocaleString() : "\u043D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043D\u043E";
+  const number = (value) => typeof value === "number" && Number.isFinite(value) ? String(value) : "\u043D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043D\u043E";
+  for (let index = 1; index <= count; index++) {
+    const source = sources?.find((source2) => source2.index === index);
+    const evidence = source?.evidence;
+    line(
+      `\u0418\u0441\u0442\u043E\u0447\u043D\u0438\u043A ${index} \xB7 \u0418\u0441\u043F\u043E\u043B\u044C\u0437\u0443\u0435\u0442\u0441\u044F: ${source?.usedBy.join(", ") || section}`
+    );
+    line(
+      `\u041F\u043E\u0441\u043B\u0435\u0434\u043D\u044F\u044F \u0443\u0434\u0430\u0447\u0430: ${date(evidence?.lastSuccess)} \xB7 \u041F\u043E\u0441\u043B\u0435\u0434\u043D\u044F\u044F \u043F\u043E\u043F\u044B\u0442\u043A\u0430: ${date(evidence?.lastAttempt)}`
+    );
+    if (evidence?.status === "failed") {
+      line(
+        "\u041E\u0448\u0438\u0431\u043A\u0430: \u0437\u0430\u0433\u0440\u0443\u0437\u043A\u0430 \u0438\u043B\u0438 \u0438\u043C\u043F\u043E\u0440\u0442 \u043D\u0435 \u0437\u0430\u0432\u0435\u0440\u0448\u0435\u043D\u044B. \u041F\u043E\u0432\u0442\u043E\u0440\u0438\u0442\u0435 \u043E\u0431\u043D\u043E\u0432\u043B\u0435\u043D\u0438\u0435 \u0438\u043B\u0438 \u043F\u0440\u043E\u0432\u0435\u0440\u044C\u0442\u0435 \u0438\u0441\u0442\u043E\u0447\u043D\u0438\u043A."
+      );
+      if (evidence.lastSuccess) line("\u041F\u043E\u0441\u043B\u0435\u0434\u043D\u0438\u0439 \u0440\u0430\u0431\u043E\u0447\u0438\u0439 \u043D\u0430\u0431\u043E\u0440 \u0441\u043E\u0445\u0440\u0430\u043D\u0451\u043D.");
+    } else if (!evidence || evidence.status === "unknown")
+      line("\u041F\u0440\u0438\u0447\u0438\u043D\u0430 \u043E\u0448\u0438\u0431\u043A\u0438: \u043D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043D\u043E \u2014 \u0438\u0441\u0442\u043E\u0440\u0438\u044F \u0435\u0449\u0451 \u043D\u0435 \u0437\u0430\u043F\u0438\u0441\u0430\u043D\u0430.");
+    else line("\u041F\u043E\u0441\u043B\u0435\u0434\u043D\u0435\u0435 \u043E\u0431\u043D\u043E\u0432\u043B\u0435\u043D\u0438\u0435 \u0438\u0441\u0442\u043E\u0447\u043D\u0438\u043A\u0430 \u0437\u0430\u0432\u0435\u0440\u0448\u0435\u043D\u043E.");
+    line(
+      `\u0414\u043E\u0431\u0430\u0432\u043B\u0435\u043D\u043E: ${number(evidence?.import.added)} \xB7 \u041F\u0440\u0438\u043D\u044F\u0442\u043E: ${number(evidence?.import.accepted)} \xB7 \u041F\u0440\u043E\u043F\u0443\u0449\u0435\u043D\u043E: ${number(evidence?.import.skipped)}`
+    );
+    line(
+      `\u0414\u0443\u0431\u043B\u0438\u043A\u0430\u0442\u044B: ${number(evidence?.import.duplicates)} \xB7 \u041D\u0435 \u043F\u043E\u0434\u0434\u0435\u0440\u0436\u0430\u043D\u043E: ${number(evidence?.import.unsupported)}`
+    );
+  }
+  line(
+    "\u0418\u043C\u043F\u043E\u0440\u0442 \u043D\u0435 \u043F\u0440\u043E\u0432\u0435\u0440\u044F\u0435\u0442 \u0441\u043E\u0435\u0434\u0438\u043D\u0435\u043D\u0438\u0435. \u041F\u0440\u043E\u043F\u0443\u0449\u0435\u043D\u043D\u044B\u0435 \u0437\u0430\u043F\u0438\u0441\u0438 \u043C\u043E\u0433\u0443\u0442 \u0432\u043A\u043B\u044E\u0447\u0430\u0442\u044C \u043D\u0435\u043A\u043E\u0440\u0440\u0435\u043A\u0442\u043D\u044B\u0435 \u0438 \u043D\u0435\u043F\u043E\u0434\u0434\u0435\u0440\u0436\u0438\u0432\u0430\u0435\u043C\u044B\u0435 \u0444\u043E\u0440\u043C\u0430\u0442\u044B; \u043E\u0442\u0434\u0435\u043B\u044C\u043D\u0430\u044F \u0440\u0430\u0437\u0431\u0438\u0432\u043A\u0430 \u043D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043D\u0430."
+  );
+  const assign = document.createElement("button");
+  assign.type = "button";
+  assign.textContent = "\u041D\u0430\u0437\u043D\u0430\u0447\u0438\u0442\u044C \u0442\u0440\u0430\u0444\u0438\u043A";
+  assign.addEventListener(
+    "click",
+    () => navigateToRule(assign, { kind: "edit", section, option: "domain" })
+  );
+  root.append(assign);
+  return root;
+}
+
 // src/forkop/tabs/dashboard/partials/renderSections.ts
+var localSearch = /* @__PURE__ */ new Map();
+function replaceSectionsPreservingSearch(container, nodes) {
+  const active = document.activeElement instanceof HTMLInputElement && container.contains(document.activeElement) ? document.activeElement : null;
+  const section = active?.dataset.nodeSearch;
+  const start = active?.selectionStart, end = active?.selectionEnd;
+  container.replaceChildren(...nodes);
+  if (section) {
+    const replacement = [
+      ...container.querySelectorAll("[data-node-search]")
+    ].find((input2) => input2.dataset.nodeSearch === section);
+    replacement?.focus({ preventScroll: true });
+    if (replacement && start != null && end != null)
+      replacement.setSelectionRange(start, end);
+  }
+}
 function renderFailedState() {
   return E(
     "div",
@@ -2565,7 +2646,7 @@ function renderDefaultState({
       section.withTagSelect && !canChooseOutbound ? "fkp_dashboard-page__outbound-grid__item--disabled" : "",
       outboundSwitching ? "fkp_dashboard-page__outbound-grid__item--switching" : ""
     ].filter(Boolean).join(" ");
-    return E(
+    const node = E(
       "div",
       {
         class: className,
@@ -2670,6 +2751,8 @@ function renderDefaultState({
         ...section.withTagSelect ? [selectionButton] : []
       ]
     );
+    node.setAttribute("data-outbound-row", outbound.code);
+    return node;
   }
   const metadataNodes = (section.subscriptionMetadata || []).map((metadata) => renderSubscriptionMetadata(metadata)).filter(Boolean);
   const subscriptionUpdateAction = renderSubscriptionUpdateAction(
@@ -2677,6 +2760,43 @@ function renderDefaultState({
     subscriptionUpdating,
     onUpdateSubscription
   );
+  const rows = [...section.outbounds].sort((a, b) => Number(b.selected) - Number(a.selected)).map((outbound) => ({ outbound, node: renderOutbound(outbound) }));
+  const count = E("span", { role: "status" });
+  count.setAttribute("aria-live", "polite");
+  const pinned = E("span", {}, "\u0412\u044B\u0431\u0440\u0430\u043D\u043D\u044B\u0439 \u0443\u0437\u0435\u043B \u0437\u0430\u043A\u0440\u0435\u043F\u043B\u0451\u043D");
+  const search = E("input", {
+    type: "search",
+    "aria-label": `\u041F\u043E\u0438\u0441\u043A \u0443\u0437\u043B\u043E\u0432: ${section.displayName}`,
+    placeholder: "\u0418\u043C\u044F, \u0441\u0442\u0440\u0430\u043D\u0430 \u0438\u043B\u0438 \u0442\u0438\u043F"
+  });
+  search.setAttribute("data-node-search", section.sectionName);
+  search.value = localSearch.get(section.sectionName) || "";
+  const updateSearch = () => {
+    const query = search.value.trim().toLocaleLowerCase();
+    let found = 0;
+    let selectedOutsideSearch = false;
+    for (const { outbound, node } of rows) {
+      const matches = [outbound.displayName, outbound.country, outbound.type].filter(Boolean).join(" ").toLocaleLowerCase().includes(query);
+      if (matches) found++;
+      node.hidden = !matches && !outbound.selected;
+      if (!matches && outbound.selected) selectedOutsideSearch = true;
+    }
+    count.textContent = `\u041D\u0430\u0439\u0434\u0435\u043D\u043E ${found} \u0438\u0437 ${rows.length}`;
+    pinned.hidden = !selectedOutsideSearch;
+    localSearch.set(section.sectionName, search.value);
+  };
+  search.addEventListener("input", updateSearch);
+  updateSearch();
+  const searchControls = E("div", { class: "fkp-node-search" }, [
+    search,
+    count,
+    pinned,
+    E(
+      "small",
+      {},
+      "\u041F\u043E\u0438\u0441\u043A \u043C\u0435\u043D\u044F\u0435\u0442 \u0442\u043E\u043B\u044C\u043A\u043E \u0441\u043F\u0438\u0441\u043E\u043A \u043D\u0430 \u044D\u043A\u0440\u0430\u043D\u0435. \u0421\u043E\u0441\u0442\u0430\u0432 URLTest \u0441\u043E\u0445\u0440\u0430\u043D\u044F\u0435\u0442\u0441\u044F."
+    )
+  ]);
   return E(
     "div",
     {
@@ -2769,9 +2889,17 @@ function renderDefaultState({
           )
         ]
       ),
+      searchControls,
+      ...section.subscriptionSourceCount ? [
+        renderSourceEvidence(
+          section.sectionName,
+          section.subscriptionSourceCount,
+          section.sourceEvidence
+        )
+      ] : [],
       E("div", { class: "fkp_dashboard-page__outbound-grid" }, [
         ...metadataNodes,
-        ...section.outbounds.map((outbound) => renderOutbound(outbound))
+        ...rows.map(({ node }) => node)
       ])
     ]
   );
@@ -4640,6 +4768,7 @@ async function getDashboardSections(options = {}) {
       if (isConnectionAction(sectionAction) && shouldUseProxyGroup(section)) {
         const subscriptionSourceCount = getSubscriptionSourceCount(section);
         const subscriptionEnabled = subscriptionSourceCount > 0;
+        const sourceEvidence = subscriptionEnabled ? await loadSourceEvidence(sectionName) : void 0;
         const dashboardCache = await readDashboardSectionCache(sectionName);
         const outboundMetadata = getOutboundMetadata(dashboardCache);
         const subscriptionMetadata = subscriptionEnabled ? getSubscriptionMetadata(
@@ -4668,6 +4797,7 @@ async function getDashboardSections(options = {}) {
           latencyTestCodes,
           proxyConfigType,
           subscriptionSourceCount,
+          sourceEvidence,
           subscriptionMetadata,
           outbounds
         };
@@ -7269,6 +7399,7 @@ async function handleUpdateSubscription(section) {
     return;
   }
   setSubscriptionUpdating(section.sectionName, true, true);
+  window.dispatchEvent(new CustomEvent("forkop:source-pool-changed"));
   let jobId = "";
   let ownsJobFollow = false;
   try {
@@ -7442,7 +7573,7 @@ async function renderSectionsWidget() {
     })
   );
   return preserveScrollForPage(() => {
-    container.replaceChildren(...renderedWidgets);
+    replaceSectionsPreservingSearch(container, renderedWidgets);
   });
 }
 async function renderBandwidthWidget() {
@@ -7688,6 +7819,12 @@ async function initController() {
 
 // src/forkop/tabs/dashboard/styles.ts
 var styles = `
+.fkp-workspace .fkp-node-search { display:flex; flex-wrap:wrap; align-items:center; gap:12px; margin:16px 0; }
+.fkp-workspace .fkp-node-search input { flex:1 1 240px; min-width:0; }
+.fkp-workspace .fkp-node-search small { flex-basis:100%; }
+.fkp-workspace [data-outbound-row][hidden] { display:none; }
+.fkp-workspace .fkp-source-evidence { margin:16px 0; overflow-wrap:anywhere; }
+.fkp-workspace .fkp-source-evidence summary { cursor:pointer; padding:12px 0; }
 @font-face {
     font-family: "Twemoji Country Flags";
     src: url("/luci-static/resources/view/forkop/fonts/TwemojiCountryFlags.woff2") format("woff2");
@@ -18037,6 +18174,140 @@ function registerConfigurationReload(target = window, adapter) {
   );
 }
 
+// src/forkop/next/extendedPreview.ts
+var reasonText = {
+  all_candidates: "\u0424\u0438\u043B\u044C\u0442\u0440 \u0432\u044B\u043A\u043B\u044E\u0447\u0435\u043D",
+  include_match: "\u0421\u043E\u0432\u043F\u0430\u0434\u0430\u0435\u0442 \u0441 \u0432\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435\u043C",
+  include_miss: "\u041D\u0435\u0442 \u0441\u043E\u0432\u043F\u0430\u0434\u0435\u043D\u0438\u044F \u0441 \u0432\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435\u043C",
+  exclude_match: "\u0421\u043E\u0432\u043F\u0430\u0434\u0430\u0435\u0442 \u0441 \u0438\u0441\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435\u043C",
+  pool_excluded: "\u0418\u0441\u043A\u043B\u044E\u0447\u0451\u043D \u0438\u0437 \u043E\u0431\u0449\u0435\u0433\u043E \u043D\u0430\u0431\u043E\u0440\u0430",
+  earlier_level: "\u0423\u0436\u0435 \u043D\u0430\u0437\u043D\u0430\u0447\u0435\u043D \u0431\u043E\u043B\u0435\u0435 \u0432\u044B\u0441\u043E\u043A\u043E\u043C\u0443 \u0443\u0440\u043E\u0432\u043D\u044E",
+  direct_level: "\u041F\u0440\u044F\u043C\u043E\u0439 \u0432\u044B\u0445\u043E\u0434"
+};
+var unavailable = {
+  source_draft_changed: "\u0418\u0437\u043C\u0435\u043D\u0435\u043D\u044B \u0438\u0441\u0442\u043E\u0447\u043D\u0438\u043A\u0438. \u0421\u043D\u0430\u0447\u0430\u043B\u0430 \u0441\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u0435 \u0438 \u043F\u0440\u0438\u043C\u0435\u043D\u0438\u0442\u0435 \u0438\u0445, \u0437\u0430\u0442\u0435\u043C \u043E\u0431\u043D\u043E\u0432\u0438\u0442\u0435 \u0441\u043D\u0438\u043C\u043E\u043A.",
+  cascade_draft_changed: "\u0418\u0437\u043C\u0435\u043D\u0451\u043D \u043A\u0430\u0441\u043A\u0430\u0434. \u0421\u043D\u0430\u0447\u0430\u043B\u0430 \u0441\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u0435 \u0438 \u043F\u0440\u0438\u043C\u0435\u043D\u0438\u0442\u0435 \u0435\u0433\u043E, \u0437\u0430\u0442\u0435\u043C \u043E\u0431\u043D\u043E\u0432\u0438\u0442\u0435 \u0441\u043D\u0438\u043C\u043E\u043A.",
+  pending_child_incomplete: "\u0417\u0430\u043F\u043E\u043B\u043D\u0438\u0442\u0435 \u043F\u0430\u0440\u0430\u043C\u0435\u0442\u0440\u044B \u043D\u043E\u0432\u043E\u0439 \u0433\u0440\u0443\u043F\u043F\u044B \u0438\u043B\u0438 \u0443\u0440\u043E\u0432\u043D\u044F.",
+  capture_changed: "\u041D\u0430\u0431\u043E\u0440 \u0443\u0437\u043B\u043E\u0432 \u0438\u0437\u043C\u0435\u043D\u0438\u043B\u0441\u044F. \u041D\u0430\u0436\u043C\u0438\u0442\u0435 \u043F\u0440\u0435\u0434\u043F\u0440\u043E\u0441\u043C\u043E\u0442\u0440 \u0435\u0449\u0451 \u0440\u0430\u0437 \u0434\u043B\u044F \u043D\u043E\u0432\u043E\u0433\u043E \u0441\u043D\u0438\u043C\u043A\u0430.",
+  country_evidence_missing: "\u0412 \u0441\u043D\u0438\u043C\u043A\u0435 \u043D\u0435\u0442 \u0441\u0432\u0435\u0434\u0435\u043D\u0438\u0439 \u043E \u0441\u0442\u0440\u0430\u043D\u0435 \u0434\u043B\u044F \u0447\u0430\u0441\u0442\u0438 \u0443\u0437\u043B\u043E\u0432. \u0420\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442 \u0444\u0438\u043B\u044C\u0442\u0440\u0430 \u043F\u043E\u043A\u0430 \u043D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u0435\u043D.",
+  invalid_request: "\u041F\u0440\u043E\u0432\u0435\u0440\u044C\u0442\u0435 \u0444\u0438\u043B\u044C\u0442\u0440\u044B \u0438 \u043F\u0430\u0440\u0430\u043C\u0435\u0442\u0440\u044B \u0443\u0440\u043E\u0432\u043D\u0435\u0439: \u0447\u0435\u0440\u043D\u043E\u0432\u0438\u043A \u043D\u0435 \u043F\u0440\u043E\u0448\u0451\u043B \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0443."
+};
+function renderExtendedPreview(section, capture) {
+  const root = document.createElement("section");
+  root.className = "fkp-extended-preview";
+  const button = document.createElement("button");
+  button.type = "button";
+  button.textContent = "\u041F\u0440\u0435\u0434\u043F\u0440\u043E\u0441\u043C\u043E\u0442\u0440 URLTest / Priority";
+  const status = document.createElement("p");
+  status.setAttribute("role", "status");
+  status.setAttribute("aria-live", "polite");
+  const content = document.createElement("div");
+  root.append(button, status, content);
+  let generation = 0, expectedCapture;
+  const paragraph = (text, parent = content) => {
+    const p = document.createElement("p");
+    p.textContent = text;
+    parent.append(p);
+  };
+  const invalidate = () => {
+    generation++;
+    content.replaceChildren();
+    status.textContent = "\u0427\u0435\u0440\u043D\u043E\u0432\u0438\u043A \u0438\u0437\u043C\u0435\u043D\u0451\u043D. \u041F\u043E\u0432\u0442\u043E\u0440\u0438\u0442\u0435 \u043F\u0440\u0435\u0434\u043F\u0440\u043E\u0441\u043C\u043E\u0442\u0440.";
+  };
+  root.addEventListener("forkop:preview-invalidated", invalidate);
+  button.addEventListener("click", async () => {
+    const current = ++generation, snapshot = capture();
+    content.replaceChildren();
+    if (snapshot.unavailableReason || !snapshot.draft) {
+      status.textContent = unavailable[snapshot.unavailableReason || ""] || "\u041F\u0440\u0435\u0434\u043F\u0440\u043E\u0441\u043C\u043E\u0442\u0440 \u043D\u0435\u0434\u043E\u0441\u0442\u0443\u043F\u0435\u043D: \u043A\u043E\u043D\u0442\u0435\u043A\u0441\u0442 \u0438\u0441\u0442\u043E\u0447\u043D\u0438\u043A\u043E\u0432 \u043D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u0435\u043D.";
+      return;
+    }
+    const requestId = `preview_${current}`;
+    status.textContent = "\u0427\u0438\u0442\u0430\u0435\u043C \u0441\u043D\u0438\u043C\u043E\u043A \u0438 \u043F\u0440\u043E\u0432\u0435\u0440\u044F\u0435\u043C \u0447\u0435\u0440\u043D\u043E\u0432\u0438\u043A\u2026";
+    root.setAttribute("aria-busy", "true");
+    const reply = await executeShellCommand({
+      command: "/usr/bin/forkop",
+      args: [
+        "extended_preview",
+        JSON.stringify({
+          schema: 1,
+          section,
+          requestId,
+          expectedCapture,
+          draft: snapshot.draft
+        })
+      ],
+      timeout: 15e3,
+      operationName: "\u041F\u0440\u0435\u0434\u043F\u0440\u043E\u0441\u043C\u043E\u0442\u0440 \u0444\u0438\u043B\u044C\u0442\u0440\u043E\u0432"
+    });
+    if (!root.isConnected || current !== generation || capture().revision !== snapshot.revision)
+      return;
+    root.setAttribute("aria-busy", "false");
+    try {
+      const result = JSON.parse(reply.stdout);
+      if (!result.success) {
+        if (result.error === "capture_changed") expectedCapture = void 0;
+        status.textContent = unavailable[result.reason] || unavailable[result.error] || "\u041F\u0440\u0435\u0434\u043F\u0440\u043E\u0441\u043C\u043E\u0442\u0440 \u043D\u0435\u0434\u043E\u0441\u0442\u0443\u043F\u0435\u043D: \u043D\u0435\u0442 \u043F\u043E\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0451\u043D\u043D\u043E\u0433\u043E \u0441\u043D\u0438\u043C\u043A\u0430 \u0442\u0435\u043A\u0443\u0449\u0438\u0445 \u0438\u0441\u0442\u043E\u0447\u043D\u0438\u043A\u043E\u0432. \u0421\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u0435 \u0438 \u043F\u0440\u0438\u043C\u0435\u043D\u0438\u0442\u0435 \u043D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438.";
+        return;
+      }
+      const data = result.data;
+      if (data.requestId !== requestId) return;
+      expectedCapture = data.capture;
+      status.textContent = "\u0427\u0435\u0440\u043D\u043E\u0432\u0438\u043A \u0444\u0438\u043B\u044C\u0442\u0440\u043E\u0432 \xB7 \u043D\u0430\u0431\u043E\u0440 \u0443\u0437\u043B\u043E\u0432 \u0438\u0437 \u0441\u043D\u0438\u043C\u043A\u0430. \u0414\u043E\u0441\u0442\u0443\u043F\u043D\u043E\u0441\u0442\u044C \u0443\u0437\u043B\u043E\u0432 \u043D\u0435 \u043F\u0440\u043E\u0432\u0435\u0440\u044F\u043B\u0430\u0441\u044C.";
+      paragraph(
+        "\u042D\u0442\u0438 \u043D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438 \u0435\u0449\u0451 \u043D\u0435 \u043F\u0440\u0438\u043C\u0435\u043D\u0435\u043D\u044B. \u0420\u0430\u0431\u043E\u0442\u0430\u044E\u0449\u0438\u0435 \u0433\u0440\u0443\u043F\u043F\u044B \u0441\u043C\u043E\u0442\u0440\u0438\u0442\u0435 \u0432 \u0440\u0430\u0437\u0434\u0435\u043B\u0435 \xAB\u0421\u0435\u0440\u0432\u0435\u0440\u044B\xBB."
+      );
+      const names = new Map(data.candidates.map((c) => [c.id, c.name]));
+      names.set("direct", "Direct");
+      for (const group of data.groups) {
+        const heading = document.createElement("h4");
+        heading.textContent = `${group.name}: ${group.count} \u0443\u0437\u043B\u043E\u0432${group.omitted ? " \xB7 \u043F\u0443\u0441\u0442\u0430\u044F \u0433\u0440\u0443\u043F\u043F\u0430 \u043D\u0435 \u0441\u043E\u0437\u0434\u0430\u0451\u0442\u0441\u044F" : ""}`;
+        content.append(heading);
+        paragraph(
+          group.interrupt ? "\u0421\u043E\u0435\u0434\u0438\u043D\u0435\u043D\u0438\u044F \u043F\u0440\u0435\u0440\u044B\u0432\u0430\u044E\u0442\u0441\u044F \u043F\u0440\u0438 \u043F\u0435\u0440\u0435\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0438." : "\u0421\u0443\u0449\u0435\u0441\u0442\u0432\u0443\u044E\u0449\u0438\u0435 \u0441\u043E\u0435\u0434\u0438\u043D\u0435\u043D\u0438\u044F \u0441\u043E\u0445\u0440\u0430\u043D\u044F\u044E\u0442\u0441\u044F \u043F\u0440\u0438 \u043F\u0435\u0440\u0435\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0438."
+        );
+        for (const level of group.levels) {
+          const details = document.createElement("details"), summary = document.createElement("summary");
+          summary.textContent = `${level.name}: ${level.count}${level.empty ? " \xB7 \u043F\u0443\u0441\u0442\u043E" : ""}${level.direct ? " \xB7 \u043F\u0440\u044F\u043C\u043E\u0439 \u0432\u044B\u0445\u043E\u0434" : ""}`;
+          details.append(summary);
+          content.append(details);
+          paragraph(
+            level.members.map((id) => names.get(id) || id).join(", ") || "\u041D\u0435\u0442 \u0443\u0447\u0430\u0441\u0442\u043D\u0438\u043A\u043E\u0432",
+            details
+          );
+          for (const overlap of level.overlap)
+            paragraph(
+              `${names.get(overlap.member) || overlap.member}: \u0443\u0436\u0435 \u043D\u0430\u0437\u043D\u0430\u0447\u0435\u043D \u0443\u0440\u043E\u0432\u043D\u044E ${overlap.assignedLevel}`,
+              details
+            );
+          const list2 = document.createElement("ul");
+          for (const decision of level.decisions) {
+            const item = document.createElement("li");
+            item.textContent = `${names.get(decision.member) || decision.member}: ${decision.included ? "\u0432\u043A\u043B\u044E\u0447\u0451\u043D" : "\u0438\u0441\u043A\u043B\u044E\u0447\u0451\u043D"} \u2014 ${decision.reasons.map((reason) => reasonText[reason] || "\u041D\u0435\u0442 \u0434\u0430\u043D\u043D\u044B\u0445").join(", ")}`;
+            list2.append(item);
+          }
+          details.append(list2);
+        }
+        if (group.kind === "priority") {
+          const levels = new Map(group.levels.map((l) => [l.id, l.name]));
+          paragraph(
+            `\u041F\u043E\u0440\u044F\u0434\u043E\u043A \u0440\u0435\u0437\u0435\u0440\u0432\u0430: ${group.fallbackOrder.map((id) => levels.get(id) || id).join(" \u2192 ") || "\u043D\u0435\u0442 \u043D\u0435\u043F\u0443\u0441\u0442\u044B\u0445 \u0443\u0440\u043E\u0432\u043D\u0435\u0439"}`
+          );
+          paragraph(
+            group.policy?.pickFastest ? "\u0412\u043D\u0443\u0442\u0440\u0438 \u0443\u0440\u043E\u0432\u043D\u044F \u0432\u044B\u0431\u0438\u0440\u0430\u0435\u0442\u0441\u044F \u0441\u0430\u043C\u044B\u0439 \u0431\u044B\u0441\u0442\u0440\u044B\u0439 \u0434\u043E\u0441\u0442\u0443\u043F\u043D\u044B\u0439 \u0443\u0437\u0435\u043B." : "\u0412\u043D\u0443\u0442\u0440\u0438 \u0443\u0440\u043E\u0432\u043D\u044F \u0441\u043E\u0445\u0440\u0430\u043D\u044F\u0435\u0442\u0441\u044F \u0448\u0442\u0430\u0442\u043D\u0430\u044F \u043F\u043E\u043B\u0438\u0442\u0438\u043A\u0430 \u0432\u044B\u0431\u043E\u0440\u0430."
+          );
+          paragraph(
+            "\u0415\u0441\u043B\u0438 \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0438 \u0432\u0441\u0435\u0445 \u0437\u0430\u043C\u0435\u043D \u043D\u0435\u0443\u0441\u043F\u0435\u0448\u043D\u044B, \u0430\u0432\u0442\u043E\u043C\u0430\u0442\u0438\u0447\u0435\u0441\u043A\u043E\u0435 \u043F\u0435\u0440\u0435\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435 \u043D\u0430 Direct \u0438\u043B\u0438 \u0431\u043B\u043E\u043A\u0438\u0440\u043E\u0432\u043A\u0443 \u043D\u0435 \u0432\u044B\u043F\u043E\u043B\u043D\u044F\u0435\u0442\u0441\u044F."
+          );
+        }
+      }
+    } catch {
+      status.textContent = "\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u043F\u0440\u043E\u0447\u0438\u0442\u0430\u0442\u044C \u043F\u0440\u0435\u0434\u043F\u0440\u043E\u0441\u043C\u043E\u0442\u0440. \u041F\u043E\u0432\u0442\u043E\u0440\u0438\u0442\u0435 \u0437\u0430\u043F\u0440\u043E\u0441.";
+    }
+  });
+  return root;
+}
+
 // src/main.ts
 if (typeof structuredClone !== "function")
   globalThis.structuredClone = (obj) => JSON.parse(JSON.stringify(obj));
@@ -18070,6 +18341,7 @@ return baseclass.extend({
   parseValueList,
   refreshRuntimeUiState,
   registerConfigurationReload,
+  renderExtendedPreview,
   renderNextPanel,
   renderQuickSite,
   renderRuleIdentity,
