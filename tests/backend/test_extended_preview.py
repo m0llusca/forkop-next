@@ -106,6 +106,9 @@ class ExtendedPreview(unittest.TestCase):
                 generated = json.loads(self.output.read_text())['outbounds']
                 actual = [o for o in generated if o['type'] == 'urltest']
                 self.assertEqual(len(actual[0]['outbounds']) if actual else 0, count)
+                names = {c['id']: c['name'] for c in result['data']['candidates']}
+                self.assertEqual([names[m] for m in group['levels'][0]['members']],
+                                 actual[0]['outbounds'] if actual else [])
 
     def test_missing_stale_capture_and_foreign_children_are_unavailable(self):
         self.generate()
@@ -179,3 +182,89 @@ class ExtendedPreview(unittest.TestCase):
                 path = self.d / 'digest-input'
                 path.write_bytes(data)
                 self.assertEqual(self.run_ucode(['-e',code,str(path)]), hashlib.sha256(data).hexdigest())
+
+    def test_parameter_and_or_pool_exclusions_and_flag_country_match_generation(self):
+        nodes = [
+            {'type':'vless','tag':'🇩🇪 Alpha','server':'127.0.0.1','server_port':443,'uuid':'SECRET',
+             'tls':{'enabled':True}},
+            {'type':'vless','tag':'Beta','server':'127.0.0.1','server_port':443,'uuid':'SECRET',
+             'transport':{'type':'ws'},'tls':{'enabled':True}},
+            {'type':'vmess','tag':'Gamma','server':'127.0.0.1','server_port':443,'uuid':'SECRET',
+             'transport':{'type':'grpc'}},
+            {'type':'http','tag':'Delta','server':'127.0.0.1','server_port':8080}]
+        self.data['section'][0]['outbound_jsons'] = list(map(json.dumps,nodes))
+        variants = [
+            ({'filter_mode':'include','include_proxy_parameters':'1','include_protocols':['vless'],
+              'include_transports':['ws'],'include_securities':['tls']}, {}, ['Beta']),
+            ({'filter_mode':'exclude','exclude_proxy_parameters':'1','exclude_protocols':['http'],
+              'exclude_transports':['grpc']}, {}, ['🇩🇪 Alpha','Beta']),
+            ({'filter_mode':'include','include_countries':['DE'],'detect_server_country':'flag_emoji'}, {}, ['🇩🇪 Alpha']),
+            ({'filter_mode':'disabled'}, {'dashboard_filter_mode':'include','dashboard_include_outbounds':['missing']},
+             ['🇩🇪 Alpha','Beta','Gamma','Delta']),
+            ({'filter_mode':'disabled'}, {'dashboard_filter_mode':'mixed','dashboard_exclude_outbounds':['Beta']},
+             ['🇩🇪 Alpha','Gamma','Delta'])]
+        for filters, parent, expected in variants:
+            with self.subTest(filters=filters,parent=parent):
+                self.data['urltest'][0] = {'.name':'u1','.type':'urltest','section':'main',**filters}
+                for key in list(self.data['section'][0]):
+                    if key.startswith('dashboard_'): del self.data['section'][0][key]
+                self.data['section'][0].update(parent)
+                self.generate()
+                result = self.preview()
+                self.assertTrue(result['success'],result)
+                names = {c['id']:c['name'] for c in result['data']['candidates']}
+                group = next(g for g in result['data']['groups'] if g['id']=='u1')
+                actual = [names[m] for m in group['levels'][0]['members']]
+                generated = next(o for o in json.loads(self.output.read_text())['outbounds'] if o['type']=='urltest')
+                self.assertEqual(actual,expected)
+                self.assertEqual(actual,generated['outbounds'])
+
+    def test_captured_subscription_and_core_changes_invalidate_without_commands_or_writes(self):
+        directory=self.d/'subscriptions';directory.mkdir()
+        url='https://user:SOURCE_SECRET@example.invalid/list?token=SOURCE_SECRET'
+        self.data['section'][0]['subscription_urls']=[url]
+        subscription={'outbounds':[{'type':'socks','tag':'https://user:NAME_SECRET@example.invalid',
+                        'server':'127.0.0.1','server_port':1080,'password':'SOURCE_SECRET'}]}
+        for suffix,content in {'.url':url,'.user_agent':'', '.hwid':'', '.json':json.dumps(subscription)}.items():
+            (directory/('main-subscription-1'+suffix)).write_text(content)
+        core=self.d/'sing-box';core.write_text('fixture core bytes');self.env['FORKOP_SINGBOX_BINARY']=str(core)
+        self.generate()
+        commands=self.d/'commands';commands.mkdir()
+        for name in ('curl','dig','nslookup','service','uci','logger'):
+            stub=commands/name;stub.write_text('#!/bin/sh\necho invoked >> "'+str(self.d/'unexpected-command')+'"\nexit 99\n');stub.chmod(0o755)
+        self.env['PATH']=str(commands)+os.pathsep+self.env['PATH']
+        before={str(p):p.read_bytes() for p in self.d.rglob('*') if p.is_file()}
+        result=self.preview();self.assertTrue(result['success'],result)
+        self.assertNotIn('SECRET',json.dumps(result))
+        self.assertEqual(before,{str(p):p.read_bytes() for p in self.d.rglob('*') if p.is_file()})
+        for path in [core, directory/'main-subscription-1.json',directory/'main-subscription-1.url',
+                     directory/'main-subscription-1.user_agent',directory/'main-subscription-1.hwid']:
+            original=path.read_bytes();path.write_bytes(original+b'changed')
+            self.assertEqual(self.preview()['error'],'preview_unavailable',str(path))
+            path.write_bytes(original)
+        self.assertFalse((self.d/'unexpected-command').exists())
+
+    def test_legacy_interrupt_order_ties_and_validation(self):
+        self.data['urltest']=[]
+        self.data['section'][0].update(urltest_enabled='1',urltest_filter_mode='include',urltest_include_outbounds=['Beta'])
+        self.data['priority_level'][1]['order']='10'
+        self.data['priority_group'][0].update(interrupt_exist_connections='0',pick_fastest='1',switch_to_faster_same_priority='1')
+        self.generate()
+        result=self.preview();self.assertTrue(result['success'],result)
+        groups={g['id']:g for g in result['data']['groups']}
+        self.assertEqual(groups['urltest']['count'],1)
+        self.assertEqual(groups['p1']['fallbackOrder'],['l1','l2','l3','l4'])
+        self.assertFalse(groups['p1']['interrupt'])
+        self.assertTrue(groups['p1']['policy']['pickFastest'])
+        for key,value in [('filter_mode','unsupported'),('include_regex',['[']),('testing_url','SECRET')]:
+            request=self.request();request['draft']['urltest']=[{'.name':'new_u','.type':'urltest','section':'main',key:value}]
+            self.assertEqual(self.preview(request)['error'],'invalid_request')
+
+    def test_public_cli_calls_the_same_read_service(self):
+        self.generate()
+        self.env['FORKOP_LIB']=str(LIB)
+        # Regenerate because trust-manifest location is part of core evidence.
+        self.generate()
+        result=json.loads(self.run_ucode([str(ROOT/'forkop/files/usr/bin/forkop'),'extended_preview',json.dumps(self.request())]))
+        self.assertTrue(result['success'],result)
+        self.assertEqual(result['data']['requestId'],'revision-1')
