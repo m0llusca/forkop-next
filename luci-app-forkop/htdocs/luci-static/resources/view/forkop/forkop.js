@@ -30,40 +30,6 @@
 
 const UCI_PACKAGE = main.FORKOP_UCI_PACKAGE;
 
-function renderSectionAdd(sectionRef, extra_class) {
-  const el = form.GridSection.prototype.renderSectionAdd.apply(sectionRef, [
-    extra_class,
-  ]);
-  const nameEl = el.querySelector(".cbi-section-create-name");
-
-  ui.addValidator(
-    nameEl,
-    "uciname",
-    true,
-    (value) => {
-      const button = el.querySelector(".cbi-section-create > .cbi-button-add");
-      const uciconfig = sectionRef.uciconfig || sectionRef.map.config;
-
-      if (!value) {
-        button.disabled = true;
-        return true;
-      }
-
-      if (uci.get(uciconfig, value)) {
-        button.disabled = true;
-        return _("Expecting: %s").format(_("unique UCI identifier"));
-      }
-
-      button.disabled = null;
-      return true;
-    },
-    "blur",
-    "keyup",
-  );
-
-  return el;
-}
-
 function getRuleEditButtonText() {
   const label = _("Edit rule action");
 
@@ -82,9 +48,6 @@ function configureGridSection(sectionRef, type, title, addTitle) {
   };
   sectionRef.sectiontitle = function (section_id) {
     return uci.get(UCI_PACKAGE, section_id, "label") || section_id;
-  };
-  sectionRef.renderSectionAdd = function (extra_class) {
-    return renderSectionAdd(sectionRef, extra_class);
   };
 
   if (type === "section") {
@@ -405,6 +368,16 @@ const EntryPoint = {
       _("Configuration for Forkop service"),
     );
     forkopMap.tabbed = true;
+    const originalRenderContents = forkopMap.renderContents;
+    forkopMap.renderContents = function () {
+      if (this.root) main.disposeWorkspaceTools(this.root);
+      return Promise.resolve(
+        originalRenderContents.apply(this, arguments),
+      ).then(function (rendered) {
+        main.mountForkopWorkspace(rendered);
+        return rendered;
+      });
+    };
     const originalHandleSaveApply = forkopMap.handleSaveApply;
     forkopMap.handleSaveApply = function (ev, mode) {
       const refreshUiState = function () {
@@ -474,6 +447,11 @@ const EntryPoint = {
       loadActionProvidersAvailability: loadUiCapabilities,
     });
     section.createSectionContent(rulesSection);
+    main.configureNamedSectionCreation(
+      rulesSection,
+      "Новое правило",
+      "Добавить правило",
+    );
 
     const serverSection = forkopMap.section(
       form.GridSection,
@@ -492,6 +470,11 @@ const EntryPoint = {
       loadCapabilities: loadUiCapabilities,
     });
     server.createServerContent(serverSection, uiCapabilities);
+    main.configureNamedSectionCreation(
+      serverSection,
+      "Входящее подключение",
+      "Добавить входящее подключение",
+    );
 
     const settingsSection = forkopMap.section(
       form.TypedSection,
@@ -602,6 +585,31 @@ const EntryPoint = {
       return ["updates"];
     };
     updates.createUpdatesContent(updatesSection);
+
+    // Append UI-only panes: existing native tab indices retain their meaning.
+    for (const [id, title, area] of [
+      ["devices", "Маршруты устройств", "devices"],
+      ["rule_tools", "Временные правила и рекомендации", "rules"],
+      ["route_tools", "Проверка маршрута", "diagnostics"],
+      ["advanced", "Профили и совместимость", "settings"],
+    ]) {
+      const toolsSection = forkopMap.section(form.TypedSection, id, title);
+      toolsSection.anonymous = true;
+      toolsSection.addremove = false;
+      toolsSection.cfgsections = function () {
+        return [id];
+      };
+      const tools = toolsSection.option(form.DummyValue, "_workspace_tools");
+      tools.rawhtml = true;
+      // DummyValue inherits Value.parse(), which calls cfgvalue(). These
+      // display-only values must not create detached hosts during saves.
+      tools.parse = function () {
+        return Promise.resolve();
+      };
+      tools.cfgvalue = function () {
+        return main.renderWorkspaceTools(area);
+      };
+    }
 
     void loadUiCapabilities().catch(showCapabilityError);
 

@@ -11,3 +11,5 @@ work/
 __pycache__/
 *.pyc
 .impeccable/review/
+.impeccable/build/
+.impeccable/questions/

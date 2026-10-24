@@ -1,4 +1,5 @@
 import { nextStyles } from './forkop/next/styles';
+import { workspaceStyles } from './forkop/workspace/styles';
 // language=CSS
 import { DashboardTab } from './forkop/tabs/dashboard';
 import { DiagnosticTab } from './forkop/tabs/diagnostic';
@@ -164,4 +165,5 @@ ${PartialStyles}
     opacity: 1;
     transform: translateY(0);
 }
+${workspaceStyles}
 `;
