@@ -56,6 +56,39 @@ module; full request/response and evidence semantics are in `docs/COMPATIBILITY.
 
 ## Controller access
 
+### Connection overview adapters
+
+`renderNextPanel(request?, loadConnections?, adapters?)` retains its two existing
+optional arguments. The optional third argument provides `readRuntime`,
+`subscribeRuntime`, `openServers`, `openRules`, `changeService` and `readTraffic`.
+Runtime snapshots contain optional
+`running: boolean`, `pending: boolean` and `error: string`; omitted evidence stays
+unknown. Subscriptions return an unsubscribe callback. The native adapter uses
+an optional second listener argument `{ cached: true }` for its synchronous
+startup cache replay. Cached evidence cannot supersede a pending fresh read or
+an already observed fresh result/error. Genuine later updates still supersede
+older in-flight replies. The native adapter uses
+the existing shared `refreshRuntimeUiState`/`subscribeRuntimeUiState` service;
+there is no additional overview polling loop for runtime state. `openServers` navigates to the
+existing authenticated selector; without an adapter the overview opens the
+native Dashboard tab and reports unavailable navigation explicitly. Advanced
+Next actions retain their current authenticated CLI contracts.
+
+`changeService('start' | 'stop')` returns `{ success, error? }` only after following
+the actual service job. The native adapter uses `serviceActionStart` followed by
+`waitServiceActionJob` and checks terminal `data.success`, preserving start/job
+errors. Local and shared pending state disable duplicate service actions.
+
+`readTraffic()` returns `{ downloadTotal, uploadTotal, connections }` from the
+existing authenticated controller snapshot. The overview reads at most once at
+a time, schedules the next read three seconds after completion and stops while
+the document or native `[data-tab-active="false"]` pane is hidden or removed.
+Rates require two valid samples and positive monotonic elapsed time; counter
+resets, failures and visibility changes reset the baseline. Missing telemetry
+stays unavailable. `openRules` navigates to existing connection/rule editing;
+without it, the native `section` tab is used. Probe inputs require a domain before
+any backend request.
+
 The generated Clash controller listens on `127.0.0.1:9090` by default. Remote YACD
 access requires both `enable_yacd=1` and a nonempty `yacd_secret_key`; only then can
 the controller bind to the service LAN address or, with explicit WAN access, all

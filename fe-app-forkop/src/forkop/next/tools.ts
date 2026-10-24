@@ -5,7 +5,10 @@ type Request = (
 ) => Promise<Response>;
 
 /** Native DOM controls, also usable outside the LuCI form lifecycle. */
-export function renderDeviceProfileTools(request: Request): HTMLElement {
+export function renderDeviceProfileTools(
+  request: Request,
+  initialRequest: Request = request,
+): HTMLElement {
   const root = document.createElement('section');
   root.className = 'fkp-next-panel';
   const heading = (text: string) => {
@@ -51,8 +54,12 @@ export function renderDeviceProfileTools(request: Request): HTMLElement {
     }
     if (items.some((item) => item.value === previous)) select.value = previous;
   };
-  const call = async (action: string, payload: Record<string, unknown>) => {
-    const response = await request(action, payload);
+  const call = async (
+    action: string,
+    payload: Record<string, unknown>,
+    read: Request = request,
+  ) => {
+    const response = await read(action, payload);
     if (!response.success) throw new Error(response.error || 'request_failed');
     return response.data;
   };
@@ -153,8 +160,8 @@ export function renderDeviceProfileTools(request: Request): HTMLElement {
   const exportName = field('select', 'Профиль для экспорта');
   options(exportName, []);
   const profileResult = result('Результат профиля');
-  const loadProfiles = async () => {
-    const data = (await call('profile_list', {})) as {
+  const loadProfiles = async (read: Request = request) => {
+    const data = (await call('profile_list', {}, read)) as {
       items: Array<{ name: string }>;
     };
     options(
@@ -244,7 +251,7 @@ export function renderDeviceProfileTools(request: Request): HTMLElement {
         error instanceof Error ? error.message : 'device_read_failed';
     });
   profileResult.textContent = 'Загрузка профилей…';
-  void loadProfiles()
+  void loadProfiles(initialRequest)
     .then(() => {
       profileResult.textContent = '';
     })
@@ -252,7 +259,7 @@ export function renderDeviceProfileTools(request: Request): HTMLElement {
       profileResult.textContent =
         error instanceof Error ? error.message : 'profile_read_failed';
     });
-  void call('status', {})
+  void call('status', {}, initialRequest)
     .then((raw) => {
       const data = raw as { sections: Array<{ name: string; label?: string }> };
       const items = data.sections.map((section) => ({

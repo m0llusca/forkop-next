@@ -858,6 +858,7 @@ function getProxyUrlName(url) {
 
 // src/forkop/next/styles.ts
 var nextStyles = `
+.fkp-next-overview>.fkp-next-service{font-size:22px;font-weight:650;line-height:1.3;margin:24px 0 8px}.fkp-next-connection{font-variant-numeric:tabular-nums;overflow-wrap:anywhere}.fkp-next-traffic{margin-top:32px}.fkp-next details{min-width:0}.fkp-next summary{cursor:pointer;padding:14px 4px;min-height:48px;font-weight:600;overflow-wrap:anywhere}.fkp-next details>summary:hover{color:var(--next-accent)}.fkp-next-advanced{margin-top:32px;border-top:1px solid var(--next-line)}.fkp-next-advanced-content{padding-top:24px}.fkp-next-advanced-content>.fkp-next-content{display:block}.fkp-next-disclosure{border-top:1px solid var(--next-line);padding-bottom:8px}.fkp-next-disclosure>.fkp-next-panel{border:0;padding:8px 0 24px}.fkp-next-overview .fkp-next-advanced-content .fkp-next-tools{padding:16px 0}.fkp-next summary::marker{color:var(--next-muted)}
 .fkp-next{--next-bg:#f6f7f8;--next-fg:#17252d;--next-muted:#455863;--next-line:#ced7dc;--next-accent:#14635e;--next-field:#fff;color:var(--next-fg);background:var(--next-bg);padding:24px;border-radius:12px;font-family:inherit;line-height:1.5;accent-color:var(--next-accent);color-scheme:light}
 .fkp-next[data-theme=dark]{--next-bg:#16232b;--next-fg:#eef4f6;--next-muted:#b8c8d0;--next-line:#455963;--next-accent:#8bd6c8;--next-field:#21333e;color-scheme:dark}
 @media(prefers-color-scheme:dark){.fkp-next:not([data-theme=light]){--next-bg:#16232b;--next-fg:#eef4f6;--next-muted:#b8c8d0;--next-line:#455963;--next-accent:#8bd6c8;--next-field:#21333e;color-scheme:dark}}
@@ -1111,12 +1112,12 @@ function preserveScrollForPage(renderFn) {
 // src/helpers/svgEl.ts
 function svgEl(tag, attrs = {}, children = []) {
   const NS = "http://www.w3.org/2000/svg";
-  const el2 = document.createElementNS(NS, tag);
+  const el3 = document.createElementNS(NS, tag);
   for (const [k, v] of Object.entries(attrs)) {
-    if (v != null) el2.setAttribute(k, String(v));
+    if (v != null) el3.setAttribute(k, String(v));
   }
-  (Array.isArray(children) ? children : [children]).filter(Boolean).forEach((ch) => el2.appendChild(ch));
-  return el2;
+  (Array.isArray(children) ? children : [children]).filter(Boolean).forEach((ch) => el3.appendChild(ch));
+  return el3;
 }
 
 // src/helpers/insertIf.ts
@@ -4175,10 +4176,10 @@ var TabService = class _TabService {
     const tabs = Array.from(
       document.querySelectorAll(".cbi-tab, .cbi-tab-disabled")
     );
-    return tabs.map((el2) => ({
-      el: el2,
-      id: el2.dataset.tab || "",
-      active: el2.classList.contains("cbi-tab") && !el2.classList.contains("cbi-tab-disabled")
+    return tabs.map((el3) => ({
+      el: el3,
+      id: el3.dataset.tab || "",
+      active: el3.classList.contains("cbi-tab") && !el3.classList.contains("cbi-tab-disabled")
     }));
   }
   getActiveTabId() {
@@ -14309,8 +14310,86 @@ function injectGlobalStyles() {
   );
 }
 
+// src/forkop/next/api.ts
+async function nextRequest(action, payload = {}) {
+  const response = await executeShellCommand({
+    command: "/usr/bin/forkop",
+    args: action === "route_explain" ? ["route_explain", JSON.stringify(payload)] : ["next", action, JSON.stringify(payload)],
+    timeout: 6e4,
+    operationName: `Forkop Next ${action}`
+  });
+  try {
+    const value = JSON.parse(response.stdout);
+    if (!value || typeof value.success !== "boolean")
+      return { success: false, error: "invalid_response" };
+    if ((response.code ?? 0) !== 0 && value.success)
+      return { success: false, error: response.stderr || "command_failed" };
+    if (value.success && typeof window !== "undefined" && [
+      "profile_apply",
+      "rollback",
+      "device_set",
+      "gaming_apply",
+      "temporary_add",
+      "temporary_delete",
+      "recommendation_accept",
+      "smart_detect_configure"
+    ].includes(action))
+      window.dispatchEvent(new CustomEvent("forkop:configuration-changed"));
+    return value;
+  } catch {
+    return { success: false, error: response.stderr || "invalid_response" };
+  }
+}
+
+// src/forkop/next/traffic.ts
+function createTrafficMonitor(output, read, visible) {
+  let timer;
+  let pending = false;
+  let epoch = 0;
+  let previous;
+  function stop() {
+    epoch++;
+    clearTimeout(timer);
+    timer = void 0;
+    previous = void 0;
+  }
+  async function refresh() {
+    if (!read || !visible() || pending) return;
+    clearTimeout(timer);
+    timer = void 0;
+    pending = true;
+    const current = epoch;
+    try {
+      const sample = await read();
+      if (current !== epoch || !visible()) return;
+      if (!sample || ![sample.downloadTotal, sample.uploadTotal, sample.connections].every(
+        (v) => Number.isFinite(v) && v >= 0
+      ) || !Number.isInteger(sample.connections))
+        throw new Error("invalid_traffic");
+      const time = performance.now();
+      const elapsed = previous ? (time - previous.time) / 1e3 : 0;
+      const valid = previous && Number.isFinite(elapsed) && elapsed > 0 && sample.downloadTotal >= previous.downloadTotal && sample.uploadTotal >= previous.uploadTotal;
+      const speed = valid ? `\u0421\u043A\u043E\u0440\u043E\u0441\u0442\u044C: \u043F\u0440\u0438\u0451\u043C ${Math.round((sample.downloadTotal - previous.downloadTotal) / elapsed)} \u0411/\u0441 \xB7 \u043E\u0442\u043F\u0440\u0430\u0432\u043A\u0430 ${Math.round((sample.uploadTotal - previous.uploadTotal) / elapsed)} \u0411/\u0441` : "\u0421\u043A\u043E\u0440\u043E\u0441\u0442\u044C \u0435\u0449\u0451 \u043D\u0435 \u0438\u0437\u043C\u0435\u0440\u0435\u043D\u0430";
+      output.textContent = `\u041F\u043E\u043B\u0443\u0447\u0435\u043D\u043E: ${sample.downloadTotal} \u0411 \xB7 \u041E\u0442\u043F\u0440\u0430\u0432\u043B\u0435\u043D\u043E: ${sample.uploadTotal} \u0411 \xB7 \u0421\u043E\u0435\u0434\u0438\u043D\u0435\u043D\u0438\u0439: ${sample.connections}. ${speed}. \u0421\u0447\u0451\u0442\u0447\u0438\u043A\u0438 \u043A\u043E\u043D\u0442\u0440\u043E\u043B\u043B\u0435\u0440\u0430 \u0441 \u043C\u043E\u043C\u0435\u043D\u0442\u0430 \u0435\u0433\u043E \u0437\u0430\u043F\u0443\u0441\u043A\u0430.`;
+      previous = { ...sample, time };
+    } catch {
+      if (current === epoch && visible()) {
+        previous = void 0;
+        output.textContent = "\u0422\u0440\u0430\u0444\u0438\u043A \u043F\u043E\u043A\u0430 \u043D\u0435\u0434\u043E\u0441\u0442\u0443\u043F\u0435\u043D. \u041E\u0431\u043D\u043E\u0432\u0438\u0442\u0435 \u0434\u0430\u043D\u043D\u044B\u0435 \u0438\u043B\u0438 \u043F\u0440\u043E\u0432\u0435\u0440\u044C\u0442\u0435 \u0441\u0435\u0440\u0432\u0438\u0441.";
+      }
+    } finally {
+      pending = false;
+      if (visible())
+        timer = setTimeout(() => {
+          void refresh();
+        }, 3e3);
+    }
+  }
+  return { refresh, stop };
+}
+
 // src/forkop/next/tools.ts
-function renderDeviceProfileTools(request) {
+function renderDeviceProfileTools(request, initialRequest = request) {
   const root = document.createElement("section");
   root.className = "fkp-next-panel";
   const heading = (text) => {
@@ -14350,8 +14429,8 @@ function renderDeviceProfileTools(request) {
     }
     if (items2.some((item) => item.value === previous)) select2.value = previous;
   };
-  const call = async (action, payload) => {
-    const response = await request(action, payload);
+  const call = async (action, payload, read = request) => {
+    const response = await read(action, payload);
     if (!response.success) throw new Error(response.error || "request_failed");
     return response.data;
   };
@@ -14443,8 +14522,8 @@ function renderDeviceProfileTools(request) {
   const exportName = field("select", "\u041F\u0440\u043E\u0444\u0438\u043B\u044C \u0434\u043B\u044F \u044D\u043A\u0441\u043F\u043E\u0440\u0442\u0430");
   options(exportName, []);
   const profileResult = result("\u0420\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442 \u043F\u0440\u043E\u0444\u0438\u043B\u044F");
-  const loadProfiles = async () => {
-    const data = await call("profile_list", {});
+  const loadProfiles = async (read = request) => {
+    const data = await call("profile_list", {}, read);
     options(
       exportName,
       data.items.map((item) => ({ value: item.name, label: item.name }))
@@ -14524,12 +14603,12 @@ function renderDeviceProfileTools(request) {
     deviceResult.textContent = error instanceof Error ? error.message : "device_read_failed";
   });
   profileResult.textContent = "\u0417\u0430\u0433\u0440\u0443\u0437\u043A\u0430 \u043F\u0440\u043E\u0444\u0438\u043B\u0435\u0439\u2026";
-  void loadProfiles().then(() => {
+  void loadProfiles(initialRequest).then(() => {
     profileResult.textContent = "";
   }).catch((error) => {
     profileResult.textContent = error instanceof Error ? error.message : "profile_read_failed";
   });
-  void call("status", {}).then((raw) => {
+  void call("status", {}, initialRequest).then((raw) => {
     const data = raw;
     const items2 = data.sections.map((section) => ({
       value: section.name,
@@ -14548,7 +14627,7 @@ function renderDeviceProfileTools(request) {
 
 // src/forkop/next/compatibility.ts
 var object = (v) => v && typeof v === "object" ? v : {};
-function renderCompatibilityPanel(request) {
+function renderCompatibilityPanel(request, initialRequest = request) {
   const root = document.createElement("section");
   root.className = "fkp-next-panel";
   const text = (tag, value) => {
@@ -14775,7 +14854,7 @@ function renderCompatibilityPanel(request) {
     );
   });
   root.append(updates);
-  void request("status", {}).then((response) => {
+  void initialRequest("status", {}).then((response) => {
     if (!response.success) {
       result.textContent = "\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0437\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044C \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u044F. \u041E\u0431\u043D\u043E\u0432\u0438\u0442\u0435 \u0441\u0442\u0440\u0430\u043D\u0438\u0446\u0443.";
       return;
@@ -14794,38 +14873,7 @@ function renderCompatibilityPanel(request) {
   return root;
 }
 
-// src/forkop/next/api.ts
-async function nextRequest(action, payload = {}) {
-  const response = await executeShellCommand({
-    command: "/usr/bin/forkop",
-    args: action === "route_explain" ? ["route_explain", JSON.stringify(payload)] : ["next", action, JSON.stringify(payload)],
-    timeout: 6e4,
-    operationName: `Forkop Next ${action}`
-  });
-  try {
-    const value = JSON.parse(response.stdout);
-    if (!value || typeof value.success !== "boolean")
-      return { success: false, error: "invalid_response" };
-    if ((response.code ?? 0) !== 0 && value.success)
-      return { success: false, error: response.stderr || "command_failed" };
-    if (value.success && typeof window !== "undefined" && [
-      "profile_apply",
-      "rollback",
-      "device_set",
-      "gaming_apply",
-      "temporary_add",
-      "temporary_delete",
-      "recommendation_accept",
-      "smart_detect_configure"
-    ].includes(action))
-      window.dispatchEvent(new CustomEvent("forkop:configuration-changed"));
-    return value;
-  } catch {
-    return { success: false, error: response.stderr || "invalid_response" };
-  }
-}
-
-// src/forkop/next/render.ts
+// src/forkop/next/advanced.ts
 var object2 = (v) => v && typeof v === "object" ? v : {};
 var items = (v) => Array.isArray(object2(v).items) ? object2(v).items : [];
 function el(tag, text = "", className = "") {
@@ -14853,9 +14901,24 @@ function select(label, choices) {
   wrap.append(node);
   return { wrap, node };
 }
-function renderNextPanel(request = nextRequest, loadConnections) {
-  const root = el("section", "", "fkp-next");
-  root.dataset.mode = "simple";
+function renderAdvancedPanel(request = nextRequest, loadConnections, lazy = false) {
+  const initialReads = /* @__PURE__ */ new Map();
+  const initialRequest = (action2, payload = {}) => {
+    if (action2 !== "status" && action2 !== "profile_list")
+      return request(action2, payload);
+    let pending = initialReads.get(action2);
+    if (!pending) {
+      pending = request(action2, payload);
+      initialReads.set(action2, pending);
+    }
+    return pending;
+  };
+  const root = el(
+    "section",
+    "",
+    lazy ? "fkp-next-advanced-content" : "fkp-next"
+  );
+  root.dataset.mode = lazy ? "detailed" : "simple";
   const header = el("header");
   const title = el("div");
   title.append(
@@ -14877,6 +14940,7 @@ function renderNextPanel(request = nextRequest, loadConnections) {
   ]);
   theme.node.onchange = () => root.dataset.theme = theme.node.value;
   header.append(title, mode, theme.wrap);
+  if (lazy) header.replaceChildren();
   root.append(header);
   const message = el("p", "", "fkp-next-notice");
   message.setAttribute("role", "status");
@@ -14894,13 +14958,13 @@ function renderNextPanel(request = nextRequest, loadConnections) {
         return;
       }
       summary.replaceChildren();
-      for (const group2 of r.data || []) {
-        const node = group2.outbounds.find((o) => o.selected);
+      for (const group of r.data || []) {
+        const node = group.outbounds.find((o) => o.selected);
         if (node)
           summary.append(
             el(
               "span",
-              `${group2.displayName}: ${node.displayName} \xB7 ${node.latency > 0 ? `${node.latency} \u043C\u0441` : "\u0437\u0430\u0434\u0435\u0440\u0436\u043A\u0430 \u043D\u0435 \u0438\u0437\u043C\u0435\u0440\u0435\u043D\u0430"}${node.latencyTestedAt ? " \xB7 \u043F\u0440\u043E\u0432\u0435\u0440\u0435\u043D\u043E " + new Date(node.latencyTestedAt).toLocaleString() : ""}`
+              `${group.displayName}: ${node.displayName} \xB7 ${node.latency > 0 ? `${node.latency} \u043C\u0441` : "\u0437\u0430\u0434\u0435\u0440\u0436\u043A\u0430 \u043D\u0435 \u0438\u0437\u043C\u0435\u0440\u0435\u043D\u0430"}${node.latencyTestedAt ? " \xB7 \u043F\u0440\u043E\u0432\u0435\u0440\u0435\u043D\u043E " + new Date(node.latencyTestedAt).toLocaleString() : ""}`
             )
           );
       }
@@ -14932,7 +14996,20 @@ function renderNextPanel(request = nextRequest, loadConnections) {
   function panel(title2, help) {
     const p = el("section", "", "fkp-next-panel");
     p.append(el("h3", title2), el("p", help, "fkp-next-help"));
-    content.append(p);
+    if (lazy) {
+      const details = el("details", "", "fkp-next-disclosure");
+      details.append(el("summary", title2));
+      let mounted = false;
+      details.addEventListener("toggle", () => {
+        if (!details.open || mounted) return;
+        mounted = true;
+        details.append(p);
+        void (title2 === "\u041F\u0440\u043E\u0444\u0438\u043B\u0438 \u0438 \u0432\u043E\u0441\u0441\u0442\u0430\u043D\u043E\u0432\u043B\u0435\u043D\u0438\u0435" ? refreshProfiles(request) : title2 === "\u0412\u0440\u0435\u043C\u0435\u043D\u043D\u044B\u0435 \u043F\u0440\u0430\u0432\u0438\u043B\u0430" ? refreshTemporary() : title2 === "Smart Detect" ? refreshRecommendations() : Promise.resolve()).catch(() => {
+          message.textContent = "\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0437\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044C \u0434\u0430\u043D\u043D\u044B\u0435. \u041D\u0430\u0436\u043C\u0438\u0442\u0435 \xAB\u041E\u0431\u043D\u043E\u0432\u0438\u0442\u044C \u0434\u0430\u043D\u043D\u044B\u0435\xBB.";
+        });
+      });
+      content.append(details);
+    } else content.append(p);
     return p;
   }
   async function invoke(action2, payload = {}, output) {
@@ -15184,8 +15261,12 @@ function renderNextPanel(request = nextRequest, loadConnections) {
     }),
     autoResult
   );
-  async function refreshStatus() {
-    const r = await request("status", {});
+  let statusGeneration = 0;
+  let profilesGeneration = 0;
+  async function refreshStatus(read = request) {
+    const current = ++statusGeneration;
+    const r = await read("status", {});
+    if (current !== statusGeneration) return;
     if (!r.success) {
       status.textContent = "\u0421\u043E\u0441\u0442\u043E\u044F\u043D\u0438\u0435 \u043D\u0435\u0434\u043E\u0441\u0442\u0443\u043F\u043D\u043E. \u041E\u0431\u043D\u043E\u0432\u0438\u0442\u0435 \u0441\u0442\u0440\u0430\u043D\u0438\u0446\u0443 \u0438\u043B\u0438 \u043F\u0440\u043E\u0432\u0435\u0440\u044C\u0442\u0435 \u0441\u0435\u0440\u0432\u0438\u0441.";
       return;
@@ -15229,9 +15310,11 @@ function renderNextPanel(request = nextRequest, loadConnections) {
     if (sections.some(([name]) => name === smart.section))
       rs.node.value = String(smart.section);
   }
-  async function refreshProfiles() {
+  async function refreshProfiles(read = request) {
+    const current = ++profilesGeneration;
     invalidatePreview();
-    const r = await request("profile_list", {});
+    const r = await read("profile_list", {});
+    if (current !== profilesGeneration) return;
     if (!r.success) {
       message.textContent = "\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0437\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044C \u043F\u0440\u043E\u0444\u0438\u043B\u0438. \u041D\u0430\u0436\u043C\u0438\u0442\u0435 \xAB\u041E\u0431\u043D\u043E\u0432\u0438\u0442\u044C \u0434\u0430\u043D\u043D\u044B\u0435\xBB.";
       return;
@@ -15295,42 +15378,406 @@ function renderNextPanel(request = nextRequest, loadConnections) {
     if (!recList.childNodes.length)
       recList.append(el("p", "\u0420\u0435\u043A\u043E\u043C\u0435\u043D\u0434\u0430\u0446\u0438\u0439 \u043F\u043E\u043A\u0430 \u043D\u0435\u0442."));
   }
-  const tools = renderDeviceProfileTools(request);
-  tools.className = "fkp-next-tools";
-  let group;
-  for (const child of [...tools.children]) {
-    if (child.tagName === "H3") {
-      group = el("section", "", "fkp-next-panel");
-      tools.append(group);
+  function mountTools() {
+    const tools = renderDeviceProfileTools(
+      request,
+      lazy ? request : initialRequest
+    );
+    tools.className = "fkp-next-tools";
+    let group;
+    for (const child of [...tools.children]) {
+      if (child.tagName === "H3") {
+        group = el("section", "", "fkp-next-panel");
+        tools.append(group);
+      }
+      group?.append(child);
     }
-    group?.append(child);
+    return tools;
   }
-  const compatibility = renderCompatibilityPanel(request);
-  compatibility.classList.add("fkp-next-compatibility");
-  content.append(compatibility, tools);
-  header.append(
-    action("\u041E\u0431\u043D\u043E\u0432\u0438\u0442\u044C \u0434\u0430\u043D\u043D\u044B\u0435", async () => {
-      message.textContent = "";
+  function mountCompatibility() {
+    const compatibility = renderCompatibilityPanel(
+      request,
+      lazy ? request : initialRequest
+    );
+    compatibility.classList.add("fkp-next-compatibility");
+    return compatibility;
+  }
+  if (lazy) {
+    for (const [title2, mount] of [
+      ["\u0421\u043E\u0432\u043C\u0435\u0441\u0442\u0438\u043C\u043E\u0441\u0442\u044C \u0441 3x-ui \u0438 Xray", mountCompatibility],
+      ["\u0423\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430, \u0438\u0433\u0440\u043E\u0432\u044B\u0435 \u043F\u0440\u0435\u0441\u0435\u0442\u044B \u0438 \u043E\u0431\u043C\u0435\u043D \u043F\u0440\u043E\u0444\u0438\u043B\u044F\u043C\u0438", mountTools]
+    ]) {
+      const details = el("details", "", "fkp-next-disclosure");
+      details.append(el("summary", title2));
+      let mounted = false;
+      details.addEventListener("toggle", () => {
+        if (details.open && !mounted) {
+          mounted = true;
+          details.append(mount());
+        }
+      });
+      content.append(details);
+    }
+  } else content.append(mountCompatibility(), mountTools());
+  const refreshVisible = async () => {
+    message.textContent = "";
+    try {
       await Promise.all([
         refreshStatus(),
-        refreshProfiles(),
-        refreshTemporary(),
-        refreshRecommendations(),
+        ...!lazy || profiles.isConnected ? [refreshProfiles()] : [],
+        ...!lazy || temporary.isConnected ? [refreshTemporary()] : [],
+        ...!lazy || recommendations.isConnected ? [refreshRecommendations()] : [],
         refreshConnections()
       ]);
-    })
-  );
+    } catch {
+      message.textContent = "\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0437\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044C \u0434\u0430\u043D\u043D\u044B\u0435. \u041D\u0430\u0436\u043C\u0438\u0442\u0435 \xAB\u041E\u0431\u043D\u043E\u0432\u0438\u0442\u044C \u0434\u0430\u043D\u043D\u044B\u0435\xBB.";
+    }
+  };
+  header.append(action("\u041E\u0431\u043D\u043E\u0432\u0438\u0442\u044C \u0434\u0430\u043D\u043D\u044B\u0435", refreshVisible));
+  root.addEventListener("forkop:refresh", () => {
+    void refreshVisible();
+  });
   root.addEventListener(
     "forkop:profiles-changed",
     () => void refreshProfiles()
   );
   void Promise.all([
-    refreshStatus(),
-    refreshProfiles(),
-    refreshTemporary(),
-    refreshRecommendations(),
+    refreshStatus(initialRequest),
+    ...!lazy ? [
+      refreshProfiles(initialRequest),
+      refreshTemporary(),
+      refreshRecommendations()
+    ] : [],
     refreshConnections()
-  ]);
+  ]).catch(() => {
+    message.textContent = "\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0437\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044C \u0434\u0430\u043D\u043D\u044B\u0435. \u041D\u0430\u0436\u043C\u0438\u0442\u0435 \xAB\u041E\u0431\u043D\u043E\u0432\u0438\u0442\u044C \u0434\u0430\u043D\u043D\u044B\u0435\xBB.";
+  });
+  return root;
+}
+
+// src/forkop/next/render.ts
+function el2(tag, text = "", className = "") {
+  const node = document.createElement(tag);
+  node.textContent = text;
+  node.className = className;
+  return node;
+}
+function renderNextPanel(request = nextRequest, loadConnections, adapters = {}) {
+  const root = el2("section", "", "fkp-next fkp-next-overview");
+  root.dataset.mode = "simple";
+  const header = el2("header");
+  const title = el2("div");
+  title.append(
+    el2("h2", "\u041F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435"),
+    el2("p", "\u0421\u043E\u0441\u0442\u043E\u044F\u043D\u0438\u0435 \u0440\u043E\u0443\u0442\u0435\u0440\u0430 \u0438 \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0430 \u0434\u043E\u0441\u0442\u0443\u043F\u0430 \u0432 \u0441\u0435\u0442\u044C.")
+  );
+  const theme = el2("label", "\u0422\u0435\u043C\u0430");
+  const themes = el2("select");
+  for (const [value, label] of [
+    ["auto", "\u041A\u0430\u043A \u0432 LuCI"],
+    ["light", "\u0421\u0432\u0435\u0442\u043B\u0430\u044F"],
+    ["dark", "\u0422\u0451\u043C\u043D\u0430\u044F"]
+  ]) {
+    const option = el2("option", label);
+    option.value = value;
+    themes.append(option);
+  }
+  themes.onchange = () => {
+    root.dataset.theme = themes.value;
+  };
+  theme.append(themes);
+  header.append(title, theme);
+  root.append(header);
+  const service = el2("p", "\u0421\u043E\u0441\u0442\u043E\u044F\u043D\u0438\u0435 \u0441\u0435\u0440\u0432\u0438\u0441\u0430 \u043D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043D\u043E", "fkp-next-service");
+  service.setAttribute("role", "status");
+  const connection = el2(
+    "p",
+    "\u0421\u043E\u0435\u0434\u0438\u043D\u0435\u043D\u0438\u0435 \u0435\u0449\u0451 \u043D\u0435 \u043F\u0440\u043E\u0432\u0435\u0440\u0435\u043D\u043E",
+    "fkp-next-connection"
+  );
+  connection.setAttribute("role", "status");
+  const notice = el2("p", "", "fkp-next-notice");
+  notice.setAttribute("role", "status");
+  root.append(service, connection, notice);
+  let runtime;
+  let servicePending = false;
+  const serviceControl = el2("button", "\u0412\u043A\u043B\u044E\u0447\u0438\u0442\u044C \u0441\u0435\u0440\u0432\u0438\u0441");
+  serviceControl.type = "button";
+  serviceControl.disabled = true;
+  if (adapters.changeService) root.insertBefore(serviceControl, connection);
+  function updateServiceControl() {
+    serviceControl.textContent = runtime?.running === true ? "\u041E\u0442\u043A\u043B\u044E\u0447\u0438\u0442\u044C \u0441\u0435\u0440\u0432\u0438\u0441" : "\u0412\u043A\u043B\u044E\u0447\u0438\u0442\u044C \u0441\u0435\u0440\u0432\u0438\u0441";
+    serviceControl.disabled = servicePending || runtime?.pending === true || typeof runtime?.running !== "boolean" || Boolean(runtime?.error);
+    serviceControl.setAttribute(
+      "aria-busy",
+      String(servicePending || runtime?.pending === true)
+    );
+  }
+  serviceControl.onclick = async () => {
+    if (serviceControl.disabled || !adapters.changeService) return;
+    servicePending = true;
+    updateServiceControl();
+    service.textContent = "\u0412\u044B\u043F\u043E\u043B\u043D\u044F\u0435\u0442\u0441\u044F \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u0435 \u0441\u0435\u0440\u0432\u0438\u0441\u0430\u2026";
+    notice.textContent = "";
+    try {
+      const result = await adapters.changeService(
+        runtime?.running === true ? "stop" : "start"
+      );
+      if (!result.success)
+        notice.textContent = `\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0438\u0437\u043C\u0435\u043D\u0438\u0442\u044C \u0441\u043E\u0441\u0442\u043E\u044F\u043D\u0438\u0435 \u0441\u0435\u0440\u0432\u0438\u0441\u0430: ${result.error || "\u043D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043D\u0430\u044F \u043E\u0448\u0438\u0431\u043A\u0430"}`;
+      else notice.textContent = "\u0414\u0435\u0439\u0441\u0442\u0432\u0438\u0435 \u0441\u0435\u0440\u0432\u0438\u0441\u0430 \u0437\u0430\u0432\u0435\u0440\u0448\u0435\u043D\u043E.";
+    } catch (error) {
+      notice.textContent = `\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0438\u0437\u043C\u0435\u043D\u0438\u0442\u044C \u0441\u043E\u0441\u0442\u043E\u044F\u043D\u0438\u0435 \u0441\u0435\u0440\u0432\u0438\u0441\u0430: ${error instanceof Error ? error.message : "\u043D\u0435\u0442 \u0441\u0432\u044F\u0437\u0438 \u0441 \u0440\u043E\u0443\u0442\u0435\u0440\u043E\u043C"}`;
+    } finally {
+      try {
+        await refresh();
+      } finally {
+        servicePending = false;
+        applyRuntime(runtime);
+      }
+    }
+  };
+  function action(text, run) {
+    const b = el2("button", text);
+    b.type = "button";
+    b.onclick = async () => {
+      if (b.disabled) return;
+      b.disabled = true;
+      b.setAttribute("aria-busy", "true");
+      try {
+        await run();
+      } finally {
+        b.disabled = false;
+        b.setAttribute("aria-busy", "false");
+      }
+    };
+    return b;
+  }
+  const server = el2("section", "", "fkp-next-panel");
+  const selected = el2(
+    "div",
+    loadConnections ? "\u0417\u0430\u0433\u0440\u0443\u0436\u0430\u0435\u043C \u0432\u044B\u0431\u0440\u0430\u043D\u043D\u044B\u0439 \u0441\u0435\u0440\u0432\u0435\u0440\u2026" : "\u0412\u044B\u0431\u0440\u0430\u043D\u043D\u044B\u0439 \u0441\u0435\u0440\u0432\u0435\u0440 \u043D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u0435\u043D",
+    "fkp-next-summary"
+  );
+  server.append(
+    el2("h3", "\u0412\u044B\u0431\u0440\u0430\u043D\u043D\u044B\u0439 \u0441\u0435\u0440\u0432\u0435\u0440"),
+    selected,
+    action("\u0418\u0437\u043C\u0435\u043D\u0438\u0442\u044C \u0441\u0435\u0440\u0432\u0435\u0440", async () => {
+      notice.textContent = "\u041E\u0442\u043A\u0440\u044B\u0432\u0430\u0435\u043C \u0432\u044B\u0431\u043E\u0440 \u0441\u0435\u0440\u0432\u0435\u0440\u0430\u2026";
+      try {
+        if (adapters.openServers) await adapters.openServers();
+        else {
+          const tab = document.querySelector(
+            '.cbi-tabmenu [data-tab="dashboard"] a, .cbi-tabmenu [data-tab="dashboard"] button'
+          );
+          if (!tab) throw new Error("navigation_unavailable");
+          tab.click();
+        }
+        notice.textContent = "";
+      } catch {
+        notice.textContent = "\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u043E\u0442\u043A\u0440\u044B\u0442\u044C \u0432\u044B\u0431\u043E\u0440 \u0441\u0435\u0440\u0432\u0435\u0440\u0430. \u041E\u0442\u043A\u0440\u043E\u0439\u0442\u0435 \u0432\u043A\u043B\u0430\u0434\u043A\u0443 Dashboard \u0432 LuCI.";
+      }
+    })
+  );
+  const addConnection = action("\u0414\u043E\u0431\u0430\u0432\u0438\u0442\u044C \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435", async () => {
+    notice.textContent = "\u041E\u0442\u043A\u0440\u044B\u0432\u0430\u0435\u043C \u043D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438 \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u044F\u2026";
+    try {
+      if (adapters.openRules) await adapters.openRules();
+      else {
+        const tab = document.querySelector(
+          '.cbi-tabmenu [data-tab="section"] a, .cbi-tabmenu [data-tab="section"] button'
+        );
+        if (!tab) throw new Error("navigation_unavailable");
+        tab.click();
+      }
+      notice.textContent = "";
+    } catch {
+      notice.textContent = "\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u043E\u0442\u043A\u0440\u044B\u0442\u044C \u043D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438. \u041E\u0442\u043A\u0440\u043E\u0439\u0442\u0435 \u0432\u043A\u043B\u0430\u0434\u043A\u0443 \xAB\u041F\u0440\u0430\u0432\u0438\u043B\u0430\xBB \u0432 LuCI.";
+    }
+  });
+  server.append(
+    addConnection,
+    el2(
+      "p",
+      "\u041F\u0435\u0440\u0432\u043E\u0435 \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435 \u0434\u043E\u0431\u0430\u0432\u043B\u044F\u0435\u0442\u0441\u044F \u0432 \u043F\u0440\u0430\u0432\u0438\u043B\u0430\u0445 \u043C\u0430\u0440\u0448\u0440\u0443\u0442\u0438\u0437\u0430\u0446\u0438\u0438. \u0412\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u0441\u0435\u0440\u0432\u0435\u0440 \u0438 \u0441\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u0435 \u043D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438.",
+      "fkp-next-help"
+    )
+  );
+  const check = el2("section", "", "fkp-next-panel");
+  check.append(el2("h3", "\u041F\u0440\u043E\u0432\u0435\u0440\u043A\u0430 \u0441\u043E\u0435\u0434\u0438\u043D\u0435\u043D\u0438\u044F"));
+  const domainLabel = el2("label", "\u0421\u0430\u0439\u0442 \u0434\u043B\u044F \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0438");
+  const domain = el2("input");
+  domain.name = "connection_domain";
+  domain.placeholder = "example.org";
+  domain.autocomplete = "off";
+  domainLabel.append(domain);
+  check.append(domainLabel);
+  check.append(
+    action("\u041F\u0440\u043E\u0432\u0435\u0440\u0438\u0442\u044C \u0441\u043E\u0435\u0434\u0438\u043D\u0435\u043D\u0438\u0435", async () => {
+      const target = domain.value.trim();
+      if (!target || /[/:]/.test(target) || !validateDomain(target).valid) {
+        domain.setAttribute("aria-invalid", "true");
+        connection.textContent = "\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u0434\u043E\u043C\u0435\u043D \u0441\u0430\u0439\u0442\u0430, \u043D\u0430\u043F\u0440\u0438\u043C\u0435\u0440 example.org, \u0431\u0435\u0437 https:// \u0438 \u043F\u0443\u0442\u0438.";
+        domain.focus();
+        return;
+      }
+      domain.removeAttribute("aria-invalid");
+      connection.textContent = "\u041F\u0440\u043E\u0432\u0435\u0440\u044F\u0435\u043C \u0441\u0435\u0442\u0435\u0432\u043E\u0439 \u0434\u043E\u0441\u0442\u0443\u043F \u0441 \u0440\u043E\u0443\u0442\u0435\u0440\u0430\u2026";
+      try {
+        const response = await request("probe", {
+          domain: target
+        });
+        if (!response.success) {
+          connection.textContent = `\u041F\u0440\u043E\u0432\u0435\u0440\u043A\u0430 \u043D\u0435 \u0432\u044B\u043F\u043E\u043B\u043D\u0435\u043D\u0430: ${response.error || "\u043D\u0435\u0442 \u0441\u0432\u044F\u0437\u0438 \u0441 \u0440\u043E\u0443\u0442\u0435\u0440\u043E\u043C"}. \u041F\u043E\u0432\u0442\u043E\u0440\u0438\u0442\u0435 \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0443.`;
+          return;
+        }
+        const data = response.data && typeof response.data === "object" ? response.data : {};
+        const result = data.reachable === true ? "\u0415\u0441\u0442\u044C \u0441\u0435\u0442\u0435\u0432\u043E\u0439 \u043E\u0442\u0432\u0435\u0442" : data.reachable === false ? "\u041D\u0435\u0442 \u0441\u0435\u0442\u0435\u0432\u043E\u0433\u043E \u043E\u0442\u0432\u0435\u0442\u0430" : "\u0420\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442 \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0438 \u043D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u0435\u043D";
+        const checked = typeof data.checked_at === "number" ? new Date(data.checked_at * 1e3).toLocaleString() : "\u0432\u0440\u0435\u043C\u044F \u043D\u0435 \u0441\u043E\u043E\u0431\u0449\u0435\u043D\u043E";
+        connection.textContent = `${result} \xB7 HTTP ${data.http_status || "\u2014"} \xB7 ${typeof data.duration_ms === "number" ? `${data.duration_ms} \u043C\u0441` : "\u0434\u043B\u0438\u0442\u0435\u043B\u044C\u043D\u043E\u0441\u0442\u044C \u043D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043D\u0430"} \xB7 ${checked}. \u041F\u0440\u043E\u0432\u0435\u0440\u0435\u043D \u0434\u043E\u0441\u0442\u0443\u043F \u0441 \u0440\u043E\u0443\u0442\u0435\u0440\u0430; \u0432\u0445\u043E\u0434 \u0432 \u0441\u0435\u0440\u0432\u0438\u0441 \u043D\u0435 \u043F\u0440\u043E\u0432\u0435\u0440\u044F\u0435\u0442\u0441\u044F.`;
+      } catch {
+        connection.textContent = "\u041F\u0440\u043E\u0432\u0435\u0440\u043A\u0430 \u043D\u0435 \u0432\u044B\u043F\u043E\u043B\u043D\u0435\u043D\u0430: \u043D\u0435\u0442 \u0441\u0432\u044F\u0437\u0438 \u0441 \u0440\u043E\u0443\u0442\u0435\u0440\u043E\u043C. \u041F\u043E\u0432\u0442\u043E\u0440\u0438\u0442\u0435 \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0443.";
+      }
+    }),
+    el2(
+      "p",
+      "\u041F\u0440\u043E\u0432\u0435\u0440\u043A\u0430 \u0438\u0441\u043F\u043E\u043B\u044C\u0437\u0443\u0435\u0442 \u0442\u0435\u043A\u0443\u0449\u0438\u0439 \u043C\u0430\u0440\u0448\u0440\u0443\u0442 \u0440\u043E\u0443\u0442\u0435\u0440\u0430. \u0421\u043E\u0441\u0442\u043E\u044F\u043D\u0438\u0435 \u043F\u0440\u043E\u0446\u0435\u0441\u0441\u0430 \u0438 \u043F\u0440\u0435\u0436\u043D\u044F\u044F \u0437\u0430\u0434\u0435\u0440\u0436\u043A\u0430 \u043D\u0435 \u043F\u043E\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0430\u044E\u0442 \u0434\u043E\u0441\u0442\u0443\u043F\u043D\u043E\u0441\u0442\u044C \u0441\u0430\u0439\u0442\u0430.",
+      "fkp-next-help"
+    )
+  );
+  const everyday = el2("div", "", "fkp-next-content");
+  everyday.append(server, check);
+  root.append(everyday);
+  const traffic = el2("section", "", "fkp-next-panel fkp-next-traffic");
+  const trafficOutput = el2("p", "\u0422\u0440\u0430\u0444\u0438\u043A \u043F\u043E\u043A\u0430 \u043D\u0435\u0434\u043E\u0441\u0442\u0443\u043F\u0435\u043D.");
+  trafficOutput.setAttribute("role", "status");
+  traffic.append(el2("h3", "\u0422\u0440\u0430\u0444\u0438\u043A"), trafficOutput);
+  root.append(traffic);
+  const advanced = el2("details", "", "fkp-next-advanced");
+  advanced.append(el2("summary", "\u0420\u0430\u0441\u0448\u0438\u0440\u0435\u043D\u043D\u044B\u0435 \u043D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438 \u0438 \u0434\u0438\u0430\u0433\u043D\u043E\u0441\u0442\u0438\u043A\u0430"));
+  let mounted = false;
+  let advancedPanel;
+  advanced.addEventListener("toggle", () => {
+    root.dataset.mode = advanced.open ? "detailed" : "simple";
+    if (advanced.open && !mounted) {
+      mounted = true;
+      advancedPanel = renderAdvancedPanel(request, void 0, true);
+      advanced.append(advancedPanel);
+    }
+  });
+  root.append(advanced);
+  let generation = 0;
+  let runtimeRevision = 0;
+  let hasFreshRuntime = false;
+  let subscribed = false;
+  let resumeRefresh = false;
+  let unsubscribe;
+  const visible = () => root.isConnected && document.visibilityState !== "hidden" && !root.closest(
+    '[hidden], [data-tab-active="false"], [style*="display: none"], [style*="display:none"]'
+  );
+  const telemetry = createTrafficMonitor(
+    trafficOutput,
+    adapters.readTraffic,
+    visible
+  );
+  function applyRuntime(state, evidence) {
+    if (evidence?.cached && hasFreshRuntime) return;
+    if (!evidence?.cached) hasFreshRuntime = true;
+    runtime = state;
+    updateServiceControl();
+    service.textContent = state?.pending || servicePending ? "\u0412\u044B\u043F\u043E\u043B\u043D\u044F\u0435\u0442\u0441\u044F \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u0435 \u0441\u0435\u0440\u0432\u0438\u0441\u0430\u2026" : state?.error ? "\u0421\u043E\u0441\u0442\u043E\u044F\u043D\u0438\u0435 \u0441\u0435\u0440\u0432\u0438\u0441\u0430 \u043D\u0435\u0434\u043E\u0441\u0442\u0443\u043F\u043D\u043E. \u041E\u0431\u043D\u043E\u0432\u0438\u0442\u0435 \u0434\u0430\u043D\u043D\u044B\u0435." : state?.running === true ? "\u0421\u0435\u0440\u0432\u0438\u0441 \u0437\u0430\u043F\u0443\u0449\u0435\u043D" : state?.running === false ? "\u0421\u0435\u0440\u0432\u0438\u0441 \u043E\u0441\u0442\u0430\u043D\u043E\u0432\u043B\u0435\u043D" : "\u0421\u043E\u0441\u0442\u043E\u044F\u043D\u0438\u0435 \u0441\u0435\u0440\u0432\u0438\u0441\u0430 \u043D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043D\u043E";
+  }
+  async function refresh(refreshAdvanced = true) {
+    void telemetry.refresh();
+    if (refreshAdvanced && advanced.open)
+      advancedPanel?.dispatchEvent(new Event("forkop:refresh"));
+    const current = ++generation;
+    const alive = () => current === generation && visible();
+    const tasks = [];
+    const revision = runtimeRevision;
+    if (adapters.readRuntime)
+      tasks.push(
+        (async () => {
+          try {
+            const state = await adapters.readRuntime();
+            if (alive() && revision === runtimeRevision) applyRuntime(state);
+          } catch {
+            if (alive() && revision === runtimeRevision)
+              applyRuntime({ error: "unavailable" });
+          }
+        })()
+      );
+    if (loadConnections)
+      tasks.push(
+        (async () => {
+          try {
+            const response = await loadConnections();
+            if (!alive()) return;
+            if (!response.success) {
+              selected.textContent = "\u0412\u044B\u0431\u0440\u0430\u043D\u043D\u044B\u0439 \u0441\u0435\u0440\u0432\u0435\u0440 \u043D\u0435\u0434\u043E\u0441\u0442\u0443\u043F\u0435\u043D. \u041E\u0431\u043D\u043E\u0432\u0438\u0442\u0435 \u0434\u0430\u043D\u043D\u044B\u0435.";
+              return;
+            }
+            selected.replaceChildren();
+            for (const group of response.data || []) {
+              const outbound = group.outbounds.find((o) => o.selected);
+              if (outbound)
+                selected.append(
+                  el2(
+                    "p",
+                    `${group.displayName}: ${outbound.displayName}${outbound.latency > 0 ? ` \xB7 \u043F\u0440\u0435\u0436\u043D\u044F\u044F \u0437\u0430\u0434\u0435\u0440\u0436\u043A\u0430 ${outbound.latency} \u043C\u0441` : " \xB7 \u0437\u0430\u0434\u0435\u0440\u0436\u043A\u0430 \u043D\u0435 \u0438\u0437\u043C\u0435\u0440\u0435\u043D\u0430"}${outbound.latencyTestedAt ? ` \xB7 ${new Date(outbound.latencyTestedAt).toLocaleString()}` : ""}`
+                  )
+                );
+            }
+            if (!selected.childNodes.length)
+              selected.textContent = "\u0412\u044B\u0431\u0440\u0430\u043D\u043D\u043E\u0433\u043E \u0441\u0435\u0440\u0432\u0435\u0440\u0430 \u043D\u0435\u0442. \u041D\u0430\u0441\u0442\u0440\u043E\u0439\u0442\u0435 \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435 \u043D\u0430 \u0432\u043A\u043B\u0430\u0434\u043A\u0435 Dashboard.";
+          } catch {
+            if (alive())
+              selected.textContent = "\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0437\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044C \u0432\u044B\u0431\u0440\u0430\u043D\u043D\u044B\u0439 \u0441\u0435\u0440\u0432\u0435\u0440. \u041E\u0431\u043D\u043E\u0432\u0438\u0442\u0435 \u0434\u0430\u043D\u043D\u044B\u0435.";
+          }
+        })()
+      );
+    await Promise.all(tasks);
+  }
+  header.append(action("\u041E\u0431\u043D\u043E\u0432\u0438\u0442\u044C \u0434\u0430\u043D\u043D\u044B\u0435", refresh));
+  function updateVisibility() {
+    if (visible() && !subscribed) {
+      subscribed = true;
+      unsubscribe = adapters.subscribeRuntime?.((state, evidence) => {
+        if (visible()) {
+          if (!evidence?.cached) runtimeRevision++;
+          applyRuntime(state, evidence);
+        }
+      });
+      if (resumeRefresh) {
+        resumeRefresh = false;
+        void refresh();
+      } else void telemetry.refresh();
+    } else if (!visible() && subscribed) {
+      subscribed = false;
+      unsubscribe?.();
+      unsubscribe = void 0;
+      generation++;
+      telemetry.stop();
+      resumeRefresh = true;
+    }
+    if (!root.isConnected) {
+      telemetry.stop();
+      observer.disconnect();
+      document.removeEventListener("visibilitychange", updateVisibility);
+    }
+  }
+  const observer = new MutationObserver(updateVisibility);
+  document.addEventListener("visibilitychange", updateVisibility);
+  observer.observe(document.body, {
+    subtree: true,
+    childList: true,
+    attributes: true,
+    attributeFilter: ["hidden", "style", "class", "data-tab-active"]
+  });
+  queueMicrotask(() => {
+    if (visible()) void refresh(false);
+    else resumeRefresh = true;
+  });
   return root;
 }
 
@@ -15372,10 +15819,12 @@ return baseclass.extend({
   getProxyUrlName,
   injectGlobalStyles,
   parseValueList,
+  refreshRuntimeUiState,
   registerConfigurationReload,
   renderNextPanel,
   showToast,
   store,
+  subscribeRuntimeUiState,
   validateDNS,
   validateDomain,
   validateIP,

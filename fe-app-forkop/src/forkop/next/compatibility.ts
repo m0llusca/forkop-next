@@ -4,6 +4,7 @@ const object = (v: unknown): Obj =>
   v && typeof v === 'object' ? (v as Obj) : {};
 export function renderCompatibilityPanel(
   request: (action: string, payload?: Obj) => Promise<NextResponse>,
+  initialRequest = request,
 ): HTMLElement {
   const root = document.createElement('section');
   root.className = 'fkp-next-panel';
@@ -246,7 +247,7 @@ export function renderCompatibilityPanel(
     );
   });
   root.append(updates);
-  void request('status', {})
+  void initialRequest('status', {})
     .then((response) => {
       if (!response.success) {
         result.textContent =

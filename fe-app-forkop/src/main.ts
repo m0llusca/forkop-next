@@ -40,6 +40,10 @@ export {
 } from './constants';
 
 export { renderNextPanel } from './forkop/next/render';
+export {
+  refreshRuntimeUiState,
+  subscribeRuntimeUiState,
+} from './forkop/services/runtimeUiState.service';
 
 export { registerConfigurationReload } from './forkop/next/configReload';
 
