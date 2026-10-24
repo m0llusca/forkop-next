@@ -36,6 +36,7 @@ const reasonText: Record<string, string> = {
   include_match: 'Совпадает с включением',
   include_miss: 'Нет совпадения с включением',
   exclude_match: 'Совпадает с исключением',
+  exclude_miss: 'Не совпадает с исключением',
   pool_excluded: 'Исключён из общего набора',
   earlier_level: 'Уже назначен более высокому уровню',
   direct_level: 'Прямой выход',

@@ -49,7 +49,7 @@ it('discards older draft replies, renders only safe text and labels draft member
                 {
                   member: 'node_0',
                   included: true,
-                  reasons: ['include_match'],
+                  reasons: ['exclude_miss'],
                 },
               ],
             },
@@ -74,6 +74,7 @@ it('discards older draft replies, renders only safe text and labels draft member
   expect(node.textContent).toContain('Черновик фильтров');
   expect(node.textContent).toContain('не проверялась');
   expect(node.textContent).toContain('Соединения прерываются');
+  expect(node.textContent).toContain('Не совпадает с исключением');
 });
 it('never sends changed source drafts and gives an unavailable explanation', () => {
   const exec = vi.fn();

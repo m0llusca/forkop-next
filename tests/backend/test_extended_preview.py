@@ -226,7 +226,11 @@ class ExtendedPreview(unittest.TestCase):
         url='https://user:SOURCE_SECRET@example.invalid/list?token=SOURCE_SECRET'
         self.data['section'][0]['subscription_urls']=[url]
         subscription={'outbounds':[{'type':'socks','tag':'https://user:NAME_SECRET@example.invalid',
-                        'server':'127.0.0.1','server_port':1080,'password':'SOURCE_SECRET'}]}
+                        'server':'127.0.0.1','server_port':1080,'password':'SOURCE_SECRET'},
+                       {'type':'socks','tag':'Ordinary subscription node','server':'127.0.0.1',
+                        'server_port':1080,'password':'plainSourcePassword'},
+                       {'type':'socks','tag':'plainSourcePassword','server':'127.0.0.1',
+                        'server_port':1080,'password':'plainSourcePassword'}]}
         for suffix,content in {'.url':url,'.user_agent':'', '.hwid':'', '.json':json.dumps(subscription)}.items():
             (directory/('main-subscription-1'+suffix)).write_text(content)
         for suffix in ('.url','.user_agent'):
@@ -240,6 +244,8 @@ class ExtendedPreview(unittest.TestCase):
         before={str(p):p.read_bytes() for p in self.d.rglob('*') if p.is_file()}
         result=self.preview();self.assertTrue(result['success'],result)
         self.assertNotIn('SECRET',json.dumps(result))
+        self.assertNotIn('plainSourcePassword',json.dumps(result))
+        self.assertIn('Ordinary subscription node',[row['name'] for row in result['data']['candidates']])
         self.assertEqual(before,{str(p):p.read_bytes() for p in self.d.rglob('*') if p.is_file()})
         for path in [core, directory/'main-subscription-1.json',directory/'main-subscription-1.url',
                      directory/'main-subscription-1.user_agent',directory/'main-subscription-1.hwid',
@@ -296,6 +302,26 @@ class ExtendedPreview(unittest.TestCase):
         decisions={row['member']:row for row in group['levels'][0]['decisions']}
         self.assertEqual(decisions['node_0']['reasons'],['exclude_miss'])
         self.assertEqual(decisions['node_1']['reasons'],['exclude_match'])
+
+    def test_native_list_order_controls_overlap_and_matches_saved_generation(self):
+        self.generate()
+        request=self.request()
+        rows=request['draft']['priority_level']
+        rows[:]=[rows[1],rows[0],rows[2],rows[3]]
+        for i,row in enumerate(rows): row['order']=str(i)
+        result=self.preview(request);self.assertTrue(result['success'],result)
+        group=next(g for g in result['data']['groups'] if g['id']=='p1')
+        self.assertEqual(group['fallbackOrder'],['l2','l3','l4'])
+        levels={row['id']:row for row in group['levels']}
+        self.assertEqual(levels['l2']['members'],['node_0','node_1'])
+        self.assertEqual(levels['l1']['members'],[])
+        self.assertEqual(levels['l1']['overlap'],[{'member':'node_0','assignedLevel':'l2'}])
+        self.data['priority_level']=rows
+        state=self.generate()
+        saved=next(g for g in state['priorityGroups'].values() if g['id']=='p1')
+        names={c['id']:c['name'] for c in result['data']['candidates']};names['direct']='direct-out'
+        for entry in saved['levels']:
+            self.assertEqual(entry['outbounds'],[names[mid] for mid in levels[entry['id']]['members']])
 
     def test_public_cli_sets_a_backend_process_time_budget(self):
         self.env['FORKOP_LIB']=str(LIB)

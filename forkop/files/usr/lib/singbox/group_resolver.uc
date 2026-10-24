@@ -215,7 +215,7 @@ function filter_candidate_outbounds(filter_mode, urltest_candidate_tags, names, 
     if (trace_sink) for (let tag in all_outbounds) {
         let inc = !filter_mode_uses_include(filter_mode) || array_contains(include_outbounds, tag);
         let exc = filter_mode_uses_exclude(filter_mode) && array_contains(exclude_outbounds, tag);
-        trace_sink(tag, inc && !exc, exc ? "exclude_match" : inc ? "include_match" : "include_miss");
+        trace_sink(tag, inc && !exc, exc ? "exclude_match" : !filter_mode_uses_include(filter_mode) ? "exclude_miss" : inc ? "include_match" : "include_miss");
     }
 
     if (filter_mode == "include")

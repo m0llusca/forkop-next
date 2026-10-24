@@ -94,10 +94,67 @@ it('captures unparsed nested child filters and empty arrays without mutating nat
   const result = api.captureExtendedPreviewDraft('main');
   expect(result.unavailableReason).toBeUndefined();
   expect(result.draft.priority_level[0].server_name).toEqual([]);
-  expect(result.draft.priority_level[0].order).toBe('2');
+  expect(result.draft.priority_level[0].order).toBe('0');
   expect(result.draft.priority_level[0].group).toBe('p1');
   expect(JSON.stringify(result)).not.toContain('SECRET');
   expect(JSON.stringify(rows)).toBe(original);
+  expect(write).not.toHaveBeenCalled();
+  rows.l2 = {
+    '.name': 'l2',
+    '.type': 'priority_level',
+    group: 'p1',
+    server_name: ['saved'],
+    order: '7',
+  };
+  let liveLevels = ['l2', 'l1', 'new-level'];
+  api.extendedPreviewModalStack.push({
+    sectionId: 'main',
+    ownerId: 'main',
+    itemId: 'p1',
+    typeName: 'priority_group',
+    map: {
+      lookupOption: (key: string) =>
+        key === 'priority_level'
+          ? [
+              {
+                formvalue: () => liveLevels,
+                pendingChildSettings: {
+                  p1: { 'new-level': { server_name: ['saved'], order: '0' } },
+                },
+              },
+            ]
+          : [],
+    },
+  });
+  const reordered =
+    api.captureExtendedPreviewDraft('main').draft.priority_level;
+  // Native Save's afterMaterializeChildItems assigns order from the displayed list.
+  // The backend sorts this order before overlap assignment and fallback selection.
+  expect(
+    reordered.map((row: { '.name': string; order: string }) => [
+      row['.name'],
+      row.order,
+    ]),
+  ).toEqual([
+    ['l2', '0'],
+    ['l1', '1'],
+    ['preview_priority_level_2', '2'],
+  ]);
+  expect(reordered[0].server_name).toEqual(['saved']);
+  expect(reordered[1].server_name).toEqual([]);
+  liveLevels = ['new-level', 'l2'];
+  api.extendedPreviewModalStack.splice(0, 1); // Close the existing level editor before removal.
+  expect(
+    api
+      .captureExtendedPreviewDraft('main')
+      .draft.priority_level.map((row: { '.name': string; order: string }) => [
+        row['.name'],
+        row.order,
+      ]),
+  ).toEqual([
+    ['preview_priority_level_0', '0'],
+    ['l2', '1'],
+  ]);
   expect(write).not.toHaveBeenCalled();
   rows.main.selector_proxy_links = ['vless://SECRET@host'];
   expect(api.captureExtendedPreviewDraft('main').unavailableReason).toBe(

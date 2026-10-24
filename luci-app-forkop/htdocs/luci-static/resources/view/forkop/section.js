@@ -3609,6 +3609,8 @@ function captureExtendedPreviewDraft(sectionId) {
           : source[key];
         if (raw != null) row[key] = previewClone(raw);
       });
+      // Match native Save's afterMaterializeChildItems ordering, including new rows.
+      if (type === "priority_level") row.order = String(index);
       draft[type].push(row);
       rows.push({ value, id, active });
     });

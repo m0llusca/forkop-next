@@ -310,6 +310,13 @@ means the existing Priority worker retains controller selection; the preview mus
 not imply automatic block/direct. Request IDs discard obsolete replies; an
 `expectedCapture` mismatch returns `capture_changed`.
 
+Display labels are checked against credential context, including plain values
+inside structured JSON outbounds; a credential-shaped-string heuristic alone is
+insufficient. When encoded/link source context cannot establish safe labels,
+preview uses neutral node/group/level labels and retains stable member IDs.
+Native Priority draft `order` is the live list index, exactly as native Save
+materializes it; stored/default order does not override reordering or additions.
+
 Both preview and generation call pure `singbox/group_resolver.uc` initialized
 with the native connections accessor index. Generation alone creates candidate
 pools and records their consumed input context, finalizing evidence only after

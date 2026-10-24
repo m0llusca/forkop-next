@@ -110,3 +110,35 @@ Linux generator/runtime suite. No live router, screen reader, real subscription
 network import or browser screenshot behavior is certified by these fixtures.
 Root owns final Linux/package gate, independent review, browser/native acceptance
 and any later authorized release/merge/router installation. This task stays local.
+
+## Review fix round 1
+
+Isolated checkout `forkop-ux-preview-fix`, base `f246ce6`; no shared Task 7 edits
+and no generated bundle changes. Review found arbitrary known credentials in
+labels, native Priority order drift and incorrect exclude-only explanation.
+
+- Backend tests-only `f1ea955ca5663a30da3883f180b7db270a44e63b`, published as
+  `39af441b84eef77f810ab770362bc538e275245a`. Root observed Linux Backend CI
+  `40140819431`, job `121012014095`: 14 tests in 6.659s, exactly two failures:
+  `plainCredential731` leaked through node/group/level labels; exclude-only
+  survivor reason was `include_match` instead of `exclude_miss`. Other 12 passed.
+- Native actual-adapter test RED: live nested order `2` differed from native
+  Save's displayed index `0`. Minimal fix assigns Priority level order from its
+  actual list index after copying filters. Reorder/add/remove, overlapping filter
+  inputs, explicit empty nested filters, owners and no writes are covered.
+- Rendering test RED: `exclude_miss` displayed unknown data; localized explanation
+  added. Focused native/render suite GREEN: two files, three tests. Existing
+  shell timing INFO output is expected; earlier full frontend logs also contained
+  expected errors/warnings from unchanged socket tests (Task 7 owns that cleanup).
+- Focused ESLint and full TypeScript check exit 0; scoped formatting/diff check
+  clean. No repeated full frontend suite/build/bundle in this fix round, per root.
+- Backend projection compares labels with non-label string values from known JSON
+  outbounds and verified captured normalized source JSON, plus source URL
+  userinfo/query/path and explicit credential fields. It rechecks captured bytes
+  before using them as label evidence. Ordinary proven subscription names remain
+  useful. Unsupported encoded manual-link context uses neutral labels/opaque IDs;
+  this is not a claim of universal arbitrary-prose anonymization.
+- Membership is unchanged; resolver trace alone uses `exclude_miss` in exclude
+  mode. Added ordered overlap/fallback parity against actual saved generation,
+  and preservation of ordinary subscription names alongside plain password tags.
+- Final fix Linux GREEN remains pending root's immutable CI observation.

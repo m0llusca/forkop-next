@@ -4,6 +4,7 @@ let common=require('core.common');
 let basis=require('singbox.preview_basis');
 let connections=require('config.connections');
 let resolver=require('singbox.group_resolver').create(connections);
+let url=require('core.url');
 let arr=common.array_or_empty, obj=common.object_or_empty;
 let filter_keys=['filter_mode','detect_server_country','include_countries','include_outbounds','include_regex',
     'include_proxy_parameters','include_protocols','include_transports','include_securities',
@@ -18,9 +19,71 @@ for(let prefix in ['dashboard_','urltest_']) for(let key in filter_keys) push(pa
 for(let key in ['dashboard_include_groups','dashboard_exclude_groups']) push(parent_keys,key);
 function fail(error,reason) {return {success:false,error,reason:reason || error};}
 function id(value) {return type(value)=='string'&&length(value)<=96&&match(value,/^[A-Za-z0-9_-]+$/)!=null;}
-function safe_name(value,fallback) {
+function label_context(saved,state) {
+    let context={values:{},certain:true};
+    function add(value) {
+        if(type(value)=='string'&&value!='')context.values[value]=true;
+    }
+    function strings(value) {
+        if(type(value)=='object'||type(value)=='array')for(let key,item in value)strings(item);
+        else add(value);
+    }
+    function outbound(value) {
+        if(type(value)!='object') {context.certain=false;return;}
+        // Only the outbound's display fields are labels. All other string values,
+        // including unknown protocol options and nested headers, are private context.
+        for(let key,item in value)if(index(['tag','remark'],key)<0)strings(item);
+    }
+    function source_url(value) {
+        value=common.as_string(value);
+        if(value=='')return;
+        let scheme=url.scheme(value);
+        if(index(['http','https','vless','trojan','hysteria2','hy2','socks','socks4','socks5'],scheme)<0) {
+            context.certain=false;return;
+        }
+        add(value);
+        let user=url.userinfo(value);add(user);
+        for(let part in split(user,':'))add(part);
+        for(let key,item in url.query_params(value))add(item);
+        for(let part in split(url.path(url.strip_fragment(value)),'/'))add(url.decode(part));
+    }
+    function credential_fields(value) {
+        if(type(value)!='object'&&type(value)!='array')return;
+        for(let key,item in value) {
+            if(match(common.as_string(key),/password|passwd|uuid|private_key|preshared_key|token|secret|auth|username|hwid|user_agent|cookie|headers/i))strings(item);
+            else credential_fields(item);
+        }
+    }
+    credential_fields(saved);
+    for(let section in arr(saved.section)) {
+        for(let raw in connections.outbound_jsons(section)) {
+            try {outbound(json(raw));}catch(e){context.certain=false;}
+        }
+        for(let link in connections.connection_urls(section))source_url(link);
+        let sources=section.subscription_urls;
+        for(let source in type(sources)=='array'?sources:[sources])if(source!=null)source_url(source);
+    }
+    for(let source in arr(saved.subscription_url))source_url(source.url);
+    for(let record in arr(obj(state.previewBasis).sourceFiles)) {
+        // Recheck this captured read before using it as label evidence. A concurrent
+        // replacement cannot remove a credential from the context we certify.
+        let raw=fs.readfile(record.path);
+        if(basis.digest(raw)!=record.digest)throw 'source_changed';
+        if(raw==null)continue;
+        if(match(record.path,/\.json$/)) {
+            try {for(let item in arr(obj(json(raw)).outbounds))outbound(item);}
+            catch(e){context.certain=false;}
+        }
+        else if(match(record.path,/\.url$/))source_url(split(raw,'\n')[0]);
+        else add(raw);
+    }
+    return context;
+}
+function safe_name(value,fallback,context) {
     value=common.as_string(value);
-    // Names can themselves contain copied credentials. Never return raw tags.
+    if(!context.certain)return fallback;
+    for(let secret in keys(context.values))if(index(value,secret)>=0)return fallback;
+    // Keep the shape guard in addition to comparison with actual private inputs.
     if(length(value)>160||match(value,/:\/\/|@|[?&](token|key|password|secret|uuid)=|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-/i))return fallback;
     return value==''?fallback:value;
 }
@@ -82,15 +145,15 @@ function country_missing(section,state) {
     for(let tag in arr(state.urltestCandidateTags))if(!obj(obj(state.outboundMetadata).countries)[tag])return true;
     return false;
 }
-function resolve(section,state,request,capture) {
+function resolve(section,state,request,capture,context) {
     let tags=arr(state.urltestCandidateTags), ids={},candidates=[],groups=[];
     for(let i=0;i<length(tags);i++) {
         ids[tags[i]]='node_'+i;
-        push(candidates,{id:ids[tags[i]],name:safe_name(obj(obj(state.outboundMetadata).names)[tags[i]],'Node '+(i+1))});
+        push(candidates,{id:ids[tags[i]],name:safe_name(obj(obj(state.outboundMetadata).names)[tags[i]],'Node '+(i+1),context)});
     }
     ids['direct-out']='direct';
     let pool=resolver.section_pool_candidate_outbounds(section,tags,state);
-    function level(level_id,name,direct,raw,members,decisions,assigned) {
+    function level(level_id,name,direct,raw,members,decisions,assigned,fallback_name) {
         let overlap=[], result=[];
         for(let tag in raw)if(index(members,tag)<0&&assigned[tag])push(overlap,{member:ids[tag],assignedLevel:assigned[tag]});
         for(let tag in tags) {
@@ -99,15 +162,15 @@ function resolve(section,state,request,capture) {
             push(result,{member:ids[tag],included,reasons:[reason]});
         }
         if(direct)push(result,{member:'direct',included:index(members,'direct-out')>=0,reasons:['direct_level']});
-        return {id:level_id,name:safe_name(name,level_id),direct,members:map(members,function(t){return ids[t];}),
+        return {id:level_id,name:safe_name(name,fallback_name,context),direct,members:map(members,function(t){return ids[t];}),
             count:length(members),empty:length(members)==0,overlap,decisions:result};
     }
     for(let u in connections.urltests(section)) {
         let trace={};resolver.set_trace(function(tag,included,reason){trace[tag]={included,reason};});
         let members=resolver.urltest_filtered_outbounds(section,u,pool,state);
-        groups[length(groups)]={id:u,kind:'urltest',name:safe_name(connections.urltest_display_name(section,u),u),
+        groups[length(groups)]={id:u,kind:'urltest',name:safe_name(connections.urltest_display_name(section,u),'URLTest '+(length(groups)+1),context),
             count:length(members),omitted:!length(members),interrupt:connections.urltest_interrupt_exist_connections(section,u),
-            levels:[level(u,'URLTest',false,members,members,trace,{})],fallbackOrder:length(members)?[u]:[]};
+            levels:[level(u,'URLTest',false,members,members,trace,{},'URLTest')],fallbackOrder:length(members)?[u]:[]};
     }
     for(let g in connections.priority_groups(section)) {
         resolver.set_trace(null);
@@ -115,12 +178,12 @@ function resolve(section,state,request,capture) {
         for(let entry in assigned_levels) {
             let trace={};resolver.set_trace(function(tag,included,reason){trace[tag]={included,reason};});
             let raw=resolver.priority_level_filtered_outbounds(g,entry.id,pool,state);
-            push(levels,level(entry.id,entry.displayName,entry.direct,raw,entry.outbounds,trace,assigned));
+            push(levels,level(entry.id,entry.displayName,entry.direct,raw,entry.outbounds,trace,assigned,'Level '+(length(levels)+1)));
             if(length(entry.outbounds))push(fallback,entry.id);
             for(let tag in entry.outbounds)assigned[tag]=entry.id;
         }
         let count=length(resolver.priority_group_outbounds(assigned_levels));
-        push(groups,{id:g,kind:'priority',name:safe_name(connections.priority_group_display_name(section,g),g),count,omitted:count==0,
+        push(groups,{id:g,kind:'priority',name:safe_name(connections.priority_group_display_name(section,g),'Priority '+(length(groups)+1),context),count,omitted:count==0,
             interrupt:connections.priority_group_interrupt_exist_connections(section,g),levels,fallbackOrder:fallback,
             policy:{pickFastest:connections.priority_group_pick_fastest(section,g),switchToFasterSamePriority:connections.priority_group_switch_to_faster_same_priority(section,g)}});
     }
@@ -141,10 +204,11 @@ function preview(request) {
         let raw=fs.readfile(path),state=json(raw),capture=basis.digest(raw);
         if(request.expectedCapture&&request.expectedCapture!=capture)return fail('capture_changed');
         if(state.section!=request.section||length(arr(state.urltestCandidateTags))>2000||!basis.verify(state.previewBasis,snapshot))return fail('preview_unavailable','unproven_source_pool');
+        let context=label_context(saved,state);
         for(let key,value in request.draft.section)section[key]=value;
         connections.set_item_sections_from_data(request.draft);
         if(country_missing(section,state))return fail('preview_unavailable','country_evidence_missing');
-        return resolve(section,state,request,capture);
+        return resolve(section,state,request,capture,context);
     } catch(e) {return fail('preview_unavailable','capture_invalid');}
 }
 if(ARGV[0]=='preview') {
