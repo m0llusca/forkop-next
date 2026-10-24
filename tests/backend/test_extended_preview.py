@@ -268,3 +268,16 @@ class ExtendedPreview(unittest.TestCase):
         result=json.loads(self.run_ucode([str(ROOT/'forkop/files/usr/bin/forkop'),'extended_preview',json.dumps(self.request())]))
         self.assertTrue(result['success'],result)
         self.assertEqual(result['data']['requestId'],'revision-1')
+
+    def test_public_cli_sets_a_backend_process_time_budget(self):
+        self.env['FORKOP_LIB']=str(LIB)
+        self.generate()
+        commands=self.d/'budget-commands';commands.mkdir()
+        budget=commands/'timeout'
+        budget.write_text('#!/bin/sh\nprintf "%s" "$1" > "'+str(self.d/'budget')+'"\nshift\nexec "$@"\n')
+        budget.chmod(0o755)
+        self.env['PATH']=str(commands)+os.pathsep+self.env['PATH']
+        result=json.loads(self.run_ucode([str(ROOT/'forkop/files/usr/bin/forkop'),'extended_preview',json.dumps(self.request())]))
+        self.assertTrue(result['success'],result)
+        self.assertTrue((self.d/'budget').exists(),'public preview must bound the backend process, not only the browser promise')
+        self.assertEqual((self.d/'budget').read_text(),'10')
