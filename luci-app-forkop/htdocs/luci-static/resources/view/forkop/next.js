@@ -23,6 +23,7 @@ return baseclass.extend({
         };
       };
       return main.renderNextPanel(undefined, main.getDashboardSections, {
+        workspace: true,
         changeService: async function (action) {
           const started =
             await main.ForkopShellMethods.serviceActionStart(action);

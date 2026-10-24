@@ -13,6 +13,7 @@ export interface OverviewRuntime {
   error?: string;
 }
 export interface OverviewAdapters {
+  workspace?: boolean;
   readRuntime?: () => Promise<OverviewRuntime | undefined>;
   subscribeRuntime?: (
     listener: (state: OverviewRuntime, evidence?: { cached?: boolean }) => void,
@@ -41,7 +42,7 @@ export function renderNextPanel(
 ): HTMLElement {
   const root = el('section', '', 'fkp-next fkp-next-overview');
   root.dataset.mode = 'simple';
-  const header = el('header');
+  const header = el('div', '', 'fkp-next-heading');
   const title = el('div');
   title.append(
     el('h2', 'Подключение'),
@@ -62,7 +63,8 @@ export function renderNextPanel(
     root.dataset.theme = themes.value;
   };
   theme.append(themes);
-  header.append(title, theme);
+  if (!adapters.workspace) header.append(title, theme);
+  else root.dataset.workspace = 'true';
   root.append(header);
   const service = el('p', 'Состояние сервиса неизвестно', 'fkp-next-service');
   service.setAttribute('role', 'status');
@@ -72,15 +74,26 @@ export function renderNextPanel(
     'fkp-next-connection',
   );
   connection.setAttribute('role', 'status');
+  connection.dataset.state = 'unknown';
   const notice = el('p', '', 'fkp-next-notice');
   notice.setAttribute('role', 'status');
-  root.append(service, connection, notice);
+  const status = el('section', '', 'fkp-next-status-block');
+  status.append(el('h3', 'Доступ в сеть'), service, connection, notice);
+  let probeRevision = 0;
+  let hasProbe = false;
+  function invalidateProbe() {
+    probeRevision++;
+    if (!hasProbe) return;
+    connection.dataset.state = 'unknown';
+    connection.textContent =
+      'Маршрут или состояние сервиса изменились. Повторите проверку соединения.';
+  }
   let runtime: OverviewRuntime | undefined;
   let servicePending = false;
   const serviceControl = el('button', 'Включить сервис');
   serviceControl.type = 'button';
   serviceControl.disabled = true;
-  if (adapters.changeService) root.insertBefore(serviceControl, connection);
+  if (adapters.changeService) status.append(serviceControl);
   function updateServiceControl() {
     serviceControl.textContent =
       runtime?.running === true ? 'Отключить сервис' : 'Включить сервис';
@@ -97,6 +110,7 @@ export function renderNextPanel(
   serviceControl.onclick = async () => {
     if (serviceControl.disabled || !adapters.changeService) return;
     servicePending = true;
+    invalidateProbe();
     updateServiceControl();
     service.textContent = 'Выполняется действие сервиса…';
     notice.textContent = '';
@@ -134,7 +148,7 @@ export function renderNextPanel(
     };
     return b;
   }
-  const server = el('section', '', 'fkp-next-panel');
+  const server = el('section', '', 'fkp-next-primary');
   const selected = el(
     'div',
     loadConnections
@@ -143,7 +157,7 @@ export function renderNextPanel(
     'fkp-next-summary',
   );
   server.append(
-    el('h3', 'Выбранный сервер'),
+    el('h3', 'Основное подключение'),
     selected,
     action('Изменить сервер', async () => {
       notice.textContent = 'Открываем выбор сервера…';
@@ -180,77 +194,114 @@ export function renderNextPanel(
         'Не удалось открыть настройки. Откройте вкладку «Правила» в LuCI.';
     }
   });
-  server.append(
-    addConnection,
-    el(
-      'p',
-      'Первое подключение добавляется в правилах маршрутизации. Выберите сервер и сохраните настройки.',
-      'fkp-next-help',
-    ),
+  const setupHelp = el(
+    'p',
+    'Первое подключение добавляется в правилах маршрутизации. Выберите сервер и сохраните настройки.',
+    'fkp-next-help',
   );
-  const check = el('section', '', 'fkp-next-panel');
-  check.append(el('h3', 'Проверка соединения'));
+  server.append(addConnection, setupHelp);
+  const check = el('div', '', 'fkp-next-probe');
   const domainLabel = el('label', 'Сайт для проверки');
   const domain = el('input');
   domain.name = 'connection_domain';
   domain.placeholder = 'example.org';
   domain.autocomplete = 'off';
+  domain.setAttribute('aria-label', 'Сайт для проверки');
   domainLabel.append(domain);
   check.append(domainLabel);
-  check.append(
-    action('Проверить соединение', async () => {
-      const target = domain.value.trim();
-      if (!target || /[/:]/.test(target) || !validateDomain(target).valid) {
-        domain.setAttribute('aria-invalid', 'true');
-        connection.textContent =
-          'Введите домен сайта, например example.org, без https:// и пути.';
-        domain.focus();
+  const probeButton = action('Проверить соединение', async () => {
+    if (!visible()) return;
+    const target = domain.value.trim();
+    if (!target || /[/:]/.test(target) || !validateDomain(target).valid) {
+      domain.setAttribute('aria-invalid', 'true');
+      connection.dataset.state = 'error';
+      connection.textContent =
+        'Введите домен сайта, например example.org, без https:// и пути.';
+      domain.focus();
+      return;
+    }
+    domain.removeAttribute('aria-invalid');
+    hasProbe = true;
+    const revision = ++probeRevision;
+    const current = () => revision === probeRevision && visible();
+    connection.dataset.state = 'pending';
+    connection.textContent = `Проверяем ${target} с роутера…`;
+    try {
+      const response = await request('probe', {
+        domain: target,
+      });
+      if (!current()) return;
+      if (!response.success) {
+        connection.dataset.state = 'error';
+        connection.textContent = `${target}: проверка не выполнена: ${response.error || 'нет связи с роутером'}. Повторите проверку.`;
         return;
       }
-      domain.removeAttribute('aria-invalid');
-      connection.textContent = 'Проверяем сетевой доступ с роутера…';
-      try {
-        const response = await request('probe', {
-          domain: target,
-        });
-        if (!response.success) {
-          connection.textContent = `Проверка не выполнена: ${response.error || 'нет связи с роутером'}. Повторите проверку.`;
-          return;
-        }
-        const data =
-          response.data && typeof response.data === 'object'
-            ? (response.data as Record<string, unknown>)
-            : {};
-        const result =
-          data.reachable === true
-            ? 'Есть сетевой ответ'
-            : data.reachable === false
-              ? 'Нет сетевого ответа'
-              : 'Результат проверки неизвестен';
-        const checked =
-          typeof data.checked_at === 'number'
-            ? new Date(data.checked_at * 1000).toLocaleString()
-            : 'время не сообщено';
-        connection.textContent = `${result} · HTTP ${data.http_status || '—'} · ${typeof data.duration_ms === 'number' ? `${data.duration_ms} мс` : 'длительность неизвестна'} · ${checked}. Проверен доступ с роутера; вход в сервис не проверяется.`;
-      } catch {
-        connection.textContent =
-          'Проверка не выполнена: нет связи с роутером. Повторите проверку.';
-      }
-    }),
+      const data =
+        response.data && typeof response.data === 'object'
+          ? (response.data as Record<string, unknown>)
+          : {};
+      const result =
+        data.reachable === true
+          ? 'Есть сетевой ответ'
+          : data.reachable === false
+            ? 'Нет сетевого ответа'
+            : 'Результат проверки неизвестен';
+      connection.dataset.state =
+        data.reachable === true
+          ? 'reachable'
+          : data.reachable === false
+            ? 'unreachable'
+            : 'unknown';
+      const checked =
+        typeof data.checked_at === 'number'
+          ? new Date(data.checked_at * 1000).toLocaleString()
+          : 'время не сообщено';
+      connection.textContent = `${target}: ${result} · HTTP ${data.http_status || '—'} · ${typeof data.duration_ms === 'number' ? `${data.duration_ms} мс` : 'длительность неизвестна'} · ${checked}. Проверен доступ с роутера; вход в сервис не проверяется.`;
+    } catch {
+      if (!current()) return;
+      connection.dataset.state = 'error';
+      connection.textContent = `${target}: проверка не выполнена: нет связи с роутером. Повторите проверку.`;
+    }
+  });
+  probeButton.className = 'fkp-next-primary-action';
+  check.append(
+    probeButton,
     el(
       'p',
       'Проверка использует текущий маршрут роутера. Состояние процесса и прежняя задержка не подтверждают доступность сайта.',
       'fkp-next-help',
     ),
   );
+  status.append(check);
   const everyday = el('div', '', 'fkp-next-content');
-  everyday.append(server, check);
+  everyday.append(status, server);
   root.append(everyday);
   const traffic = el('section', '', 'fkp-next-panel fkp-next-traffic');
-  const trafficOutput = el('p', 'Трафик пока недоступен.');
-  trafficOutput.setAttribute('role', 'status');
+  const trafficOutput = el('div');
   traffic.append(el('h3', 'Трафик'), trafficOutput);
   root.append(traffic);
+  const routes = el('section', '', 'fkp-next-panel fkp-next-routes');
+  routes.append(el('h3', 'Дополнительные маршруты'));
+  const routesOutput = el('div', 'Данные маршрутов пока недоступны.');
+  routes.append(
+    routesOutput,
+    action('Открыть правила', async () => {
+      try {
+        if (adapters.openRules) await adapters.openRules();
+        else {
+          const tab = document.querySelector<HTMLElement>(
+            '.cbi-tabmenu [data-tab="section"] a, .cbi-tabmenu [data-tab="section"] button',
+          );
+          if (!tab) throw Error('navigation_unavailable');
+          tab.click();
+        }
+      } catch {
+        notice.textContent =
+          'Не удалось открыть правила. Откройте вкладку «Правила» в LuCI.';
+      }
+    }),
+  );
+  root.append(routes);
   const advanced = el('details', '', 'fkp-next-advanced');
   advanced.append(el('summary', 'Расширенные настройки и диагностика'));
   let mounted = false;
@@ -263,13 +314,14 @@ export function renderNextPanel(
       advanced.append(advancedPanel);
     }
   });
-  root.append(advanced);
+  if (!adapters.workspace) root.append(advanced);
   let generation = 0;
   let runtimeRevision = 0;
   let hasFreshRuntime = false;
   let subscribed = false;
   let resumeRefresh = false;
   let unsubscribe: (() => void) | undefined;
+  let selectedSignature: string | undefined;
   const visible = () =>
     root.isConnected &&
     document.visibilityState !== 'hidden' &&
@@ -287,6 +339,12 @@ export function renderNextPanel(
   ) {
     if (evidence?.cached && hasFreshRuntime) return;
     if (!evidence?.cached) hasFreshRuntime = true;
+    if (
+      state?.running !== runtime?.running ||
+      Boolean(state?.pending) !== Boolean(runtime?.pending) ||
+      state?.error !== runtime?.error
+    )
+      invalidateProbe();
     runtime = state;
     updateServiceControl();
     service.textContent =
@@ -327,34 +385,83 @@ export function renderNextPanel(
             const response = await loadConnections();
             if (!alive()) return;
             if (!response.success) {
+              invalidateProbe();
               selected.textContent =
                 'Выбранный сервер недоступен. Обновите данные.';
+              routesOutput.textContent =
+                'Маршруты недоступны. Обновите данные.';
               return;
             }
+            const groups = response.data || [];
+            const signature = JSON.stringify(
+              groups
+                .map((group) => [
+                  group.sectionName || group.code || group.displayName,
+                  group.outbounds
+                    .filter((o) => o.selected)
+                    .map((o) => o.code || o.displayName),
+                ])
+                .sort((a, b) => String(a[0]).localeCompare(String(b[0]))),
+            );
+            if (signature !== selectedSignature) invalidateProbe();
+            selectedSignature = signature;
+            const primary =
+              groups.find((g) => g.sectionName === 'main') ||
+              groups.find((g) => !g.sectionName);
             selected.replaceChildren();
-            for (const group of response.data || []) {
+            routesOutput.replaceChildren();
+            for (const group of groups) {
               const outbound = group.outbounds.find((o) => o.selected);
+              const host = group === primary ? selected : routesOutput;
+              const row = el('div', '', 'fkp-next-route');
+              row.append(
+                el(
+                  'p',
+                  `${group.displayName}: ${outbound?.displayName || 'сервер не выбран'}`,
+                  group === primary ? 'fkp-next-selected-name' : '',
+                ),
+              );
               if (outbound)
-                selected.append(
+                row.append(
                   el(
                     'p',
-                    `${group.displayName}: ${outbound.displayName}${outbound.latency > 0 ? ` · прежняя задержка ${outbound.latency} мс` : ' · задержка не измерена'}${outbound.latencyTestedAt ? ` · ${new Date(outbound.latencyTestedAt).toLocaleString()}` : ''}`,
+                    `${outbound.latency > 0 ? `Прежняя задержка ${outbound.latency} мс` : 'Задержка не измерена'}${outbound.latencyTestedAt ? ` · ${new Date(outbound.latencyTestedAt).toLocaleString()}` : ''}`,
+                    'fkp-next-help',
                   ),
                 );
+              host.append(row);
             }
+            const primarySelected = primary?.outbounds.some((o) => o.selected);
+            addConnection.hidden = Boolean(primarySelected);
+            setupHelp.hidden = Boolean(primarySelected);
+            if (!routesOutput.childNodes.length)
+              routesOutput.textContent =
+                'Дополнительных маршрутов нет. Они появятся после настройки правил.';
             if (!selected.childNodes.length)
               selected.textContent =
                 'Выбранного сервера нет. Настройте подключение на вкладке Dashboard.';
           } catch {
-            if (alive())
+            if (alive()) {
+              invalidateProbe();
               selected.textContent =
                 'Не удалось загрузить выбранный сервер. Обновите данные.';
+              routesOutput.textContent =
+                'Не удалось загрузить маршруты. Обновите данные.';
+            }
           }
         })(),
       );
     await Promise.all(tasks);
   }
   header.append(action('Обновить данные', refresh));
+  function configurationChanged() {
+    invalidateProbe();
+    generation++;
+    selectedSignature = undefined;
+    telemetry.stop();
+    if (visible()) void refresh();
+    else resumeRefresh = true;
+  }
   // Shared runtime updates avoid starting another periodic poll for this view.
   function updateVisibility() {
     if (visible() && !subscribed) {
@@ -370,6 +477,7 @@ export function renderNextPanel(
         void refresh();
       } else void telemetry.refresh();
     } else if (!visible() && subscribed) {
+      invalidateProbe();
       subscribed = false;
       unsubscribe?.();
       unsubscribe = undefined;
@@ -381,10 +489,15 @@ export function renderNextPanel(
       telemetry.stop();
       observer.disconnect();
       document.removeEventListener('visibilitychange', updateVisibility);
+      window.removeEventListener(
+        'forkop:configuration-changed',
+        configurationChanged,
+      );
     }
   }
   const observer = new MutationObserver(updateVisibility);
   document.addEventListener('visibilitychange', updateVisibility);
+  window.addEventListener('forkop:configuration-changed', configurationChanged);
   observer.observe(document.body, {
     subtree: true,
     childList: true,

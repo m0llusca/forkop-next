@@ -19,6 +19,32 @@ export function render() {
         ),
       ),
       E('div', { class: 'fkp_dashboard-page__content' }, [
+        // All outbounds
+        E(
+          'div',
+          { id: 'dashboard-sections-grid' },
+          renderSections({
+            loading: true,
+            failed: false,
+            section: {
+              code: '',
+              sectionName: '',
+              displayName: '',
+              outbounds: [],
+              withTagSelect: false,
+            },
+            onTestLatency: () => {},
+            onChooseOutbound: () => {},
+            onCopyOutbound: () => {},
+            onShowUrlTestInfo: () => {},
+            onShowPriorityInfo: () => {},
+            onUpdateSubscription: () => {},
+            latencyFetching: false,
+            latencyProgress: undefined,
+            subscriptionUpdating: false,
+            selectorSwitchingTag: undefined,
+          }),
+        ),
         // Widgets section
         E('div', { class: 'fkp_dashboard-page__widgets-section' }, [
           E(
@@ -62,32 +88,6 @@ export function render() {
             }),
           ),
         ]),
-        // All outbounds
-        E(
-          'div',
-          { id: 'dashboard-sections-grid' },
-          renderSections({
-            loading: true,
-            failed: false,
-            section: {
-              code: '',
-              sectionName: '',
-              displayName: '',
-              outbounds: [],
-              withTagSelect: false,
-            },
-            onTestLatency: () => {},
-            onChooseOutbound: () => {},
-            onCopyOutbound: () => {},
-            onShowUrlTestInfo: () => {},
-            onShowPriorityInfo: () => {},
-            onUpdateSubscription: () => {},
-            latencyFetching: false,
-            latencyProgress: undefined,
-            subscriptionUpdating: false,
-            selectorSwitchingTag: undefined,
-          }),
-        ),
       ]),
     ],
   );

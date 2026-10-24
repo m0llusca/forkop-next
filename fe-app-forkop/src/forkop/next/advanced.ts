@@ -39,8 +39,11 @@ function select(label: string, choices: [string, string][]) {
 export type ConnectionLoader = () => Promise<{
   success: boolean;
   data?: Array<{
+    sectionName?: string;
+    code?: string;
     displayName: string;
     outbounds: Array<{
+      code?: string;
       displayName: string;
       selected: boolean;
       latency: number;
