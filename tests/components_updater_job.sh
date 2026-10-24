@@ -170,6 +170,9 @@ package_runtime_lib="$WORK_DIR/package-runtime-lib"
 package_runtime_bin="$WORK_DIR/package-runtime-bin"
 mkdir -p "$package_runtime_lib/components" "$package_runtime_lib/core" "$package_runtime_lib/singbox" "$package_runtime_bin"
 cp "$UPDATER" "$package_runtime_lib/components/updater.uc"
+# Keep the actual pre-mutation admission guard in the isolated package fixture.
+cp "$FORKOP_LIB/singbox/reality.uc" "$package_runtime_lib/singbox/reality.uc"
+printf '{"schema":1,"cores":[]}\n' >"$package_runtime_lib/singbox/validated-cores.json"
 cat >"$package_runtime_lib/core/constants.uc" <<'UCODE'
 function module_exports() {
   return {};

@@ -17,15 +17,16 @@ export FORKOP_SECTION_CACHE_DIR="$WORK_DIR/cache" TMP_SUBSCRIPTION_FOLDER="$WORK
 OUTBOUND='{"type":"vless","tag":"fixture-node","server":"example.invalid","server_port":443,"uuid":"00000000-0000-4000-8000-000000000001","flow":"xtls-rprx-vision","tls":{"enabled":true,"server_name":"example.org","utls":{"enabled":true,"fingerprint":"chrome"},"reality":{"enabled":true,"public_key":"PUBLICKEY","short_id":"aabb"}}}'
 fail() { printf 'FAIL: %s\n' "$1" >&2; exit 1; }
 make_fixture() {
- "$UCODE" -L "$LIB" -e 'let fs=require("fs"),o=json(ARGV[0]); if(ARGV[2]!="absent")o.tls.reality.record_fragment_size=json(ARGV[2]);fs.writefile(ARGV[1],sprintf("%J",{settings:{".name":"settings",".type":"settings",dns_server:["1.1.1.1"],bootstrap_dns_server:["1.1.1.1"]},section:[{".name":"main",".type":"section",enabled:"1",action:"connection",outbound_jsons:[sprintf("%J",o)]}]}));' "$OUTBOUND" "$WORK_DIR/input.json" "$1"
+ # Older ucode/GNU getopt permutes negative fixture values into option parsing.
+ "$UCODE" -L "$LIB" -e 'let fs=require("fs"),o=json(ARGV[0]); if(ARGV[2]!="absent")o.tls.reality.record_fragment_size=json(ARGV[2]);fs.writefile(ARGV[1],sprintf("%J",{settings:{".name":"settings",".type":"settings",dns_server:["1.1.1.1"],bootstrap_dns_server:["1.1.1.1"]},section:[{".name":"main",".type":"section",enabled:"1",action:"connection",outbound_jsons:[sprintf("%J",o)]}]}));' -- "$OUTBOUND" "$WORK_DIR/input.json" "$1"
 }
 case "${1:-all}" in adapter|all)
- "$UCODE" -L "$LIB" -e 'let a=require("singbox.reality"),p=a.verified_runtime(ARGV[0]),o=json(ARGV[1]);a.adapt_outbound(o,p);if(o.tls.reality.record_fragment_size!==256)die("expected record_fragment_size=256 from verified record profile");o=json(ARGV[1]);o.tls.reality.record_fragment_size=0;a.adapt_outbound(o,p);if(o.tls.reality.record_fragment_size!==0)die("explicit zero lost");print("PASS: adapter auto-policy and explicit opt-out\n");' "$VERSION" "$OUTBOUND"
+ "$UCODE" -L "$LIB" -e 'let a=require("singbox.reality"),p=a.verified_runtime(ARGV[0]),o=json(ARGV[1]);a.adapt_outbound(o,p);if(o.tls.reality.record_fragment_size!==256)die("expected record_fragment_size=256 from verified record profile");o=json(ARGV[1]);o.tls.reality.record_fragment_size=0;a.adapt_outbound(o,p);if(o.tls.reality.record_fragment_size!==0)die("explicit zero lost");print("PASS: adapter auto-policy and explicit opt-out\n");' -- "$VERSION" "$OUTBOUND"
  ;; esac
 case "${1:-all}" in generator|all)
  make_fixture absent
  "$UCODE" -L "$LIB" "$LIB/singbox/generator.uc" generate-config-fixture "$WORK_DIR/input.json" "$WORK_DIR/output.json" 127.0.0.1
- "$UCODE" -e 'let c=json(require("fs").readfile(ARGV[0])),found=false;for(let o in c.outbounds)if(o.type=="vless"){found=true;if(o.tls.reality.record_fragment_size!==256)die("generated outbound lacks record policy");if(o.tls.insecure===true)die("TLS verification weakened");}if(!found)die("fixture outbound missing");print("PASS: real generator policy\n");' "$WORK_DIR/output.json"
+ "$UCODE" -e 'let c=json(require("fs").readfile(ARGV[0])),found=false;for(let o in c.outbounds)if(o.type=="vless"){found=true;if(o.tls.reality.record_fragment_size!==256)die("generated outbound lacks record policy");if(o.tls.insecure===true)die("TLS verification weakened");}if(!found)die("fixture outbound missing");print("PASS: real generator policy\n");' -- "$WORK_DIR/output.json"
  ;; esac
 case "${1:-all}" in validator|all)
  make_fixture 256

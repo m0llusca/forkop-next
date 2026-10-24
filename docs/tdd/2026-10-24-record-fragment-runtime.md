@@ -85,8 +85,29 @@ python3 -m unittest discover -s tests/backend -p test_record_fragment_runtime.py
 ```
 
 This Python suite requires Linux ucode with fs/uci modules and has not been run on
-this Windows host. Its Python syntax/AST check passed. `git diff --check` passed.
-The root task owns the full native CI run, exact real identity manifest,
+this Windows host. Its Python syntax/AST check passed. Native Linux Backend CI at
+commit `44fff3cdb8364069f50d18eac81340960313ca76` ran all nine
+`RecordFragmentRuntime` methods successfully; its complete Python suite reported
+252 tests, OK. `git diff --check` passed.
+The root task owns the full CI result, exact real identity manifest,
 independent source review and integration. The live ARM64/core interoperability
 matrix belongs to the separate core verification evidence; it is not claimed as
 part of these generator/validator fixtures.
+
+## Standalone CI fixture argument boundary
+
+The same commit's Backend CI shell fixture failed with exit 254. The preserved
+`backend-verification` artifact (run 40073326537, artifact 12551958230) shows the
+adapter and generator passing, followed by `ucode: invalid option -- '1'` twice
+and a `json(ARGV[2])` type error while constructing the negative `-1` validation
+fixture. Its no-argument/default library selection was already correct. The
+older CI ucode/GNU getopt parser treated that negative positional argument as an
+interpreter option; the newer isolated router invocation had not exposed it.
+
+All three `ucode -e` invocations now put `--` before their positional arguments.
+This retains the negative-value schema checks rather than dropping the `-1`
+case. Running without arguments still selects adapter → generator → validator
+from the repository library by default; explicit modes and `FORKOP_TEST_LIB`
+continue to support isolated native verification. A fresh CI run is required to
+confirm the standalone shell fix under the pinned older interpreter. Runtime
+sources were not changed for this correction.

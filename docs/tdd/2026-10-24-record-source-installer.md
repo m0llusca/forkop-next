@@ -140,3 +140,21 @@ backend CI remain integration checks; they are not claimed as run here.
 No production installation, release publication or network mutation is performed
 by these fixtures. Native isolated tests do not establish a live installation or
 independent rollback acceptance.
+
+## Existing package-job fixture dependency regression
+
+The first Linux CI run at `44fff3c` passed the new source/memory/transaction/policy
+fixtures, syntax checks and pinned-core provisioning, but
+`components_updater_job.sh` failed. Its isolated `package_runtime_lib` lacked the
+new `singbox.reality` dependency required by the actual stable/tiny pre-mutation
+admission guard. The native error identified `sing_box_verified_runtime`; the
+recorded package-manager log contained only the initial version lookup, so the
+existing assertion correctly reported that the package list update never ran.
+
+The fixture now copies the actual admission module and supplies an explicitly
+empty local trust manifest. It still represents an unadmitted/no-engine runtime;
+the security guard is neither bypassed nor replaced by a permissive stub.
+No production source change was needed. A Linux CI rerun is required to establish
+GREEN for this existing job fixture. The complete legacy package fixture is not
+run on a live router because its package installation entry retains production
+filesystem paths; native record-source fixtures remain separately isolated.
