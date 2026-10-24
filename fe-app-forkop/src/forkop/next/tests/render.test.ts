@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { renderNextPanel } from '../render';
+import { renderAdvancedPanel as renderNextPanel } from '../advanced';
 const tick = async () => {
   for (let i = 0; i < 10; i++) await Promise.resolve();
 };
@@ -78,6 +78,88 @@ function setup() {
 }
 const button = (text: string) =>
   [...document.querySelectorAll('button')].find((x) => x.textContent === text)!;
+
+it('ignores an initial status response that arrives after a fresh explicit refresh', async () => {
+  let finish!: (v: { success: boolean; data: unknown }) => void;
+  let reads = 0;
+  const panel = renderNextPanel(async (action) => {
+    if (action === 'status') {
+      if (++reads === 1)
+        return new Promise((resolve) => {
+          finish = resolve;
+        });
+      return {
+        success: true,
+        data: { versions: { forkop: 'fresh' }, sections: [] },
+      };
+    }
+    return { success: true, data: { items: [] } };
+  });
+  document.body.append(panel);
+  button('Обновить данные').click();
+  await tick();
+  finish({
+    success: true,
+    data: { versions: { forkop: 'stale' }, sections: [] },
+  });
+  await tick();
+  expect(panel.querySelector('.fkp-next-status')?.textContent).toContain(
+    'fresh',
+  );
+});
+
+it('shares initial status and profile reads without waiting for unrelated data', async () => {
+  const calls: string[] = [];
+  const panel = renderNextPanel(async (action) => {
+    calls.push(action);
+    if (action === 'devices') return new Promise(() => {});
+    if (action === 'status')
+      return {
+        success: true,
+        data: { versions: { forkop: 'ready' }, sections: [] },
+      };
+    return { success: true, data: { items: [{ name: 'home' }] } };
+  });
+  document.body.append(panel);
+  await tick();
+  expect(panel.querySelector('.fkp-next-status')?.textContent).toContain(
+    'ready',
+  );
+  expect(calls.filter((action) => action === 'status')).toHaveLength(1);
+  expect(calls.filter((action) => action === 'profile_list')).toHaveLength(1);
+  expect(calls).toContain('temporary_list');
+  expect(calls).toContain('recommendations');
+  expect(
+    panel.querySelector('select[aria-label="Профиль для экспорта"]')
+      ?.textContent,
+  ).toContain('home');
+});
+
+it('uses fresh reads for explicit refresh even while initial reads are pending', async () => {
+  const calls: string[] = [];
+  let statusReads = 0;
+  const panel = renderNextPanel(async (action) => {
+    calls.push(action);
+    if (action === 'status') {
+      statusReads++;
+      if (statusReads === 1) return new Promise(() => {});
+      return {
+        success: true,
+        data: { versions: { forkop: 'fresh' }, sections: [] },
+      };
+    }
+    return { success: true, data: { items: [] } };
+  });
+  document.body.append(panel);
+  await tick();
+  button('Обновить данные').click();
+  await tick();
+  expect(calls.filter((action) => action === 'status')).toHaveLength(2);
+  expect(calls.filter((action) => action === 'profile_list')).toHaveLength(2);
+  expect(panel.querySelector('.fkp-next-status')?.textContent).toContain(
+    'fresh',
+  );
+});
 
 function profileScenario() {
   let digest = 'current-before';

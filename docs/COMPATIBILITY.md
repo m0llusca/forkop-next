@@ -1,183 +1,136 @@
-# 3x-ui / Xray compatibility
+# Совместимость 3x-ui, Xray и sing-box
 
-Forkop compares connection capabilities and performs an explicit preflight. A newer
-panel or server core is not inherently incompatible; a version number alone cannot
-prove a successful connection. No downgrade or disabled certificate checking is
-recommended. Update checks never install anything or contact the panel/VPS.
+Версия панели или ядра сама по себе не подтверждает работу подключения. Forkop
+сопоставляет транспорт, flow, шифрование и TLS/REALITY, затем предлагает явную
+проверку через выбранное подключение. Проверка сертификата остаётся включённой;
+настройки удалённого сервера автоматически не меняются.
 
-`forkop next compatibility_updates '{"installed":{"panel":"3.9.9","xray":"26.1.0"}}'`
-reads the fixed official GitHub `releases/latest` endpoints for `MHSanaei/3x-ui` and
-`XTLS/Xray-core`. TLS verification stays enabled, connect timeout is 3 seconds,
-overall timeout 8 seconds per component, response limit 256 KiB. Missing/invalid
-metadata, unknown installed versions, prereleases and network failures yield
-`unknown`. Numerically newer stable releases yield `update_available`; same or
-older releases yield `current`. The supplied installed versions are operator
-metadata, not remotely authenticated observations. No credentials are stored.
+## Что проверено
 
-`compatibility_check` accepts `section`, optional `outbound_tag`, redacted `server`
-inbound metadata and optionally `domain` plus `probe:true`. A generated mixed inbound
-and its first unconditional direct outbound rule determine the local connection.
-When the association is unambiguous, the internal outbound tag can be omitted.
-The result includes `outbounds:[{outbound_tag,label}]` for the UI. Selector/URLTest
-groups currently require resolving the selected child before a verified result;
-they never silently fall back to the current general route.
+| Среда | Результат и границы |
+| --- | --- |
+| ARM64, сжатый `1.14.3-extended-2.7.3-forkop-record1`, Xray 26.10.21 | Две серии по 8/8; неверный REALITY-ключ отклонён |
+| ARM64, несжатый вариант того же исправления, Xray 26.7.28 | 8/8 в отдельной проверке; это не проверка сжатого варианта с этой версией сервера |
+| Действующее ARM64-подключение с новым ядром и backend | Контроллер вернул HTTP 200 и числовую задержку в 8/8 авторизованных проверок; проверены DNS, HTTPS и закреплённый канал обновлений. Рабочий выбор маршрута сохранён |
+| Живая 3x-ui 3.10.2 | Обновлена и проверена; поддержка всех возможных настроек панели из этого не следует |
+| Linux amd64, официальный Extended 1.14.3-extended-2.7.3, Xray 26.6.27 / 26.9.30 / 26.10.21 | Передача случайного HTTPS-содержимого через REALITY/Vision; неверные UUID, ключи и short ID отклоняются |
+| Linux amd64, stock sing-box 1.13.7 / 1.14.3, Xray 26.10.21 | TLS/Vision работает со строгой проверкой сертификата; REALITY у этих stock-клиентов не поддерживает требуемый гибридный обмен |
+| Extended XHTTP / VLESS Encryption | Генерация, проверка схемы и запуск ядра; без подтверждённой передачи трафика |
 
-Server input can be one Xray inbound (`protocol`, `settings.clients`,
-`settings.decryption`, `streamSettings`) or normalized metadata:
+Короткие серии не доказывают долговременную устойчивость, работу всех маршрутов,
+архитектур или будущих Xray. Успех официального Extended на Linux amd64 нельзя
+переносить на любой прямой маршрут ARM64. Проверка через контроллер подтверждает
+измеренный сетевой доступ, а не вход в приложение или доступность всех сайтов.
+Автоматического переключения на отдельный клиент Xray в 1.1.5 нет.
 
-```json
-{
-  "protocol": "vless",
-  "transport": "tcp",
-  "flow": "xtls-rprx-vision",
-  "encryption": "none",
-  "security": "reality",
-  "server_names": ["example.org"],
-  "short_ids": ["aabb"]
-}
+## Два отдельных исправления REALITY
+
+Официальный Extended `1.14.3-extended-2.7.3` предоставляет
+`tls.reality.support_x25519mlkem768`. Forkop добавляет его только для проверенного
+по SHA256 executable, включённого REALITY и Chrome uTLS, если поле отсутствует.
+Явное `false` сохраняет прежний обмен ключами. Старый Extended 2.6.5 не понимает
+это поле; его обновление требует отдельного действия.
+
+Для проверенного ARM64-маршрута подготовлен собственный
+`1.14.3-extended-2.7.3-forkop-record1`. Он сохраняет все сборочные теги и
+возможности Extended, включая встроенную панель. Дополнительное исправление
+меняет оформление первого ClientHello в TLS-записи, сохраняя аутентификацию,
+ключи, проверку сертификата и последующий трафик.
+
+Только профиль с точной проверенной идентичностью и capability
+`reality_record_fragment: true` получает автоматический
+`tls.reality.record_fragment_size: 256` для подходящего Chrome REALITY-outbound.
+Явный `0` — отказ от этой адаптации; заданные целые значения `0..16384`
+сохраняются. Любое явное поле, даже `0`, требует такого ядра: неизвестный SHA,
+stock или обычный Extended вызывают понятную ошибку вместо молчаливого удаления
+настройки. Ссылки, JSON и подписки проходят общий финальный адаптер.
+
+Trust manifest — `singbox/validated-cores.json`. Название версии и маркер канала
+не заменяют SHA256 реального executable. Сжатый binary, архив и архив исходников
+имеют разные контрольные суммы. [Патч, лицензия и сборка](../core-patches/README.md)
+опубликованы вместе с [предварительным релизом ядра](https://github.com/m0llusca/forkop-next/releases/tag/core-1.14.3-extended-2.7.3-forkop-record1).
+Патч ядра распространяется под GPL-3.0-or-later; лицензия Forkop сохранена.
+
+## Явная установка собственного ядра
+
+Установка пакетов Forkop сама по себе ядро не заменяет. После установки backend
+1.1.5 отдельная команда выбирает проверенный ARM64 UPX-вариант:
+
+```sh
+forkop component_action sing_box install_forkop_record_compressed
 ```
 
-Use exactly one selected client when importing an Xray inbound; multiple different
-clients require normalized metadata for the chosen connection. Local generated
-outbound data takes precedence over optional `client` metadata. Supplying `client`
-can compare a proposal but cannot prove a live connection. Inputs are processed in
-memory and results omit UUIDs, passwords, private/public keys, short IDs and SNI.
-Do not paste complete panel backups. Remove credentials before importing metadata.
+Допускается подлинное проверенное сжатое ядро Extended либо отсутствие ядра
+без пакета-владельца. Команда не заменяет произвольный stock/tiny или неизвестный
+binary. Для других архитектур этот asset не выбирается. Проверяются точные
+версия, источник, SHA256 и допустимые возможности; устанавливается закреплённый
+собственный канал. Обычная проверка/установка обновления затем использует его,
+а не переключается молча на upstream. Обычные варианты ядер сохраняют свой путь
+обновления. Ошибка установки восстанавливает локальные файлы и сведения о канале;
+точная база регистрации пакетов не реконструируется.
 
-3x-ui 3.10.2 serializes `settings` and `streamSettings` as JSON strings. Both
-strings and already decoded objects are accepted; malformed JSON is rejected.
-Current Xray also accepts `settings.users`, gives `clients` precedence, and
-inherits `settings.flow` when the selected client's flow is empty. Transport
-aliases and case are normalized, including `raw`/`tcp` and `websocket`/`ws`;
-an explicit `streamSettings.method` overrides `network`.
-REALITY short IDs are validated as hexadecimal bytes, including Xray's eight-byte
-zero padding. Vision without VLESS Encryption requires direct RAW/TCP with
-TLS/REALITY; a TLS ceiling below 1.3 is incompatible.
+Пакеты приложения 1.1.5 ещё не опубликованы. Подробности подготовки —
+в [описании выпуска](releases/1.1.5.md). Не отключайте проверку сертификата,
+чтобы скрыть ошибку REALITY: ответ маскирующего сайта после неудачной
+аутентификации не означает проблему с доверенным CA.
 
-## Pinned current-core results (2026-10-23)
+## Проверка из интерфейса и CLI
 
-Official latest releases checked: Xray 26.10.21 and 3x-ui 3.10.2. The panel's
-source/API serialization was reviewed; a live 3x-ui service was not deployed.
-Actual loopback-core tests use checksum-pinned Xray 26.10.21 and stock sing-box
-1.13.7 / 1.14.3. TLS/Vision succeeds with both clients, including strict
-certificate validation, authenticated VLESS, and an exact random HTTPS payload.
+`compatibility_check` принимает `section`, необязательный `outbound_tag`, описание
+серверного inbound в `server` и, для явного запроса, `domain` с `probe:true`.
+Локальная генерируемая конфигурация имеет приоритет над предложенными
+метаданными клиента. Mixed inbound и его первое безусловное правило определяют
+проверяемое подключение; неоднозначная связь не подменяется общим маршрутом.
+Selector/URLTest требуют определения выбранного дочернего outbound.
 
-REALITY on those stock clients is incompatible with this Xray release. Xray's
-REALITY dependency requires an X25519MLKEM768 share before optional X25519, while
-both sing-box versions explicitly remove the hybrid share. An authentication
-failure followed by a cover-site certificate error is not a CA-installation
-problem. Do not trust a cover certificate or disable verification to hide it.
+Можно передать один Xray inbound либо нормализованные параметры. Например:
 
-When supplied installed Xray metadata is exactly 26.9.30 or 26.10.21, the
-preflight marks the two tested stock versions unsupported for REALITY.
-Unadmitted clients remain unknown; the validated Extended exception is described
-below. This table is
-deliberately pinned: it does not infer support or rejection for future releases.
-TLS/Vision remains eligible for a selected-outbound probe. Using the latest Xray
-with REALITY requires a client implementation supporting its handshake; a core
-downgrade is not required for the tested TLS/Vision alternative. Server security
-settings are never changed automatically.
+```json
+{"protocol":"vless","transport":"tcp","flow":"xtls-rprx-vision","encryption":"none","security":"reality","server_names":["example.org"],"short_ids":["aabb"]}
+```
 
-Primary implementation references:
+У нескольких разных клиентов нужно выбрать один профиль. Принимаются JSON-строки
+`settings`/`streamSettings` формата 3x-ui и уже разобранные объекты; повреждённый
+JSON отклоняется. Поддержаны `settings.users`, приоритет `clients` и наследование
+`settings.flow`, нормализуются `raw`/`tcp`, `websocket`/`ws` и регистр. Явный
+`streamSettings.method` имеет приоритет над `network`. Short ID проверяются как
+hex-байты с учётом дополнения Xray до восьми байт. Vision без VLESS Encryption
+требует RAW/TCP с TLS/REALITY; ограничение TLS ниже 1.3 несовместимо.
 
-- https://github.com/XTLS/Xray-core/releases/tag/v26.10.21
-- https://github.com/MHSanaei/3x-ui/releases/tag/v3.10.2
-- https://github.com/XTLS/REALITY/blob/83f621788ca8/tls.go#L204-L224
-- https://github.com/SagerNet/sing-box/blob/v1.14.3/common/tls/reality_client.go#L138-L148
-- https://github.com/SagerNet/sing-box/blob/v1.13.7/common/tls/reality_client.go#L124-L134
-- https://github.com/XTLS/Xray-core/blob/v26.10.21/infra/conf/vless.go
-- https://github.com/XTLS/Xray-core/blob/v26.10.21/infra/conf/transport_internet.go
-- https://github.com/XTLS/Xray-core/blob/v26.10.21/infra/conf/transport_security.go
+Ответ: `{success:true,data:{status,checks,outbounds,client,server}}`. Каждая проверка
+содержит `capability,status,detail,next_step`. `unsupported` означает известное
+несоответствие, `probe_required` — недостаток подтверждения, `verified` — успешный
+HTTPS-запрос через настроенный mixed SOCKS выбранной секции с совпадающими
+метаданными. Это результат в момент проверки, без обещания будущей совместимости.
 
-See `docs/tdd/README.md` for the verification scope and test limitations.
+Версионные исключения preflight ограничены проверенными сочетаниями: stock
+1.13.7/1.14.3 с известными Xray 26.9.30/26.10.21 не получают допуск REALITY;
+проверенный Extended с нужным гибридным профилем допускается к явному probe.
+Сам допуск не означает успешного соединения. Непроверенные расширения и
+fingerprint остаются неподтверждёнными. UUID, пароли, ключи, short ID и SNI
+не выводятся в результатах; полные резервные копии панели передавать не нужно.
 
-## Verified Extended REALITY profile (Forkop 1.1.4)
+`forkop next compatibility_updates '{"installed":{"panel":"3.9.9","xray":"26.1.0"}}'`
+читает официальные GitHub releases [3x-ui](https://github.com/MHSanaei/3x-ui)
+и [Xray-core](https://github.com/XTLS/Xray-core).
+Автоматической установки нет. Переданные версии — сведения оператора, не
+удалённое подтверждение. TLS проверяется, соединение ограничено 3 с, запрос —
+8 с на компонент, ответ — 256 КиБ. Ошибки сети, неизвестные версии, prerelease
+и повреждённые метаданные дают `unknown`; остальные результаты —
+`update_available` или `current`.
 
-The primary corrected core is official sing-box Extended
-`1.14.3-extended-2.7.3`. Upstream already supplies the opt-in correction
-`tls.reality.support_x25519mlkem768`; Forkop integrates it rather than replacing
-Extended with stock sing-box or maintaining another cryptographic fork.
-Legacy Extended `1.13.18-extended-2.6.5` cannot parse this field and must be updated
-explicitly before using this profile. No component is installed automatically.
+## Схемы sing-box и источники
 
-The final generator pass applies to manual links, JSON outbounds and subscriptions.
-It enables the field only for a SHA256-admitted actual executable with enabled
-REALITY and Chrome uTLS, and only when the option is absent. Explicit false is
-the legacy opt-out; explicit fingerprints/security choices remain unchanged.
-Stock, legacy and unknown core builds do not receive the new automatic field.
-An existing user-supplied unsupported field is not silently erased to make an
-incompatible core pass its mandatory configuration validation.
+Адаптер сохраняет схему 1.13; для 1.14+ переводит DNS response matching и удаляет
+`independent_cache`, заменяет `download_detour` на `http_client`, сохраняя выбранный
+маршрут и пользовательские HTTP clients. Повторное преобразование идемпотентно.
+Неподдерживаемые формы DNS-условий отклоняются с
+`unsupported_dns_response_migration`. Перед активацией обязательна проверка
+сгенерированной конфигурации фактически установленным ядром. Успешные проверки
+схем 1.13.7/1.14.3 не доказывают поддержку будущих расширений.
 
-`singbox/validated-cores.json` is the packaged identity trust anchor. A version
-suffix or a variant marker alone does not admit a runtime. Changing the executable
-invalidates its profile; hashing is streaming and occurs once per adapter request.
-Profiles cover published standard/compressed Linux binaries and OpenWrt IPKs;
-native interoperability runs on Linux amd64, not every listed architecture.
-
-Prior isolated native tests prove generated
-REALITY/Vision random HTTPS transfers against Xray **26.6.27, 26.9.30 and
-26.10.21**, with untrusted-certificate and wrong UUID/key/short-ID rejection.
-Legacy opt-out also succeeds against 26.6.27. Extended XHTTP and VLESS Encryption
-retain generated-schema and core-start checks; these are not live protocol tests.
-The same test suite retains unmodified stock-client rejection controls.
-
-For the known hybrid-required server profiles, admission of core, fingerprint and
-generated flag permits the existing explicit selected-section HTTPS probe. It
-does not certify a connection without that probe. Older 26.6.27 keeps its legacy
-probe behavior. Unsupported modern fingerprints stay unconfirmed. Xray remains
-an optional reserve architecture; no second router process is introduced.
-
-Operator sequence: explicitly update the sing-box component to the validated
-Extended release, apply/reload the configuration, then probe the selected section.
-Keep private server metadata out of reports. No certificate verification, server
-REALITY policy or remote Xray version is weakened or downgraded.
-
-Release archives/packages are accepted only from the exact official HTTPS
-tag/asset URL with a valid release SHA256, checked before extracting/executing or
-stopping services. Redirect transport behavior is unchanged. Exact local runtime
-backups are used for rollback; this does not reconstruct package-manager database
-registration. See `docs/tdd/README.md` for the verification scope and test limitations.
-
-The response envelope is `{success:true,data:{status,checks,outbounds,client,server}}`.
-Each check contains `capability,status,detail,next_step`. Status is `unsupported`
-for known mismatches, `probe_required` for missing or unconfirmed evidence, and
-`verified` only after a successful HTTPS request through that section's configured
-mixed SOCKS inbound with matching capability metadata. `verified` describes this
-bounded network test at its timestamp, not application login, every destination,
-or compatibility with future releases. REALITY public-key validity is established
-by the actual connection, not by comparing an untrusted boolean or a version.
-
-Stock sing-box's documented VLESS capability set does not include Xray's non-none
-VLESS Encryption, XHTTP or `xtls-rprx-vision-udp443`. Such a stock combination is
-reported unsupported. An Extended core's version suffix does not prove a capability:
-unconfirmed extensions remain `probe_required`. The server encryption settings
-are never silently removed or downgraded.
-
-Official references consulted:
-
-- https://xtls.github.io/en/config/outbounds/vless.html
-- https://sing-box.sagernet.org/configuration/outbound/vless/
-- https://sing-box.sagernet.org/migration/
-- https://sing-box.sagernet.org/configuration/dns/rule_action/
-- https://sing-box.sagernet.org/configuration/rule-set/
-- https://sing-box.sagernet.org/configuration/shared/http-client/
-
-## Local core schema migration
-
-`singbox.compatibility.transform(config, actual_version)` preserves the legacy
-1.13 shape. For 1.14+, it removes `independent_cache`, changes generated
-source-aware bypass address filtering to `evaluate` followed by response matching
-and `respond`, and converts remote rule-set `download_detour` into `http_client`
-without changing the chosen download outbound. Existing custom HTTP clients are
-preserved. Transforming an already migrated configuration is idempotent.
-
-The adapter rewrites the understood two-child logical AND shape: request/source
-conditions first, address filtering second, with a route action and server.
-The generator uses this shape for its inverted FakeIP bypass filter. OR rules,
-whole-rule inversion, request children with legacy address filtering, and other
-unhandled shapes fail with `unsupported_dns_response_migration`. Unknown runtime versions retain the
-legacy shape and must pass the actual core's mandatory configuration check before
-activation. No flag enables deprecated schemas or weakens transport security.
-Published sing-box 1.13.7 and 1.14.3 both passed actual configuration checks on the
-behavioral fixtures. This establishes those schemas, not universal support for
-future core features or protocol extensions.
+[Документация VLESS Xray](https://xtls.github.io/en/config/outbounds/vless.html)
+· [VLESS sing-box](https://sing-box.sagernet.org/configuration/outbound/vless/)
+· [Миграция sing-box](https://sing-box.sagernet.org/migration/)
+· [Xray 26.10.21](https://github.com/XTLS/Xray-core/releases/tag/v26.10.21)
+· [3x-ui 3.10.2](https://github.com/MHSanaei/3x-ui/releases/tag/v3.10.2).

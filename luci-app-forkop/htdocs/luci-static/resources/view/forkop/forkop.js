@@ -114,8 +114,37 @@ const EntryPoint = {
     };
     let uiCapabilitiesPromise = null;
     let serverSectionRef = null;
+    let mapRendered = false;
+    let initializeSettings = null;
+    const capabilityNotice = document.createElement("div");
+    const capabilityMessage = document.createElement("p");
+    capabilityMessage.setAttribute("role", "status");
+    capabilityMessage.textContent =
+      "Проверяем возможности компонентов. Настройки появятся после проверки; правила и обзор уже доступны.";
+    const retryCapabilities = document.createElement("button");
+    retryCapabilities.type = "button";
+    retryCapabilities.textContent = "Повторить проверку";
+    capabilityNotice.append(capabilityMessage, retryCapabilities);
+    const showCapabilityError = function () {
+      capabilityMessage.textContent =
+        "Не удалось проверить возможности компонентов. Настройки временно недоступны. Повторите проверку.";
+    };
+    retryCapabilities.onclick = function () {
+      retryCapabilities.disabled = true;
+      capabilityMessage.textContent = "Проверяем возможности компонентов…";
+      void loadUiCapabilities()
+        .then(function () {
+          return initializeSettings?.();
+        })
+        .catch(showCapabilityError)
+        .finally(function () {
+          retryCapabilities.disabled = false;
+        });
+    };
 
     const applyUiCapabilities = function () {
+      if (mapRendered && initializeSettings)
+        void initializeSettings().catch(showCapabilityError);
       if (serverSectionRef) {
         server.applyServerCapabilities(serverSectionRef, uiCapabilities);
       }
@@ -161,6 +190,20 @@ const EntryPoint = {
     };
 
     const updateUiCapabilities = function (data) {
+      const evidenceKeys = [
+        "sing_box_extended",
+        "sing_box_tiny",
+        "zapret_installed",
+        "zapret2_installed",
+        "byedpi_installed",
+      ];
+      if (
+        !data ||
+        !evidenceKeys.every(function (key) {
+          return [0, 1, "0", "1", true, false].includes(data[key]);
+        })
+      )
+        throw new Error("UI capability evidence unavailable");
       uiCapabilities.loaded = true;
       uiCapabilities.singBoxExtended = Boolean(
         Number(data?.sing_box_extended) === 1,
@@ -256,6 +299,24 @@ const EntryPoint = {
             inboundsConfigResult.status === "fulfilled"
               ? inboundsConfigResult.value
               : null;
+
+          if (
+            !serverCapabilities?.success ||
+            !zapretRuntime?.success ||
+            !zapret2Runtime?.success ||
+            !byedpiRuntime?.success ||
+            !inboundsConfig?.success ||
+            ![
+              serverCapabilities.data?.sing_box_extended,
+              serverCapabilities.data?.sing_box_tiny,
+              zapretRuntime.data?.zapret_installed,
+              zapret2Runtime.data?.zapret2_installed,
+              byedpiRuntime.data?.byedpi_installed,
+            ].every(function (value) {
+              return [0, 1, "0", "1", true, false].includes(value);
+            })
+          )
+            throw new Error("Fallback capability evidence unavailable");
 
           return updateUiCapabilities({
             sing_box_extended:
@@ -442,7 +503,57 @@ const EntryPoint = {
     settingsSection.cfgsections = function () {
       return ["settings"];
     };
-    settings.createSettingsContent(settingsSection, uiCapabilities);
+    const pendingSettings = settingsSection.option(
+      form.DummyValue,
+      "_capabilities_pending",
+    );
+    pendingSettings.rawhtml = true;
+    pendingSettings.cfgvalue = function () {
+      return capabilityNotice;
+    };
+    let settingsReady = false;
+    let settingsMountPromise = null;
+    const originalSettingsParse = settingsSection.parse;
+    settingsSection.parse = function () {
+      // Unmounted fields must never parse null form values into UCI deletions.
+      return settingsReady
+        ? originalSettingsParse.apply(this, arguments)
+        : Promise.resolve();
+    };
+    initializeSettings = function () {
+      if (!mapRendered || !uiCapabilities.loaded || settingsReady)
+        return Promise.resolve();
+      if (settingsMountPromise) return settingsMountPromise;
+      const pendingChildren = settingsSection.children;
+      settingsMountPromise = Promise.resolve()
+        .then(async function () {
+          settingsSection.children = [];
+          try {
+            settings.createSettingsContent(settingsSection, uiCapabilities);
+            await settingsSection.load();
+            const pane = await settingsSection.render();
+            const previous = forkopMap.findElement(
+              '.cbi-map-tabbed > .cbi-section[data-tab="settings"]',
+            );
+            if (!previous) throw new Error("Settings pane unavailable");
+            if (previous.hasAttribute("data-tab-active"))
+              pane.setAttribute(
+                "data-tab-active",
+                previous.getAttribute("data-tab-active"),
+              );
+            previous.replaceWith(pane);
+            settingsReady = true;
+            forkopMap.checkDepends();
+          } catch (error) {
+            settingsSection.children = pendingChildren;
+            throw error;
+          }
+        })
+        .finally(function () {
+          settingsMountPromise = null;
+        });
+      return settingsMountPromise;
+    };
 
     const diagnosticSection = forkopMap.section(
       form.TypedSection,
@@ -492,9 +603,12 @@ const EntryPoint = {
     };
     updates.createUpdatesContent(updatesSection);
 
-    await loadUiCapabilities().catch(() => null);
+    void loadUiCapabilities().catch(showCapabilityError);
 
     const rendered = await forkopMap.render();
+    mapRendered = true;
+    if (uiCapabilities.loaded)
+      void initializeSettings().catch(showCapabilityError);
     main.coreService({
       waitForLogWatcherStart: loadUiCapabilities,
       logWatcherStartDelayMs: 5000,

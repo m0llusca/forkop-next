@@ -411,10 +411,30 @@ function createSettingsContent(section, capabilities) {
     form.Flag,
     "enable_yacd",
     _("Enable YACD"),
-    `<a href="${main.getClashUIUrl()}" target="_blank">${main.getClashUIUrl()}</a>`,
+    `<a href="${main.getClashUIUrl()}" target="_blank">${main.getClashUIUrl()}</a><br>${_("Remote YACD access is off without a secret key, including older configurations. LuCI continues to use its authenticated connection.")}`,
   );
   o.default = "0";
   o.rmempty = false;
+  const yacdEnabled = o;
+  o.cfgvalue = function (section_id) {
+    const secret = uci.get(UCI_PACKAGE, section_id, "yacd_secret_key");
+    return String(secret || "").trim()
+      ? uci.get(UCI_PACKAGE, section_id, "enable_yacd") || "0"
+      : "0";
+  };
+  o.parse = function (section_id) {
+    // Optional empty Textfields may skip custom validation in native LuCI.
+    // Check the enabling flag at save time as well, before its native write.
+    if (
+      this.formvalue(section_id) === "1" &&
+      !String(yacdSecret.formvalue(section_id) || "").trim()
+    ) {
+      return Promise.reject(
+        new TypeError(_("Enter a secret key to enable remote YACD access.")),
+      );
+    }
+    return form.Flag.prototype.parse.call(this, section_id);
+  };
 
   o = section.option(
     form.Flag,
@@ -438,12 +458,13 @@ function createSettingsContent(section, capabilities) {
   );
   o.depends("enable_yacd", "1");
   o.password = true;
+  const yacdSecret = o;
   o.validate = function (section_id, value) {
-    return String(value || "").trim()
+    return yacdEnabled.formvalue(section_id) !== "1" || String(value || "").trim()
       ? true
       : _("Enter a secret key to enable remote YACD access.");
   };
-  o.rmempty = false;
+  o.rmempty = true;
 
   o = section.option(
     form.Flag,

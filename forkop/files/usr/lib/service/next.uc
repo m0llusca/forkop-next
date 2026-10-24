@@ -258,8 +258,8 @@ function handle(action,payload) {
         return apply(current,current_digest,previous);
     }
     if(action=='status') {
-        let version='unknown',pipe=fs.popen('sing-box version 2>/dev/null','r');
-        if(pipe){let text=pipe.read(4096),status=pipe.close(),found=match(text||'',/sing-box version ([0-9][0-9A-Za-z.+_-]*)/);if(status==0 && found)version=found[1];}
+        let version='unknown',pipe=fs.popen('ucode -L '+quote(LIB)+' '+quote(LIB+'/singbox/runtime.uc')+' version 2>/dev/null','r');
+        if(pipe){let text=pipe.read(4096),status=pipe.close(),found=match(trim(text||''),/^([0-9][0-9A-Za-z.+_-]*)$/);if(status==0 && found)version=found[1];}
         let settings={};for(let row in rows())if(row['.type']=='settings')settings=row;
         return ok({digest:digest(CONFIG),recovery_pending:fs.lstat(DIR+'/journal.json')!=null,previous_available:read(DIR+'/previous.uci')!=null,sections:sections(),versions:{forkop:require('core.constants').FORKOP_VERSION,sing_box:version},smart_detect:{enabled:settings.smart_detect_enabled=='1',section:settings.smart_detect_section||'',interval:60}});
     }
