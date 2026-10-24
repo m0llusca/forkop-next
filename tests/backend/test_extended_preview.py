@@ -3,6 +3,7 @@
 No installed core or downloads are needed. Absence of ucode is a hard failure.
 """
 import copy
+import hashlib
 import json
 import os
 import pathlib
@@ -168,3 +169,13 @@ class ExtendedPreview(unittest.TestCase):
         self.assertIsNone(observed['import']['duplicates'])
         self.assertIsNone(observed['import']['unsupported'])
         self.assertEqual(call('other')['status'], 'unknown')
+
+    def test_capture_digest_hashes_exact_bytes_without_writes(self):
+        code = ('let fs=require("fs");let m=require("core.sha256");'
+                'print(m.digest(fs.readfile(ARGV[0])));')
+        for data in [b'', b'abc', b'x' * 1000, *[b'a' * n for n in (55,56,63,64,65)],
+                     'Привет 🌍'.encode(), b'first\x00last']:
+            with self.subTest(data=data[:12], size=len(data)):
+                path = self.d / 'digest-input'
+                path.write_bytes(data)
+                self.assertEqual(self.run_ucode(['-e',code,str(path)]), hashlib.sha256(data).hexdigest())

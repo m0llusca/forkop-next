@@ -1800,8 +1800,11 @@ function update_subscription_source(section_name_value, index_value, entry, phas
         remove_subscription_source_runtime_cache(source_section);
     }
 
+    let evidence = require("subscription.evidence");
+    let previous = object_or_empty(read_json(source_json_path(TMP_SUBSCRIPTION_FOLDER, source_section)));
+    let attemptedAt = int(clock()[0]);
     let proxy = get_subscription_download_proxy_address(section_name_value, sections, parsed, phase || "runtime");
-    return download_subscription_into_cache(
+    let result = download_subscription_into_cache(
         section_name_value,
         parsed.url,
         source_json_path(TMP_SUBSCRIPTION_FOLDER, source_section),
@@ -1814,6 +1817,16 @@ function update_subscription_source(section_name_value, index_value, entry, phas
         as_string(metadata_output_path),
         sections
     );
+    let succeeded = result == 0 || result == 2;
+    let current = succeeded ? object_or_empty(read_json(source_json_path(TMP_SUBSCRIPTION_FOLDER, source_section))) : {};
+    let old = {}, added = 0;
+    for (let outbound in array_or_empty(previous.outbounds)) old[sprintf("%J", outbound)] = true;
+    for (let outbound in array_or_empty(current.outbounds)) if (!old[sprintf("%J", outbound)]) added++;
+    evidence.record(source_section, evidence.identity(section, entry), {attemptedAt,succeeded,
+        reason:result == 4 ? "source_changed" : "download_or_import_failed",added,
+        accepted:succeeded ? length(array_or_empty(current.outbounds)) : null,
+        skipped:succeeded && current.skipped != null ? int(current.skipped) : null});
+    return result;
 }
 
 function subscription_update_timestamp_path(section_name_value) {

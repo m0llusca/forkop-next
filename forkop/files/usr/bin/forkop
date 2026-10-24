@@ -130,6 +130,8 @@ function command_spec(command) {
     let commands = {
         next: [ "service/next.uc", "dispatch", 2 ],
         route_explain: [ "service/route_explain.uc", "explain", 1 ],
+        extended_preview: [ "service/extended_preview.uc", "preview", 1 ],
+        source_evidence: [ "subscription/evidence.uc", "read-section", 1 ],
         start: [ "service/lifecycle.uc", "start", 0 ],
         stop: [ "service/lifecycle.uc", "stop", 0 ],
         reload: [ "service/lifecycle.uc", "reload", 1 ],

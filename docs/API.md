@@ -272,3 +272,55 @@ read wave. Gaming scope requires explicit `all` or `selected`; only `all` omits
 Known native guard codes are preserved by the API and rendered as actionable
 local wording beside device/game actions. Task 1 mutation/refresh events and
 Task 2 evidence semantics remain unchanged.
+
+## Extended filter draft preview and source evidence (UX task 5)
+
+`forkop extended_preview <JSON>` is a bounded, read-only, authenticated write-ACL
+CLI operation implemented by `service/extended_preview.uc`. It never imports the
+executable generator, fetches subscriptions, resolves countries, tests connections,
+changes UCI, generates config or starts/stops services. Maximum request: 128 KiB;
+maximum 64 groups, 128 levels, 2,000 captured candidates, 128 filter values and
+256 bytes per regex. Invalid fields, enums, regexes and foreign native ownership
+fail with `invalid_request`; missing or unverifiable source evidence returns
+`preview_unavailable`. The existing broad write ACL remains required.
+
+Request: `{schema:1, section, requestId, expectedCapture?, draft}`. `draft` contains
+`section` (only dashboard/legacy URLTest filter options), `urltest`,
+`priority_group`, `priority_level` complete child arrays. Rows preserve `.name`,
+`.type`, `section` or `group` ownership. New rows use preview-only IDs. Public
+allowlists exclude testing/health URLs, subscription credentials and all source
+values. Native extraction reads live unparsed widgets before pending/UCI values,
+including explicit empty lists. Changed source/cascade drafts disable preview;
+no modal parse/save or child materialization is allowed during extraction.
+
+Success envelope: `{success:true,data:{schema:1,requestId,scope:"draft",
+basis:"captured_source_pool",capture,applied:false,connectivity_tested:false,
+sourceFreshness:"verified",candidates,groups}}`. Candidates have opaque `id`
+and safe `name`. Groups have `id`, `kind`, `name`, `count`, `omitted`, `interrupt`,
+`levels`, `fallbackOrder` and optional selection `policy`. Each level has `id`,
+`name`, `direct`, opaque member IDs, `count`, `empty`, `overlap` (member and earlier
+assigned level), and `decisions` (member, included, stable reason codes).
+Fallback lists nonempty eligible levels in native order. It predicts membership,
+not latency winners, active selection or reachability. No responsive replacement
+means the existing Priority worker retains controller selection; the preview must
+not imply automatic block/direct. Request IDs discard obsolete replies; an
+`expectedCapture` mismatch returns `capture_changed`.
+
+Both preview and generation call pure `singbox/group_resolver.uc` initialized
+with the native connections accessor index. Generation alone creates candidate
+pools and records their consumed input context, finalizing evidence only after
+successful output creation. A section cache without completed provenance or with
+changed saved configuration/source/core context is unavailable. The cache token
+identifies the exact bytes captured once by the read request. Cached country.is
+metadata is required when such predicates are used; preview never substitutes a
+lookup or flag heuristic. The scope is a captured source pool, never applied
+runtime proof. Captured source inputs and internal digests are not response fields.
+
+Source outcome records are keyed by native subscription source ID plus exact
+source identity. `subscription/evidence.uc` preserves the last observed success
+across a subsequent failed attempt. Missing historical timestamps/counts are
+null/unknown; file mtime and current node count never stand in for history.
+Import results distinguish observed accepted/skipped counts from unknown duplicate
+and unsupported breakdowns. `forkop source_evidence <section>` returns only source
+IDs, safe observed outcomes and the owning rule ID. It never returns source URLs.
+A successful source update is import evidence, not successful connectivity.
