@@ -8,6 +8,9 @@ let zapret_validator_module = null;
 let zapret2_validator_module = null;
 let byedpi_validator_module = null;
 let constants_module = null;
+let reality_adapter_module = null;
+let reality_profile_loaded = false;
+let reality_runtime_profile = null;
 let core_url = require("core.url");
 let core_ip = require("core.ip");
 let rule_config = require("config.rule");
@@ -1278,6 +1281,22 @@ function valid_outbound_json(value) {
     return value != null && type(value.type) == "string" && trim(as_string(value.type)) != "";
 }
 
+function validate_outbound_record_fragment(outbound, section) {
+    let reality_options = object_or_empty(object_or_empty(object_or_empty(outbound).tls).reality);
+    if (index(keys(reality_options), "record_fragment_size") < 0)
+        return;
+    if (reality_adapter_module == null)
+        reality_adapter_module = require("singbox.reality");
+    if (!reality_profile_loaded) {
+        let version = getenv("FORKOP_SING_BOX_VERSION") || reality_adapter_module.runtime_version();
+        reality_runtime_profile = reality_adapter_module.verified_runtime(version);
+        reality_profile_loaded = true;
+    }
+    let error = reality_adapter_module.record_fragment_error(outbound, reality_runtime_profile);
+    if (error != "")
+        fail_validation("Invalid JSON outbound in rule '" + section + "': " + error + ". Aborted.");
+}
+
 function validate_outbound_json_rule(section) {
     let name = section_name(section);
     let outbound_json = option(section, "outbound_json", "");
@@ -1287,6 +1306,7 @@ function validate_outbound_json_rule(section) {
 
     if (!valid_outbound_json(outbound_json))
         fail_validation("JSON outbound rule '" + name + "' must contain a valid sing-box outbound JSON object with a type field. Aborted.");
+    validate_outbound_record_fragment(outbound_json_object(outbound_json), name);
 }
 
 function validate_outbound_json_values(section) {
@@ -1303,6 +1323,7 @@ function validate_outbound_json_values(section) {
             fail_validation("Connection rule '" + name + "' must contain valid sing-box outbound JSON objects with a type field. Aborted.");
 
         let outbound = outbound_json_object(value);
+        validate_outbound_record_fragment(outbound, name);
         let tag_name = trim(as_string(outbound.tag || ""));
         if (tag_name == "" && require_user_tag)
             fail_validation("Connection rule '" + name + "' has JSON outbound without a non-empty tag. Aborted.");

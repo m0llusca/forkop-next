@@ -15,6 +15,7 @@ const COMPONENT_LOCK_DIR = getenv("UPDATES_LOCK_DIR") || RUNTIME_STATE_DIR + "/c
 const TMP_STALE_TTL_MINUTES = getenv("UPDATES_TMP_STALE_TTL_MINUTES") || "30";
 const TMP_FILE_STALE_TTL_MINUTES = getenv("UPDATES_TMP_FILE_STALE_TTL_MINUTES") || "10";
 const SB_MANAGED_SERVICE_MARKER = getenv("SB_MANAGED_SERVICE_MARKER") || constants.SB_MANAGED_SERVICE_MARKER || "Forkop managed sing-box service for binary variants";
+const SB_SOURCE_STATE_FILE = getenv("SB_SOURCE_STATE_FILE") || "/etc/forkop/sing-box-source";
 
 let tmp_dir = "";
 let lock_held = false;
@@ -283,7 +284,8 @@ function updates_response(success, component, action, message, current_version, 
         latest_version: as_string(latest_version),
         changed: int(changed || 0),
         status: as_string(status),
-        release_url: as_string(release_url)
+        release_url: as_string(release_url),
+        source: component == "sing_box" ? trim(as_string(fs.readfile(SB_SOURCE_STATE_FILE) || "")) : ""
     });
 }
 
@@ -1081,14 +1083,21 @@ function sing_box_verified_runtime(version, binary) {
     return reality.verified_runtime(version, binary);
 }
 
+function sing_box_release_destination_valid(release) {
+    let source = as_string(release.source);
+    let owner = source == "forkop-next-record" ? "m0llusca/forkop-next" : "shtorm-7/sing-box-extended";
+    let tag = as_string(release.tag), name = as_string(release.asset_name);
+    return (source == "" || source == "forkop-next-record") &&
+        match(tag, /^[A-Za-z0-9._+-]+$/) != null &&
+        match(name, /^[A-Za-z0-9._+-]+$/) != null &&
+        as_string(release.asset_url) == "https://github.com/" + owner + "/releases/download/" + tag + "/" + name;
+}
+
 function download_verified_sing_box_extended(release, output_path) {
     let tag = as_string(release.tag);
     let name = as_string(release.asset_name);
     let digest = lc(as_string(release.sha256));
-    if (match(tag, /^[A-Za-z0-9._+-]+$/) == null ||
-        match(name, /^[A-Za-z0-9._+-]+$/) == null ||
-        match(digest, /^[0-9a-f]{64}$/) == null ||
-        as_string(release.asset_url) != "https://github.com/shtorm-7/sing-box-extended/releases/download/" + tag + "/" + name)
+    if (!sing_box_release_destination_valid(release) || match(digest, /^[0-9a-f]{64}$/) == null)
         return false;
 
     if (!download_with_retry(release.asset_url, output_path, name))
@@ -1449,6 +1458,8 @@ function install_sing_box_extended_package(action) {
     }
 
     let previous_profile = sing_box_verified_runtime(current_version, "/usr/bin/sing-box");
+    if (previous_profile?.reality_record_fragment === true)
+        action_fail("sing_box", action, "Official package would lose verified REALITY record fragmentation; selected core was preserved", current_version, latest_version);
     let package_file = tmp_dir + "/" + release.asset_name;
     if (!download_verified_sing_box_extended(release, package_file))
         action_fail("sing_box", action, "Failed to download or verify sing-box-extended package", current_version, latest_version);
@@ -1591,11 +1602,13 @@ function install_sing_box_extended(action, compressed) {
         }
     }
 
-    if (previous_profile != null && sing_box_verified_runtime(latest_version, tmp_binary) == null) {
+    let candidate_profile = previous_profile != null ? sing_box_verified_runtime(latest_version, tmp_binary) : null;
+    if (previous_profile != null && (candidate_profile == null ||
+        (previous_profile.reality_record_fragment === true && candidate_profile.reality_record_fragment !== true))) {
         remove_file(tmp_binary);
         remove_file(tmp_cronet);
         remove_file(archive_file);
-        action_fail("sing_box", action, "Downloaded sing-box-extended lacks verified REALITY capability; current sing-box was preserved", current_version, latest_version);
+        action_fail("sing_box", action, "Downloaded sing-box-extended lacks verified REALITY capability or required record fragmentation; current sing-box was preserved", current_version, latest_version);
     }
     remove_file(archive_file);
     stop_forkop_before_sing_box_change();
@@ -1722,6 +1735,10 @@ function install_package_sing_box(action, tiny) {
             action_fail("sing_box", action, "sing-box-tiny is not installed", current_version, latest_version);
         check_success("sing_box", current_version, latest_version, "");
     }
+
+    let previous_profile = sing_box_verified_runtime(binary_version, "/usr/bin/sing-box");
+    if (previous_profile?.reality_record_fragment === true)
+        action_fail("sing_box", action, "Package core would lose verified REALITY record fragmentation; selected core was preserved", current_version, latest_version);
 
     if (!run_logged("Updating package lists before " + package_name + " installation", pkg_list_update_command()))
         action_fail("sing_box", action, "Failed to update package lists", current_version, latest_version);
@@ -1877,7 +1894,183 @@ function install_forkop() {
     action_success("forkop", "install", "Forkop has been installed", new_version, latest_version, 1, "latest", release.release_url);
 }
 
+function resolve_sing_box_record_release() {
+    let arch = resolve_sing_box_extended_arch_suffix();
+    if (arch == "") return null;
+    let path = LIB_DIR + "/singbox/validated-cores.json", stat = fs.stat(path), manifest;
+    if (!stat || stat.size > 131072) return null;
+    try { manifest = json(fs.readfile(path)); } catch (e) { return null; }
+    if (manifest.schema != 1 || type(manifest.cores) != "array") return null;
+    let candidates = [];
+    for (let profile in manifest.cores) {
+        if (type(profile) != "object" || profile.source != "forkop-next-record" || profile.source_current !== true ||
+            profile.architecture != arch + "-compressed") continue;
+        let version = as_string(profile.version), tag = as_string(profile.release_tag);
+        let asset = as_string(profile.asset);
+        if (profile.reality_hybrid !== true || profile.reality_record_fragment !== true ||
+            match(version, /^[0-9][0-9A-Za-z.+_-]*$/) == null || tag != "core-" + version ||
+            asset != "sing-box-" + version + "-linux-" + arch + "-compressed.tar.gz" ||
+            match(as_string(profile.sha256), /^[0-9a-f]{64}$/) == null ||
+            match(as_string(profile.archive_sha256), /^[0-9a-f]{64}$/) == null ||
+            type(profile.validation_memory_kb) != "int" || profile.validation_memory_kb < 1 ||
+            profile.validation_memory_kb > 4194304) return null;
+        push(candidates, {
+            source: "forkop-next-record", version, tag, asset_name: asset,
+            sha256: profile.archive_sha256, executable_sha256: profile.sha256,
+            validation_memory_kb: profile.validation_memory_kb,
+            release_url: "https://github.com/m0llusca/forkop-next/releases/tag/" + tag,
+            asset_url: "https://github.com/m0llusca/forkop-next/releases/download/" + tag + "/" + asset
+        });
+    }
+    return length(candidates) == 1 ? candidates[0] : null;
+}
+
+function verify_sing_box_record_binary(release, binary) {
+    if (!sing_box_release_destination_valid(release) || release.source != "forkop-next-record" ||
+        match(as_string(release.executable_sha256), /^[0-9a-f]{64}$/) == null) return false;
+    let fields = split(trim(command_output_from_args([ "sha256sum", binary ])), /[ \t]+/);
+    if (!length(fields) || fields[0] != release.executable_sha256) return false;
+    let profile = sing_box_verified_runtime(release.version, binary);
+    return profile != null && profile.source == "forkop-next-record" && profile.reality_record_fragment === true;
+}
+
+function sing_box_binary_unowned() {
+    let args;
+    if (command_exists("apk")) args = [ "apk", "info", "--who-owns", "/usr/bin/sing-box" ];
+    else if (command_exists("opkg")) args = [ "opkg", "search", "/usr/bin/sing-box" ];
+    else return false;
+    let pipe = fs.popen(command_from_args(args) + " 2>/dev/null", "r");
+    if (!pipe) return false;
+    let output = pipe.read("all"), status = pipe.close();
+    return trim(output || "") == "" && (status == 0 || status == 1 || status == 256);
+}
+
+function snapshot_sing_box_record_state(paths) {
+    let state = [];
+    for (let path in paths) {
+        let stat = fs.lstat(path);
+        // Preserve regular files byte-for-byte. Refuse unusual filesystem state.
+        if (stat && stat.type != "file") return null;
+        let backup = tmp_dir + "/record-state-" + length(state);
+        if (stat && !command_success_from_args([ "cp", "-p", path, backup ])) return null;
+        push(state, { path, backup, existed: stat != null });
+    }
+    return state;
+}
+
+function restore_sing_box_record_state(state) {
+    let restored = true;
+    for (let entry in state) {
+        if (entry.existed) {
+            let staged = entry.path + ".forkop-restore." + owner_pid();
+            if (!command_success_from_args([ "cp", "-p", entry.backup, staged ]) || !fs.rename(staged, entry.path)) {
+                remove_file(staged);
+                restored = false;
+            }
+        } else if (fs.lstat(entry.path) != null && !fs.unlink(entry.path)) restored = false;
+    }
+    return restored;
+}
+
+function fail_sing_box_record_install(action, message, state, current_version, latest_version) {
+    if (forkop_stopped_for_sing_box_change && forkop_was_running && file_exists(SERVICE_INIT))
+        command_success_from_args([ SERVICE_INIT, "stop" ]);
+    let restored = restore_sing_box_record_state(state);
+    if (!restored) {
+        forkop_stopped_for_sing_box_change = false;
+        // Keep independent recovery material outside the updater's stale-temp glob.
+        let recovery = "/tmp/forkop-record-recovery." + owner_pid();
+        if (fs.lstat(recovery) == null && fs.rename(tmp_dir, recovery)) {
+            for (let entry in state) entry.backup = replace(entry.backup, tmp_dir + "/", recovery + "/");
+            fs.writefile(recovery + "/state.json", sprintf("%J", state));
+            tmp_dir = "";
+            message += "; recovery files: " + recovery;
+        } else {
+            message += "; retain recovery files: " + tmp_dir;
+            tmp_dir = "";
+        }
+    }
+    action_fail("sing_box", action, message + (restored ? "; previous runtime state was restored" : "; rollback failed; service remains stopped"), current_version, latest_version);
+}
+
+function sing_box_record_memory_sufficient(release, meminfo) {
+    let required = release.validation_memory_kb;
+    if (type(required) != "int" || required < 1 || required > 4194304) return false;
+    if (meminfo == null) meminfo = fs.readfile("/proc/meminfo");
+    let available = -1, count = 0;
+    for (let line in split(as_string(meminfo), "\n")) {
+        if (match(line, /^MemAvailable[ \t]*:/) == null) continue;
+        let found = match(line, /^MemAvailable:[ \t]+([0-9]{1,10})[ \t]+kB[ \t\r]*$/);
+        if (!found || ++count != 1) return false;
+        available = int(found[1], 10);
+        if (available > 2147483647) return false;
+    }
+    return count == 1 && available >= required;
+}
+
+function install_sing_box_record_compressed(action) {
+    init_tmp_dir() || action_fail("sing_box", action, "Failed to create temporary directory");
+    let current_version = sing_box_runtime_output("version", []);
+    let release = resolve_sing_box_record_release();
+    if (release == null)
+        action_fail("sing_box", action, "No pinned forkop-next-record core for this architecture; no upstream fallback", current_version);
+    if (action == "check_update")
+        check_success("sing_box", current_version, release.version, release.release_url);
+    let previous = file_exists("/usr/bin/sing-box") ? sing_box_verified_runtime(current_version, "/usr/bin/sing-box") : null;
+    if (file_exists("/usr/bin/sing-box") &&
+        (sing_box_runtime_output("read-variant-marker", []) != "extended-compressed" || previous == null ||
+            match(as_string(previous.architecture), /-compressed$/) == null))
+        action_fail("sing_box", action, "Install a verified official compressed core first; custom core requires a genuine compressed runtime", current_version, release.version);
+    if (!sing_box_binary_unowned())
+        action_fail("sing_box", action, "Current sing-box is package-owned or ownership is unknown; custom overlay refused", current_version, release.version);
+    let archive = tmp_dir + "/" + release.asset_name;
+    if (!download_verified_sing_box_extended(release, archive))
+        action_fail("sing_box", action, "Failed to download or verify pinned core archive", current_version, release.version);
+    let member = select_archive_member_path(archive, "sing-box");
+    let candidate = tmp_dir + "/sing-box.record." + owner_pid();
+    if (member == "" ||
+        !command_success(command_from_args([ "tar", "-xzf", archive, "-O", member ]) + " >" + shell_quote(candidate)) ||
+        !verify_sing_box_record_binary(release, candidate))
+        action_fail("sing_box", action, "Pinned core executable SHA256/capability verification failed before execution", current_version, release.version);
+    // Extraction and executable admission are complete; release tmpfs before UPX runs.
+    remove_file(archive);
+    if (!sing_box_record_memory_sufficient(release))
+        action_fail("sing_box", action, "Insufficient memory to validate compressed core: requires at least " +
+            release.validation_memory_kb + " kB MemAvailable after extraction; current service was preserved", current_version, release.version);
+    if (!command_success_from_args([ "chmod", "0755", candidate ]) ||
+        validate_sing_box_extended_binary(candidate, "/usr/lib") != release.version)
+        action_fail("sing_box", action, "Verified core version does not match pinned manifest", current_version, release.version);
+    let config = as_string(uci_core.get((constants.FORKOP_CONFIG_NAME || "forkop") + ".settings.config_path") || "/etc/sing-box/config.json");
+    let state = snapshot_sing_box_record_state([
+        "/usr/bin/sing-box", "/usr/lib/libcronet.so", config, "/etc/config/sing-box", "/etc/init.d/sing-box",
+        getenv("SB_VARIANT_STATE_FILE") || "/etc/forkop/sing-box-variant",
+        getenv("SB_VERSION_STATE_FILE") || "/etc/forkop/sing-box-version",
+        getenv("SB_SOURCE_STATE_FILE") || "/etc/forkop/sing-box-source"
+    ]);
+    if (state == null)
+        action_fail("sing_box", action, "Could not snapshot exact runtime state; current service was preserved", current_version, release.version);
+    stop_forkop_before_sing_box_change();
+    if (!install_managed_sing_box_service_script() ||
+        !install_staged_file(candidate, "/usr/bin/sing-box", "0755") ||
+        !verify_sing_box_record_binary(release, "/usr/bin/sing-box") ||
+        !sing_box_runtime_success("write-variant-marker", [ "extended-compressed" ]) ||
+        !sing_box_runtime_success("write-version-state", [ release.version ]))
+        fail_sing_box_record_install(action, "Could not commit pinned core", state, current_version, release.version);
+    restart_forkop_after_successful_change();
+    if (!wait_forkop_running_after_sing_box_change())
+        fail_sing_box_record_install(action, "Pinned core failed startup", state, current_version, release.version);
+    // Channel selection is committed only after exact identity and successful startup.
+    if (!sing_box_runtime_success("write-source-state", [ "forkop-next-record" ]))
+        fail_sing_box_record_install(action, "Could not commit source selection", state, current_version, release.version);
+    clear_version_caches();
+    action_success("sing_box", action, "Pinned record-fragment core installed", release.version, release.version, 1, "latest", release.release_url);
+}
+
 function dispatch_sing_box(action) {
+    if (action == "install_forkop_record_compressed") {
+        install_sing_box_record_compressed(action);
+        return;
+    }
     if (action == "install_extended") {
         install_sing_box_extended(action, false);
         return;
@@ -1895,6 +2088,13 @@ function dispatch_sing_box(action) {
         return;
     }
 
+    let source = sing_box_runtime_output("read-source-state", []);
+    if (source == "forkop-next-record") {
+        install_sing_box_record_compressed(action);
+        return;
+    }
+    if (source != "")
+        action_fail("sing_box", action, "Unknown sing-box source; automatic upstream fallback is disabled");
     let variant = sing_box_runtime_output("variant", []);
     if (variant == "extended-compressed")
         install_sing_box_extended(action, true);
@@ -1929,7 +2129,7 @@ function component_action(component, action) {
     else if (component == "forkop" && action == "install")
         install_forkop();
     else if (component == "sing_box" && (action == "check_update" || action == "install" ||
-        action == "install_extended" || action == "install_extended_compressed" ||
+        action == "install_extended" || action == "install_extended_compressed" || action == "install_forkop_record_compressed" ||
         action == "install_tiny" || action == "install_stable"))
         dispatch_sing_box(action);
     else if (component == "zapret" && (action == "check_update" || action == "install"))

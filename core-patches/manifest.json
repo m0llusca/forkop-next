@@ -15,5 +15,6 @@
   "archive_sha256": "9c05230852c3ea7ab9fe3e48ff1fa1c395691fe8789a70c874aa58a453529f2e",
   "source_asset": "sing-box-1.14.3-extended-2.7.3-forkop-record1-source.tar.gz",
   "source_archive_sha256": "ea0d6464b21f2e477a57b0e35383e2ef6a28776b9a62371f4e493a7c6d7cc853",
-  "source_current": true
+  "source_current": true,
+  "validation_memory_kb": 140000
 }

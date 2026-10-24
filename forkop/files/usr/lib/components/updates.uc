@@ -54,6 +54,7 @@ const NFT_FAKEIP_MARK = getenv("NFT_FAKEIP_MARK") || "0x04000000";
 const SB_SERVICE_MIXED_INBOUND_ADDRESS = getenv("SB_SERVICE_MIXED_INBOUND_ADDRESS") || "127.0.0.1";
 const SB_SERVICE_MIXED_INBOUND_PORT = getenv("SB_SERVICE_MIXED_INBOUND_PORT") || "4534";
 const SB_VARIANT_STATE_FILE = getenv("SB_VARIANT_STATE_FILE") || "/etc/forkop/sing-box-variant";
+const SB_SOURCE_STATE_FILE = getenv("SB_SOURCE_STATE_FILE") || "/etc/forkop/sing-box-source";
 const GITHUB_RAW_URL = getenv("GITHUB_RAW_URL") || "https://raw.githubusercontent.com/itdoginfo/allow-domains/main";
 const BUILTIN_SUBNET_URLS = {
     twitter: [ getenv("SUBNETS_TWITTER") || GITHUB_RAW_URL + "/Subnets/IPv4/twitter.lst", getenv("SUBNETS_TWITTER6") || GITHUB_RAW_URL + "/Subnets/IPv6/twitter.lst" ],
@@ -1374,6 +1375,13 @@ function component_update_check_cache_path(component) {
     component = normalize_component_name(component);
     if (!valid_component_name(component))
         return "";
+    if (component == "sing_box") {
+        let source = trim(as_string(fs.readfile(SB_SOURCE_STATE_FILE) || ""));
+        if (source == "forkop-next-record")
+            return COMPONENT_UPDATE_CHECK_CACHE_DIR + "/sing_box-forkop-next-record.json";
+        if (source != "")
+            return "";
+    }
     return COMPONENT_UPDATE_CHECK_CACHE_DIR + "/" + component + ".json";
 }
 
@@ -1384,6 +1392,9 @@ function component_update_check_cache_enabled() {
 function component_update_check_result_cacheable(value) {
     value = object_or_empty(value);
     let status = as_string(value.status || "");
+    if (normalize_component_name(value.component) == "sing_box" &&
+        as_string(value.source) != trim(as_string(fs.readfile(SB_SOURCE_STATE_FILE) || "")))
+        return false;
     return value.success === true && as_string(value.action) == "check_update" &&
         valid_component_name(value.component) &&
         (status == "latest" || status == "outdated" || status == "dev");
@@ -1408,6 +1419,7 @@ function cache_component_update_check_result(value, notify_update) {
         current_version: as_string(value.current_version),
         latest_version: as_string(value.latest_version),
         release_url: as_string(value.release_url),
+        source: as_string(value.source),
         changed: 0,
         status: as_string(value.status),
         updated_at: now_seconds()
@@ -1457,6 +1469,7 @@ function update_component_check_cache_from_action(value) {
             current_version: as_string(value.current_version),
             latest_version,
             release_url: as_string(value.release_url),
+            source: as_string(value.source),
             status: "latest"
         }, false);
     }
