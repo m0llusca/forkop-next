@@ -10,6 +10,7 @@ export const workspaceStyles = `
   --primary-color-high:var(--next-accent);--primary-color-medium:var(--next-accent);--primary-color-low:var(--next-muted);
   --success-color-medium:var(--next-accent);--success-color-low:var(--next-accent);--error-color-medium:var(--fkp-danger);--warn-color-medium:#815210;
   --link-color:var(--next-accent);--link-color-dark:var(--next-accent);
+  --at-bg:var(--next-bg);--at-panel:var(--next-bg);--at-text:var(--next-fg);--at-muted:var(--next-muted);--at-line:var(--next-line);--at-cyan:var(--next-accent);--at-good:var(--next-accent);
   color:var(--next-fg);background:var(--next-bg);font-family:inherit;font-size:14px;line-height:1.5;
   accent-color:var(--next-accent);color-scheme:light;scrollbar-color:var(--next-line) var(--next-bg);
 }
@@ -17,6 +18,15 @@ export const workspaceStyles = `
   --next-bg:#16232b;--next-fg:#eef4f6;--next-muted:#b8c8d0;--next-line:#455963;--next-accent:#8bd6c8;--next-field:#21333e;
   --fkp-hover:#29423f;--fkp-danger:#ffb4b8;--fkp-selected:#29473f;--warn-color-medium:#f2ca87;color-scheme:dark;
 }
+/* Native themes may load later and use important colors. The existing map ID
+   and marked modal contain these overrides; surrounding LuCI is untouched. */
+#cbi-forkop.fkp-workspace[data-theme],#modal_overlay .fkp-workspace-modal[data-theme],
+#cbi-forkop.fkp-workspace[data-theme] :is(.cbi-map,.cbi-section,fieldset),#modal_overlay .fkp-workspace-modal[data-theme] :is(.cbi-map,.cbi-section,fieldset) {background:var(--next-bg)!important;color:var(--next-fg)!important}
+#cbi-forkop.fkp-workspace[data-theme] :is(input:not([type=checkbox]):not([type=radio]):not([type=button]):not([type=submit]),select,textarea,.cbi-select,.cbi-dropdown),
+#modal_overlay .fkp-workspace-modal[data-theme] :is(input:not([type=checkbox]):not([type=radio]):not([type=button]):not([type=submit]),select,textarea,.cbi-select,.cbi-dropdown),
+#cbi-forkop.fkp-workspace[data-theme] :is(.cbi-button,.btn),#modal_overlay .fkp-workspace-modal[data-theme] :is(.cbi-button,.btn) {background:var(--next-field)!important;color:var(--next-fg)!important;border-color:var(--next-line)}
+#cbi-forkop.fkp-workspace[data-theme] :is(.cbi-button-positive,.cbi-button-apply,.cbi-button-save,.fkp-next-primary-action),#modal_overlay .fkp-workspace-modal[data-theme] :is(.cbi-button-positive,.cbi-button-apply,.cbi-button-save) {background:var(--next-accent)!important;color:var(--next-bg)!important}
+#cbi-forkop.fkp-workspace[data-theme] :is(.cbi-button-negative,.cbi-button-remove),#modal_overlay .fkp-workspace-modal[data-theme] :is(.cbi-button-negative,.cbi-button-remove) {color:var(--fkp-danger)!important}
 .fkp-workspace *,.fkp-workspace-modal * {box-sizing:border-box}
 .fkp-workspace ::selection,.fkp-workspace-modal ::selection {background:var(--next-accent);color:var(--next-bg)}
 .fkp-workspace {display:grid;grid-template-columns:184px minmax(0,1fr);padding:0!important;margin:24px 0;min-width:0;border:1px solid var(--next-line);border-radius:12px;overflow:clip}
@@ -48,11 +58,17 @@ export const workspaceStyles = `
 .fkp-workspace .cbi-section > h3:first-child {margin-top:0}
 .fkp-workspace p,.fkp-workspace-modal p {max-width:75ch;overflow-wrap:anywhere}
 .fkp-workspace .cbi-section-descr,.fkp-workspace .cbi-value-description,.fkp-workspace-modal .cbi-section-descr,.fkp-workspace-modal .cbi-value-description {color:var(--next-muted);font-size:13px;line-height:1.6;max-width:75ch;margin:8px 0 16px;overflow-wrap:anywhere}
-.fkp-workspace .cbi-value,.fkp-workspace-modal .cbi-value {display:flex;align-items:flex-start;gap:24px;padding:16px 0;border-bottom:1px solid var(--next-line);background:transparent;min-width:0}
+.fkp-workspace .cbi-value,.fkp-workspace-modal .cbi-value {display:flex;flex-wrap:nowrap;align-items:flex-start;gap:24px;padding:12px 0;margin:0;border-bottom:1px solid var(--next-line);background:transparent;min-width:0}
 .fkp-workspace .cbi-value:last-child,.fkp-workspace-modal .cbi-value:last-child {border-bottom:0}
-.fkp-workspace .cbi-value-title,.fkp-workspace-modal .cbi-value-title {flex:0 0 28%;float:none;width:auto;text-align:left;padding:10px 0 0;margin:0;color:var(--next-fg);font-size:14px;line-height:1.5;font-weight:550;overflow-wrap:anywhere}
+.fkp-workspace .cbi-value > label.cbi-value-title,.fkp-workspace-modal .cbi-value > label.cbi-value-title {flex:0 0 200px;float:none;width:auto;text-align:left;padding:10px 0 0;margin:0;color:var(--next-fg);font-size:14px;line-height:1.5;font-weight:550;overflow-wrap:anywhere}
 .fkp-workspace .cbi-value-field,.fkp-workspace-modal .cbi-value-field {flex:1;min-width:0;width:auto;margin:0;padding:0;color:var(--next-fg)}
 .fkp-workspace .cbi-value-field:only-child,.fkp-workspace-modal .cbi-value-field:only-child {margin-left:0}
+.fkp-workspace .cbi-value > .cbi-value-field > :is(input:not([type=checkbox]):not([type=radio]),select,textarea,.cbi-select,.cbi-dropdown,.cbi-dynlist,.control-group),
+.fkp-workspace-modal .cbi-value > .cbi-value-field > :is(input:not([type=checkbox]):not([type=radio]),select,textarea,.cbi-select,.cbi-dropdown,.cbi-dynlist,.control-group) {width:100%;max-width:42rem;min-width:0;height:auto}
+.fkp-workspace .cbi-value .cbi-value-description,.fkp-workspace-modal .cbi-value .cbi-value-description {margin:6px 0 0;line-height:1.5;white-space:normal;max-width:75ch}
+.fkp-workspace .cbi-value .cbi-dynlist > .add-item,.fkp-workspace-modal .cbi-value .cbi-dynlist > .add-item {display:flex;gap:4px;min-width:0}
+.fkp-workspace .cbi-value .cbi-dynlist > .add-item > :is(input,.cbi-dropdown),.fkp-workspace-modal .cbi-value .cbi-dynlist > .add-item > :is(input,.cbi-dropdown) {flex:1;min-width:0;width:100%}
+.fkp-workspace .cbi-value .cbi-dynlist > .add-item > button,.fkp-workspace-modal .cbi-value .cbi-dynlist > .add-item > button {flex:0 0 42px;min-width:42px}
 .fkp-workspace .cbi-value:has(.fkp-next),.fkp-workspace .cbi-value:has(.fkp_dashboard-page),.fkp-workspace .cbi-value:has(.fkp_monitoring-page),.fkp-workspace .cbi-value:has(.fkp_diagnostic-page),.fkp-workspace .cbi-value:has(.fkp_updates-page) {display:block;padding:0;border:0}
 .fkp-workspace input:not([type=checkbox]):not([type=radio]):not([type=button]):not([type=submit]),.fkp-workspace select,.fkp-workspace textarea,
 .fkp-workspace-modal input:not([type=checkbox]):not([type=radio]):not([type=button]):not([type=submit]),.fkp-workspace-modal select,.fkp-workspace-modal textarea {
@@ -86,6 +102,9 @@ export const workspaceStyles = `
 .fkp-workspace .cbi-section-table-row,.fkp-workspace .cbi-section-table-row:nth-child(2n),.fkp-workspace-modal .cbi-section-table-row {background:transparent}
 .fkp-workspace .cbi-section-actions > div,.fkp-workspace-modal .cbi-section-actions > div {display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:8px}
 .fkp-workspace .cbi-section-actions,.fkp-workspace-modal .cbi-section-actions {min-width:104px}
+.fkp-workspace :is(#cbi-forkop-section,#cbi-forkop-server) .td.cbi-section-actions {width:240px!important;min-width:240px!important;white-space:normal}
+.fkp-workspace .td.cbi-section-actions > div:not(.cbi-dropdown) {display:flex;justify-content:flex-end;align-items:center;flex-wrap:wrap;gap:8px}
+.fkp-workspace .td.cbi-section-actions > div:not(.cbi-dropdown) > :is(button,.cbi-button) {flex:0 0 auto;width:auto;margin:0!important}
 .fkp-workspace .cbi-section-create,.fkp-workspace .cbi-page-actions,.fkp-workspace-modal .button-row {display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-top:24px;padding-top:16px}
 .fkp-workspace pre,.fkp-workspace code,.fkp-workspace-modal pre,.fkp-workspace-modal code {background:var(--next-field);color:var(--next-fg);font-size:13px;line-height:1.6;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
 .fkp-workspace pre,.fkp-workspace-modal pre {max-width:100%;overflow:auto;border-radius:6px;padding:16px;border:1px solid var(--next-line)}
@@ -142,12 +161,12 @@ export const workspaceStyles = `
 .fkp-workspace-modal .cbi-tabmenu a {display:block;padding:10px 12px;min-height:42px;border-radius:6px;text-decoration:none;color:var(--next-muted)}
 .fkp-workspace-modal .cbi-tabmenu .cbi-tab:not(.cbi-tab-disabled) a {background:var(--fkp-selected);color:var(--next-accent);font-weight:650}
 .fkp-workspace-modal .fkp_dashboard-page__urltest-details__row {grid-template-columns:minmax(0,1fr) minmax(54px,max-content) 42px;padding:12px 0;border-radius:0}
-@media(max-width:1050px) {
+@media (max-width:1050px) {
   .fkp-workspace {grid-template-columns:160px minmax(0,1fr)}
   .fkp-workspace-main {padding:24px}
   .fkp-workspace-top {gap:16px;flex-wrap:wrap}
 }
-@media(max-width:720px) {
+@media (max-width:720px) {
   .fkp-workspace {display:block;border-radius:8px;margin:16px 0}
   .fkp-workspace-sidebar {position:static;padding:16px 16px 12px;border-bottom:1px solid var(--next-line)}
   .fkp-workspace-brand {font-size:20px;padding:0;margin-bottom:12px}
@@ -156,12 +175,23 @@ export const workspaceStyles = `
   .fkp-workspace-main {padding:24px 16px;border:0}
   .fkp-workspace-top {margin-bottom:24px;padding-bottom:16px}
   .fkp-workspace .fkp-workspace-title {font-size:26px}
-  .fkp-workspace .cbi-value,.fkp-workspace-modal .cbi-value {display:block;padding:16px 0}
-  .fkp-workspace .cbi-value-title,.fkp-workspace-modal .cbi-value-title {display:block;width:100%;padding:0;margin:0 0 8px}
+  .fkp-workspace .cbi-value,.fkp-workspace-modal .cbi-value {display:block;padding:12px 0}
+  .fkp-workspace .cbi-value > label.cbi-value-title,.fkp-workspace-modal .cbi-value > label.cbi-value-title {display:block;width:100%;text-align:left;padding:0;margin:0 0 8px}
   .fkp-workspace input,.fkp-workspace select,.fkp-workspace textarea,.fkp-workspace-modal input,.fkp-workspace-modal select,.fkp-workspace-modal textarea {font-size:16px!important}
   .fkp-workspace .fkp-workspace-theme select {font-size:16px}
   .fkp-workspace .cbi-map-tabbed > .cbi-section {overflow-x:auto}
   .fkp-workspace .table,.fkp-workspace table {min-width:520px}
+  .fkp-workspace :is(#cbi-forkop-section,#cbi-forkop-server) .table.cbi-section-table {display:block;width:100%;min-width:0;table-layout:auto}
+  .fkp-workspace :is(#cbi-forkop-section,#cbi-forkop-server) .cbi-section-table > thead {display:none}
+  .fkp-workspace :is(#cbi-forkop-section,#cbi-forkop-server) .cbi-section-table > :is(tbody,tfoot) {display:block;width:100%}
+  .fkp-workspace :is(#cbi-forkop-section,#cbi-forkop-server) .cbi-section-table-row {display:block;width:100%;padding:16px 0;margin:0;border-bottom:1px solid var(--next-line)}
+  .fkp-workspace :is(#cbi-forkop-section,#cbi-forkop-server) .cbi-section-table-row::before {display:none;content:none}
+  .fkp-workspace :is(#cbi-forkop-section,#cbi-forkop-server) .cbi-section-table-row > .td {display:grid;grid-template-columns:minmax(88px,32%) minmax(0,1fr);align-items:center;gap:12px;width:100%;min-width:0;margin:0;padding:8px 0;border:0;text-align:left;white-space:normal}
+  .fkp-workspace :is(#cbi-forkop-section,#cbi-forkop-server) .cbi-section-table-row > .td[data-title]::before {content:attr(data-title);color:var(--next-muted);font-weight:550;white-space:normal;overflow-wrap:anywhere}
+  .fkp-workspace :is(#cbi-forkop-section,#cbi-forkop-server) .cbi-section-table-row > .cbi-section-table-titles {display:block;font-size:15px;color:var(--next-fg);font-weight:650;padding:0 0 12px}
+  .fkp-workspace :is(#cbi-forkop-section,#cbi-forkop-server) .cbi-section-table-row > .cbi-section-actions {display:block;width:100%!important;min-width:0!important;padding-top:12px}
+  .fkp-workspace .td.cbi-section-actions > div:not(.cbi-dropdown) {justify-content:flex-start}
+  .fkp-workspace :is(#cbi-forkop-section,#cbi-forkop-server) .placeholder > .td {display:block;padding:16px 0}
   .fkp-workspace .fkp-next-content {grid-template-columns:minmax(0,1fr)}
   .fkp-workspace .fkp_dashboard-page {--dashboard-grid-columns:1}
   .fkp-workspace .fkp_diagnostic-page {grid-template-columns:minmax(0,1fr)}
@@ -169,5 +199,5 @@ export const workspaceStyles = `
   .fkp-workspace .fkp_updates-page__components-column {flex-basis:auto}
   .fkp-workspace-modal {padding:20px 16px!important;max-width:calc(100vw - 16px);max-height:calc(100dvh - 16px);border-radius:8px}
 }
-@media(prefers-reduced-motion:reduce) {.fkp-workspace *,.fkp-workspace-modal * {transition:none!important;animation:none!important}}
+@media (prefers-reduced-motion:reduce) {.fkp-workspace *,.fkp-workspace-modal * {transition:none!important;animation:none!important}}
 `;
