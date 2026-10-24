@@ -156,8 +156,9 @@ export function renderNextPanel(
       : 'Выбранный сервер неизвестен',
     'fkp-next-summary',
   );
+  const serverHeading = el('h3', 'Основное подключение');
   server.append(
-    el('h3', 'Основное подключение'),
+    serverHeading,
     selected,
     action('Изменить сервер', async () => {
       notice.textContent = 'Открываем выбор сервера…';
@@ -406,8 +407,11 @@ export function renderNextPanel(
             if (signature !== selectedSignature) invalidateProbe();
             selectedSignature = signature;
             const primary =
-              groups.find((g) => g.sectionName === 'main') ||
-              groups.find((g) => !g.sectionName);
+              groups.find((g) => g.sectionName === 'main') || groups[0];
+            serverHeading.textContent =
+              primary && primary.sectionName !== 'main'
+                ? 'Первое подключение'
+                : 'Основное подключение';
             selected.replaceChildren();
             routesOutput.replaceChildren();
             for (const group of groups) {

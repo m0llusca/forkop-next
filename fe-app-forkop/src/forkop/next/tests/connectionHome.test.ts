@@ -123,6 +123,9 @@ it('distinguishes native main from additional groups including unselected routes
   expect(panel.querySelector('.fkp-next-primary')?.textContent).toContain(
     'Primary server',
   );
+  expect(panel.querySelector('.fkp-next-primary h3')?.textContent).toBe(
+    'Основное подключение',
+  );
   expect(panel.querySelector('.fkp-next-primary')?.textContent).not.toContain(
     'Game route',
   );
@@ -132,7 +135,90 @@ it('distinguishes native main from additional groups including unselected routes
   expect(panel.querySelector('.fkp-next-routes')?.textContent).toContain(
     'work: сервер не выбран',
   );
+  expect(panel.querySelector('.fkp-next-routes')?.textContent).not.toContain(
+    'Primary server',
+  );
   expect(panel.querySelector('header')).toBeNull();
+});
+
+it('recognizes the first native Add connection with its real section_1 identity', async () => {
+  const panel = renderNextPanel(
+    undefined,
+    async () => ({
+      success: true,
+      data: [group('section_1', 'Selected VPN')],
+    }),
+    { workspace: true },
+  );
+  document.body.append(panel);
+  await tick();
+  expect(panel.querySelector('.fkp-next-primary')?.textContent).toContain(
+    'section_1: Selected VPN',
+  );
+  expect(panel.querySelector('.fkp-next-primary h3')?.textContent).toBe(
+    'Первое подключение',
+  );
+  expect(button(panel, 'Добавить подключение').hidden).toBe(true);
+  expect(panel.querySelector('.fkp-next-routes')?.textContent).not.toContain(
+    'Selected VPN',
+  );
+});
+
+it('uses native group priority when custom connections have no main designation', async () => {
+  const panel = renderNextPanel(
+    undefined,
+    async () => ({
+      success: true,
+      data: [
+        group('section_2', 'First route'),
+        group('section_1', 'Second route'),
+      ],
+    }),
+    { workspace: true },
+  );
+  document.body.append(panel);
+  await tick();
+  expect(panel.querySelector('.fkp-next-primary')?.textContent).toContain(
+    'section_2: First route',
+  );
+  expect(panel.querySelector('.fkp-next-primary')?.textContent).not.toContain(
+    'Second route',
+  );
+  expect(panel.querySelector('.fkp-next-routes')?.textContent).toContain(
+    'section_1: Second route',
+  );
+  expect(panel.querySelector('.fkp-next-routes')?.textContent).not.toContain(
+    'First route',
+  );
+});
+
+it('keeps an unselected first connection truthful instead of promoting a selected secondary route', async () => {
+  const panel = renderNextPanel(
+    undefined,
+    async () => ({
+      success: true,
+      data: [
+        group('section_1', 'Unselected', false),
+        group('section_2', 'Secondary VPN'),
+      ],
+    }),
+    { workspace: true },
+  );
+  document.body.append(panel);
+  await tick();
+  expect(panel.querySelector('.fkp-next-primary')?.textContent).toContain(
+    'section_1: сервер не выбран',
+  );
+  expect(panel.querySelector('.fkp-next-primary')?.textContent).not.toContain(
+    'Secondary VPN',
+  );
+  expect(button(panel, 'Добавить подключение').hidden).toBe(false);
+  expect(panel.querySelector('.fkp-next-routes')?.textContent).toContain(
+    'section_2: Secondary VPN',
+  );
+  expect(panel.querySelector('.fkp-next-routes')?.textContent).not.toContain(
+    'section_1',
+  );
 });
 
 it('omits duplicate workspace theme and advanced controls but retains standalone disclosure', () => {

@@ -15944,8 +15944,9 @@ function renderNextPanel(request = nextRequest, loadConnections, adapters = {}) 
     loadConnections ? "\u0417\u0430\u0433\u0440\u0443\u0436\u0430\u0435\u043C \u0432\u044B\u0431\u0440\u0430\u043D\u043D\u044B\u0439 \u0441\u0435\u0440\u0432\u0435\u0440\u2026" : "\u0412\u044B\u0431\u0440\u0430\u043D\u043D\u044B\u0439 \u0441\u0435\u0440\u0432\u0435\u0440 \u043D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u0435\u043D",
     "fkp-next-summary"
   );
+  const serverHeading = el2("h3", "\u041E\u0441\u043D\u043E\u0432\u043D\u043E\u0435 \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435");
   server.append(
-    el2("h3", "\u041E\u0441\u043D\u043E\u0432\u043D\u043E\u0435 \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435"),
+    serverHeading,
     selected,
     action("\u0418\u0437\u043C\u0435\u043D\u0438\u0442\u044C \u0441\u0435\u0440\u0432\u0435\u0440", async () => {
       notice.textContent = "\u041E\u0442\u043A\u0440\u044B\u0432\u0430\u0435\u043C \u0432\u044B\u0431\u043E\u0440 \u0441\u0435\u0440\u0432\u0435\u0440\u0430\u2026";
@@ -16148,7 +16149,8 @@ function renderNextPanel(request = nextRequest, loadConnections, adapters = {}) 
             );
             if (signature !== selectedSignature) invalidateProbe();
             selectedSignature = signature;
-            const primary = groups2.find((g) => g.sectionName === "main") || groups2.find((g) => !g.sectionName);
+            const primary = groups2.find((g) => g.sectionName === "main") || groups2[0];
+            serverHeading.textContent = primary && primary.sectionName !== "main" ? "\u041F\u0435\u0440\u0432\u043E\u0435 \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435" : "\u041E\u0441\u043D\u043E\u0432\u043D\u043E\u0435 \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435";
             selected.replaceChildren();
             routesOutput.replaceChildren();
             for (const group of groups2) {

@@ -81,3 +81,34 @@ warnings, all-src Prettier, whitespace, production build and executed native
 bundle checks passed. Build output: **555.97 KB**, build phase **59 ms**.
 Generated bundle remains uncommitted for final consolidation. No browser/router
 operations or additional scope.
+
+## Final whole-branch fixwave: recognize named native connections
+
+The final branch review identified that the native Add flow creates `section_1`,
+`section_2`, etc., while Home accepted only literal `main` or missing metadata as
+its primary connection. Added native-shaped regressions for a sole `section_1`,
+multiple custom groups in configured order, and an unselected first group with a
+selected secondary. Strengthened the existing explicit-main case to ensure its
+primary is not duplicated in additional routes.
+
+RED command: `node node_modules/vitest/vitest.mjs run src/forkop/next/tests/connectionHome.test.ts`.
+Observed **3 failed, 21 passed**: all three new named-group cases incorrectly
+showed the no-server fallback in the primary area.
+
+The lookup now prefers an explicit `main` group and otherwise uses the first
+returned connection group, preserving the native loader's configured order.
+Selection is still checked independently: an unselected primary is labeled
+truthfully and does not promote a selected secondary. No persisted IDs or routing
+semantics change, and the primary is not repeated under additional routes.
+The fallback heading says “Первое подключение”; “Основное подключение” is retained
+for explicit `main`, so configured order is not presented as a global route
+assertion. Added that distinction to the regression, observed **1 failed, 23
+passed**, then implemented the heading change and restored GREEN.
+
+GREEN command: `node node_modules/vitest/vitest.mjs run src/forkop/next/tests/connectionHome.test.ts src/forkop/next/tests/overview.test.ts src/forkop/next/tests/overviewReview.test.ts src/forkop/next/tests/nativeOverview.test.ts src/forkop/next/tests/traffic.test.ts`.
+Observed **54 passed across 5 files**. TypeScript, all-src ESLint with zero
+warnings, all-src Prettier, whitespace checks, production build and executed
+native bundle smoke check passed. Generated bundle **571.46 KB**, local build
+phase **57 ms**, included in this final fix commit as requested. The controller
+owns the final whole-branch full-suite/CI run. No browser/router operations or
+broader polish were performed.
