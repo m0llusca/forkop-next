@@ -117,6 +117,8 @@ function remember_upgrade_state(action) {
 
     if (command_success_from_args([ INIT_PATH, "status" ]))
         fs.writefile(PACKAGE_UPGRADE_STATE, "1\n");
+    else
+        unlink_if_exists(PACKAGE_UPGRADE_STATE);
 }
 
 function prerm_cleanup(action) {
@@ -127,7 +129,10 @@ function prerm_cleanup(action) {
     if (!PACKAGE_TEST_MODE) {
         command_success_from_args([ INIT_PATH, "stop" ]);
         restore_dnsmasq_if_needed();
-        remove_managed_sing_box();
+        // The core is installed independently of the Forkop package payload.
+        // Keep it available for postinst to resume the service after an upgrade.
+        if (as_string(action) != "upgrade")
+            remove_managed_sing_box();
     }
     return remove_rt_tables_entry();
 }
