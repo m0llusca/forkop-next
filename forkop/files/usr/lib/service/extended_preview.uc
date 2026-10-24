@@ -68,7 +68,7 @@ function label_context(saved,state) {
         // Recheck this captured read before using it as label evidence. A concurrent
         // replacement cannot remove a credential from the context we certify.
         let raw=fs.readfile(record.path);
-        if(basis.digest(raw)!=record.digest)throw 'source_changed';
+        if(basis.digest(raw)!=record.digest)die('source_changed');
         if(raw==null)continue;
         if(match(record.path,/\.json$/)) {
             try {for(let item in arr(obj(json(raw)).outbounds))outbound(item);}
