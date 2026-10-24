@@ -8,18 +8,25 @@ type Request = (
 export function renderDeviceProfileTools(
   request: Request,
   initialRequest: Request = request,
+  area: 'all' | 'devices' | 'profiles' = 'all',
 ): HTMLElement {
   const root = document.createElement('section');
   root.className = 'fkp-next-panel';
+  let group = root;
   const heading = (text: string) => {
+    group = document.createElement('section');
+    group.className = 'fkp-next-panel';
+    const wanted =
+      text === 'Импорт и экспорт профилей' ? 'profiles' : 'devices';
+    if (area === 'all' || area === wanted) root.append(group);
     const h = document.createElement('h3');
     h.textContent = text;
-    root.append(h);
+    group.append(h);
   };
   const note = (text: string) => {
     const p = document.createElement('p');
     p.textContent = text;
-    root.append(p);
+    group.append(p);
   };
   const field = <K extends 'input' | 'select' | 'textarea'>(
     tag: K,
@@ -30,14 +37,14 @@ export function renderDeviceProfileTools(
     const input = document.createElement(tag);
     input.setAttribute('aria-label', name);
     label.append(input);
-    root.append(label);
+    group.append(label);
     return input;
   };
   const result = (name: string) => {
     const output = document.createElement('output');
     output.setAttribute('aria-label', name);
     output.setAttribute('aria-live', 'polite');
-    root.append(output);
+    group.append(output);
     return output;
   };
   const options = (
@@ -85,28 +92,46 @@ export function renderDeviceProfileTools(
         output.setAttribute('aria-busy', 'false');
       }
     });
-    root.append(b);
+    group.append(b);
     return b;
   };
   heading('Устройства');
+  note(
+    'Здесь показаны сохранённые назначения маршрутов. Остальные условия включения и исключения задаются в правилах.',
+  );
+  const rules = document.createElement('button');
+  rules.type = 'button';
+  rules.textContent = 'Открыть условия в правилах';
+  rules.onclick = () =>
+    root
+      .closest('.cbi-map')
+      ?.querySelector<HTMLAnchorElement>('.cbi-tabmenu [data-tab="section"] a')
+      ?.click();
+  group.append(rules);
   const devices = document.createElement('ul');
-  root.append(devices);
+  group.append(devices);
   const device = field('input', 'Адрес устройства');
   const route = field('select', 'Маршрут устройства');
   options(route, []);
   const deviceResult = result('Результат устройства');
+  let assignments: Array<{ address: string; section: string }> = [];
+  const routeLabels = new Map<string, string>([['direct', 'Напрямую']]);
+  const showDevices = () => {
+    devices.replaceChildren();
+    for (const item of assignments) {
+      const li = document.createElement('li');
+      li.textContent = `${item.address} → ${routeLabels.get(item.section) || item.section}`;
+      devices.append(li);
+    }
+    if (!assignments.length)
+      devices.textContent = 'Маршруты устройств пока не заданы.';
+  };
   const loadDevices = async () => {
     const data = (await call('devices', {})) as {
       items: Array<{ address: string; section: string }>;
     };
-    devices.replaceChildren();
-    for (const item of data.items) {
-      const li = document.createElement('li');
-      li.textContent = `${item.address} → ${item.section}`;
-      devices.append(li);
-    }
-    if (!data.items.length)
-      devices.textContent = 'Маршруты устройств пока не заданы.';
+    assignments = data.items;
+    showDevices();
   };
   button('Сохранить маршрут устройства', deviceResult, async () => {
     if (!device.value.trim() || !route.value)
@@ -241,40 +266,76 @@ export function renderDeviceProfileTools(
     profileResult.textContent = 'Список профилей обновлён.';
   });
 
-  deviceResult.textContent = 'Загрузка устройств…';
-  void loadDevices()
-    .then(() => {
-      deviceResult.textContent = '';
-    })
-    .catch((error) => {
-      deviceResult.textContent =
-        error instanceof Error ? error.message : 'device_read_failed';
-    });
-  profileResult.textContent = 'Загрузка профилей…';
-  void loadProfiles(initialRequest)
-    .then(() => {
-      profileResult.textContent = '';
-    })
-    .catch((error) => {
-      profileResult.textContent =
-        error instanceof Error ? error.message : 'profile_read_failed';
-    });
-  void call('status', {}, initialRequest)
-    .then((raw) => {
+  if (area !== 'profiles') {
+    deviceResult.textContent = 'Загрузка устройств…';
+    void loadDevices()
+      .then(() => {
+        deviceResult.textContent = '';
+      })
+      .catch((error) => {
+        deviceResult.textContent =
+          error instanceof Error ? error.message : 'device_read_failed';
+      });
+  }
+  if (area !== 'devices') {
+    profileResult.textContent = 'Загрузка профилей…';
+    void loadProfiles(initialRequest)
+      .then(() => {
+        profileResult.textContent = '';
+      })
+      .catch((error) => {
+        profileResult.textContent =
+          error instanceof Error ? error.message : 'profile_read_failed';
+      });
+  }
+  let routesGeneration = 0;
+  const loadRoutes = (read = request) => {
+    const generation = ++routesGeneration;
+    return call('status', {}, read).then((raw) => {
+      if (generation !== routesGeneration) return;
       const data = raw as { sections: Array<{ name: string; label?: string }> };
       const items = data.sections.map((section) => ({
         value: section.name,
         label: section.label || section.name,
       }));
+      for (const item of items) routeLabels.set(item.value, item.label);
+      showDevices();
       options(route, [
         { value: 'direct', label: 'Напрямую' },
         ...items.filter((item) => item.value !== 'direct'),
       ]);
       options(gamingRoute, items);
-    })
-    .catch(() => {
-      gamingResult.textContent =
-        'Не удалось загрузить маршруты. Обновите панель для повторной попытки.';
     });
+  };
+  const routeError = () =>
+    (gamingResult.textContent =
+      'Не удалось загрузить маршруты. Нажмите «Обновить маршруты».');
+  if (area !== 'profiles') {
+    void loadRoutes(initialRequest).catch(routeError);
+    // Keep entered addresses when route loading fails; retry only the read.
+    group = route.closest('section')!;
+    button('Обновить маршруты', gamingResult, async () => {
+      await loadRoutes();
+      gamingResult.textContent = 'Маршруты обновлены.';
+    });
+  }
+  root.addEventListener('forkop:refresh-tools', (event) => {
+    const read =
+      (event as CustomEvent<{ read?: Request }>).detail?.read || request;
+    if (area !== 'profiles') {
+      void loadDevices().catch(
+        () =>
+          (deviceResult.textContent =
+            'Не удалось загрузить устройства. Нажмите «Обновить устройства».'),
+      );
+      void loadRoutes(read).catch(routeError);
+    }
+    if (area !== 'devices')
+      void loadProfiles(read).catch(
+        () =>
+          (profileResult.textContent =
+            'Не удалось загрузить профили. Нажмите «Обновить профили».'),
+      );
+  });
   return root;
 }

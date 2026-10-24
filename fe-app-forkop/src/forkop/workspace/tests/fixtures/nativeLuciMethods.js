@@ -6,7 +6,65 @@
 // ui.js SHA256 00c1708f28fcd8991dbb259c1377911f65599fd71a9b1393469e8efc47375c52
 // Method selection, wrapper and formatting added; method bodies retain native semantics.
 export function nativeLuciMethods(E, dom, L, ui, UI, _) {
+  // Native form.js helper used by Value.parse().
+  function isEqual(x, y) {
+    if (typeof y == 'object' && y instanceof RegExp)
+      return x == null ? false : y.test(x);
+    if (x != null && y != null && typeof x != typeof y) return false;
+    if ((x == null && y != null) || (x != null && y == null)) return false;
+    if (Array.isArray(x)) {
+      if (x.length != y.length) return false;
+      for (let i = 0; i < x.length; i++) if (!isEqual(x[i], y[i])) return false;
+    } else if (typeof x == 'object') {
+      for (const k in x) {
+        if (x.hasOwnProperty(k) && !y.hasOwnProperty(k)) return false;
+        if (!isEqual(x[k], y[k])) return false;
+      }
+      for (const k in y)
+        if (y.hasOwnProperty(k) && !x.hasOwnProperty(k)) return false;
+    } else if (x != y) return false;
+    return true;
+  }
   return {
+    value: {
+      parse(section_id) {
+        const active = this.isActive(section_id);
+        if (active && !this.isValid(section_id)) {
+          const title = this.stripTags(this.title).trim();
+          const error = this.getValidationError(section_id);
+          return Promise.reject(
+            new TypeError(
+              `${_('Option "%s" contains an invalid input value.').format(title || this.option)} ${error}`,
+            ),
+          );
+        }
+        if (active) {
+          const cval = this.cfgvalue(section_id);
+          const fval = this.formvalue(section_id);
+          if (fval == null || fval == '') {
+            if (this.rmempty || this.optional)
+              return Promise.resolve(this.remove(section_id));
+            else {
+              const title = this.stripTags(this.title).trim();
+              return Promise.reject(
+                new TypeError(
+                  _('Option "%s" must not be empty.').format(
+                    title || this.option,
+                  ),
+                ),
+              );
+            }
+          } else if (this.forcewrite || !isEqual(cval, fval)) {
+            if (
+              this.map.findElement('data-field', this.cbid(section_id)) != null
+            )
+              return Promise.resolve(this.write(section_id, fval));
+          }
+        } else if (!this.retain)
+          return Promise.resolve(this.remove(section_id));
+        return Promise.resolve();
+      },
+    },
     map: {
       save(cb, silent) {
         this.checkDepends();
@@ -208,6 +266,27 @@ export function nativeLuciMethods(E, dom, L, ui, UI, _) {
       },
     },
     grid: {
+      handleAdd(ev, name) {
+        const config_name = this.uciconfig ?? this.map.config;
+        const section_id = this.map.data.add(
+          config_name,
+          this.sectiontype,
+          name,
+        );
+        const mapNode = this.getPreviousModalMap();
+        const prevMap = mapNode ? dom.findClassInstance(mapNode) : this.map;
+        prevMap.addedSection = section_id;
+        return this.renderMoreOptionsModal(section_id);
+      },
+      handleModalCancel(modalMap, ev, isSaving) {
+        const config_name = this.uciconfig ?? this.map.config;
+        const mapNode = this.getPreviousModalMap();
+        const prevMap = mapNode ? dom.findClassInstance(mapNode) : this.map;
+        if (prevMap.addedSection != null && !isSaving)
+          this.map.data?.remove(config_name, prevMap.addedSection);
+        delete prevMap.addedSection;
+        return this.super('handleModalCancel', arguments);
+      },
       handleModalSave(modalMap, ev) {
         const mapNode = this.getActiveModalMap();
         let activeMap = dom.findClassInstance(mapNode);

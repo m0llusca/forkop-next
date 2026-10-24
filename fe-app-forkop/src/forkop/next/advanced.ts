@@ -3,6 +3,7 @@ import { renderCompatibilityPanel } from './compatibility';
 import { nextRequest, type NextResponse } from './api';
 type Obj = Record<string, unknown>;
 export type Request = (action: string, payload?: Obj) => Promise<NextResponse>;
+export type ToolArea = 'all' | 'rules' | 'diagnostics' | 'settings' | 'devices';
 const object = (v: unknown): Obj =>
   v && typeof v === 'object' ? (v as Obj) : {};
 const items = (v: unknown): Obj[] =>
@@ -55,25 +56,31 @@ export function renderAdvancedPanel(
   request: Request = nextRequest,
   loadConnections?: ConnectionLoader,
   lazy = false,
+  area: ToolArea = 'all',
 ): HTMLElement {
-  // Only startup reads share results. Actions and explicit refreshes always read anew.
-  const initialReads = new Map<string, Promise<NextResponse>>();
-  const initialRequest: Request = (action, payload = {}) => {
-    if (action !== 'status' && action !== 'profile_list')
-      return request(action, payload);
-    let pending = initialReads.get(action);
-    if (!pending) {
-      pending = request(action, payload);
-      initialReads.set(action, pending);
-    }
-    return pending;
-  };
+  const includes = (part: ToolArea) => area === 'all' || area === part;
+  // Share one read per refresh wave, never across explicit refreshes or actions.
+  function sharedReads(): Request {
+    const reads = new Map<string, Promise<NextResponse>>();
+    return (action, payload = {}) => {
+      if (action !== 'status' && action !== 'profile_list')
+        return request(action, payload);
+      let pending = reads.get(action);
+      if (!pending) {
+        pending = request(action, payload);
+        reads.set(action, pending);
+      }
+      return pending;
+    };
+  }
+  const initialRequest = sharedReads();
   const root = el(
     'section',
     '',
     lazy ? 'fkp-next-advanced-content' : 'fkp-next',
   );
-  root.dataset.mode = lazy ? 'detailed' : 'simple';
+  root.dataset.mode = lazy || area !== 'all' ? 'detailed' : 'simple';
+  if (area !== 'all') root.dataset.area = area;
   const header = el('header');
   const title = el('div');
   title.append(
@@ -97,7 +104,7 @@ export function renderAdvancedPanel(
   ]);
   theme.node.onchange = () => (root.dataset.theme = theme.node.value);
   header.append(title, mode, theme.wrap);
-  if (lazy) header.replaceChildren();
+  if (lazy || area !== 'all') header.replaceChildren();
   root.append(header);
   const message = el('p', '', 'fkp-next-notice');
   message.setAttribute('role', 'status');
@@ -151,9 +158,10 @@ export function renderAdvancedPanel(
     sectionSelects.push(s.node);
     return s;
   }
-  function panel(title: string, help: string) {
+  function panel(title: string, help: string, part: ToolArea) {
     const p = el('section', '', 'fkp-next-panel');
     p.append(el('h3', title), el('p', help, 'fkp-next-help'));
+    if (!includes(part)) return p;
     if (lazy) {
       const details = el('details', '', 'fkp-next-disclosure');
       details.append(el('summary', title));
@@ -222,6 +230,7 @@ export function renderAdvancedPanel(
   const route = panel(
     'Почему сайт идёт так?',
     'Проверка правил объясняет маршрут. Доступность проверяется отдельным действием.',
+    'diagnostics',
   );
   const domain = input('domain', 'Домен');
   domain.node.placeholder = 'example.org';
@@ -296,6 +305,7 @@ export function renderAdvancedPanel(
   const profiles = panel(
     'Профили и восстановление',
     'Сначала сравните профиль. При применении сохраняется предыдущая рабочая конфигурация.',
+    'settings',
   );
   const profile = select('Сохранённый профиль', []);
   const profileName = input('profile_name', 'Название нового профиля');
@@ -371,6 +381,7 @@ export function renderAdvancedPanel(
   const temporary = panel(
     'Временные правила',
     'Правило автоматически перестанет действовать по истечении выбранного срока.',
+    'rules',
   );
   const td = input('temporary_domain', 'Домен');
   const ts = connection();
@@ -397,6 +408,7 @@ export function renderAdvancedPanel(
   const recommendations = panel(
     'Smart Detect',
     'Только рекомендации на основе наблюдений. Применение — по вашему решению.',
+    'rules',
   );
   const rs = connection();
   const recList = el('div');
@@ -581,16 +593,9 @@ export function renderAdvancedPanel(
     const tools = renderDeviceProfileTools(
       request,
       lazy ? request : initialRequest,
+      area === 'devices' ? 'devices' : area === 'settings' ? 'profiles' : 'all',
     );
     tools.className = 'fkp-next-tools';
-    let group: HTMLElement | undefined;
-    for (const child of [...tools.children]) {
-      if (child.tagName === 'H3') {
-        group = el('section', '', 'fkp-next-panel');
-        tools.append(group);
-      }
-      group?.append(child);
-    }
     return tools;
   }
   function mountCompatibility() {
@@ -606,6 +611,9 @@ export function renderAdvancedPanel(
       ['Совместимость с 3x-ui и Xray', mountCompatibility],
       ['Устройства, игровые пресеты и обмен профилями', mountTools],
     ] as const) {
+      if (mount === mountCompatibility && !includes('settings')) continue;
+      if (mount === mountTools && !includes('devices') && !includes('settings'))
+        continue;
       const details = el('details', '', 'fkp-next-disclosure');
       details.append(el('summary', title));
       let mounted = false;
@@ -617,18 +625,34 @@ export function renderAdvancedPanel(
       });
       content.append(details);
     }
-  } else content.append(mountCompatibility(), mountTools());
+  } else {
+    if (includes('settings')) content.append(mountCompatibility());
+    if (includes('devices') || includes('settings'))
+      content.append(mountTools());
+  }
   const refreshVisible = async () => {
     message.textContent = '';
+    const read = sharedReads();
+    root
+      .querySelectorAll('.fkp-next-tools,.fkp-next-compatibility')
+      .forEach((child) =>
+        child.dispatchEvent(
+          new CustomEvent('forkop:refresh-tools', { detail: { read } }),
+        ),
+      );
     try {
       await Promise.all([
-        refreshStatus(),
-        ...(!lazy || profiles.isConnected ? [refreshProfiles()] : []),
-        ...(!lazy || temporary.isConnected ? [refreshTemporary()] : []),
-        ...(!lazy || recommendations.isConnected
+        refreshStatus(read),
+        ...(includes('settings') && (!lazy || profiles.isConnected)
+          ? [refreshProfiles(read)]
+          : []),
+        ...(includes('rules') && (!lazy || temporary.isConnected)
+          ? [refreshTemporary()]
+          : []),
+        ...(includes('rules') && (!lazy || recommendations.isConnected)
           ? [refreshRecommendations()]
           : []),
-        refreshConnections(),
+        ...(area === 'all' ? [refreshConnections()] : []),
       ]);
     } catch {
       message.textContent =
@@ -639,20 +663,20 @@ export function renderAdvancedPanel(
   root.addEventListener('forkop:refresh', () => {
     void refreshVisible();
   });
-  root.addEventListener(
-    'forkop:profiles-changed',
-    () => void refreshProfiles(),
-  );
+  root.addEventListener('forkop:profiles-changed', () => {
+    if (includes('settings')) void refreshProfiles();
+  });
   void Promise.all([
     refreshStatus(initialRequest),
     ...(!lazy
       ? [
-          refreshProfiles(initialRequest),
-          refreshTemporary(),
-          refreshRecommendations(),
+          ...(includes('settings') ? [refreshProfiles(initialRequest)] : []),
+          ...(includes('rules')
+            ? [refreshTemporary(), refreshRecommendations()]
+            : []),
         ]
       : []),
-    refreshConnections(),
+    ...(area === 'all' ? [refreshConnections()] : []),
   ]).catch(() => {
     message.textContent =
       'Не удалось загрузить данные. Нажмите «Обновить данные».';

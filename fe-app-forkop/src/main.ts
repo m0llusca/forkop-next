@@ -42,6 +42,11 @@ export {
 export { renderNextPanel } from './forkop/next/render';
 export { mountForkopWorkspace } from './forkop/workspace/render';
 export {
+  renderWorkspaceTools,
+  disposeWorkspaceTools,
+} from './forkop/workspace/tools';
+export { configureNamedSectionCreation } from './forkop/workspace/namedCreation';
+export {
   refreshRuntimeUiState,
   subscribeRuntimeUiState,
 } from './forkop/services/runtimeUiState.service';

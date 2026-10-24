@@ -11,7 +11,24 @@ function createDashboardContent(section) {
   o.rawhtml = true;
   o.cfgvalue = () => {
     main.DashboardTab.initController();
-    return main.DashboardTab.render();
+    const root = document.createElement("div");
+    const sources = document.createElement("div");
+    sources.className = "fkp-workspace-sources";
+    const help = document.createElement("p");
+    help.textContent =
+      "Подписки, URLTest и группы задаются в правилах маршрутизации.";
+    const edit = document.createElement("button");
+    edit.type = "button";
+    edit.className = "cbi-button";
+    edit.textContent = "Добавить или изменить источники";
+    edit.onclick = () =>
+      root
+        .closest(".cbi-map")
+        ?.querySelector('.cbi-tabmenu [data-tab="section"] a')
+        ?.click();
+    sources.append(help, edit);
+    root.append(sources, main.DashboardTab.render());
+    return root;
   };
 }
 

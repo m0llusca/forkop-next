@@ -5,6 +5,11 @@ import { mountForkopWorkspace } from '../../workspace/render';
 import { nativeLuciHarness } from '../../workspace/tests/fixtures/nativeLuciHarness';
 import { store } from '../../services/store.service';
 import { workspaceStyles } from '../../workspace/styles';
+import {
+  renderWorkspaceTools,
+  disposeWorkspaceTools,
+} from '../../workspace/tools';
+import { configureNamedSectionCreation } from '../../workspace/namedCreation';
 const tick = async () => {
   for (let i = 0; i < 40; i++) await Promise.resolve();
 };
@@ -38,7 +43,16 @@ function setup(shell: Record<string, unknown>) {
       public title: string,
     ) {}
     option(_type: unknown, name: string) {
-      const o = { option: name, cfgvalue: () => '', parse: async () => {} };
+      const o = {
+        option: name,
+        cfgvalue: () => '',
+        parse: native.value.parse,
+        isActive: () => true,
+        isValid: () => true,
+        formvalue: () => null,
+        rmempty: true,
+        remove: () => {},
+      };
       this.children.push(o);
       return o;
     }
@@ -51,6 +65,11 @@ function setup(shell: Record<string, unknown>) {
     }
     async parse() {
       if (this.sectiontype === 'settings') settingsParse();
+      await Promise.all(
+        this.children.map((o) =>
+          (o.parse as (section: string) => unknown).call(o, this.sectiontype),
+        ),
+      );
     }
     async render() {
       const pane = document.createElement('section');
@@ -143,6 +162,9 @@ function setup(shell: Record<string, unknown>) {
     coreService: vi.fn(),
     applyUiStateToStore: vi.fn(),
     mountForkopWorkspace,
+    renderWorkspaceTools,
+    disposeWorkspaceTools,
+    configureNamedSectionCreation,
   };
   const feature = {
     createDiagnosticContent: vi.fn(),
@@ -224,6 +246,57 @@ it('mounts workspace navigation on the real native render result and retains its
   expect(rendered.querySelector('[data-tab="dashboard"]')?.className).toBe(
     'cbi-tab',
   );
+});
+it('appends focused pure UI sections after original native IDs and exposes all six primary areas', async () => {
+  const state = setup({ getUiCapabilities: () => new Promise(() => {}) });
+  const rendered: HTMLElement = await state.controller.render();
+  document.body.append(rendered);
+  const ids = state.maps[0].children.map((s) => s.sectiontype);
+  expect(ids).toEqual([
+    'next',
+    'section',
+    'server',
+    'settings',
+    'diagnostic',
+    'dashboard',
+    'monitoring',
+    'updates',
+    'devices',
+    'rule_tools',
+    'route_tools',
+    'advanced',
+  ]);
+  expect(rendered.querySelectorAll('[data-workspace-section]')).toHaveLength(6);
+  for (const s of state.maps[0].children.slice(8)) {
+    expect(s.children).toHaveLength(1);
+    expect(s.children[0].option).toBe('_workspace_tools');
+  }
+});
+it('disposes unvisited tool hosts before every native reset/save reconstruction', async () => {
+  const state = setup({ getUiCapabilities: () => new Promise(() => {}) });
+  const dispose = vi.spyOn(state.main, 'disposeWorkspaceTools');
+  const rendered: HTMLElement = await state.controller.render();
+  document.body.append(rendered);
+  const oldTools = rendered.querySelector('[data-tools-area="rules"]');
+  expect(oldTools).not.toBeNull();
+  await state.maps[0].reset();
+  expect(dispose).toHaveBeenCalledWith(rendered);
+  expect(rendered.querySelector('[data-tools-area="rules"]')).not.toBe(
+    oldTools,
+  );
+  await state.maps[0].save(null, true);
+  expect(dispose).toHaveBeenCalledTimes(2);
+  expect(rendered.querySelectorAll('.fkp-workspace-sidebar')).toHaveLength(1);
+});
+it('does not rerender pure tool values during native Value.parse or create uninserted observers on save', async () => {
+  const state = setup({ getUiCapabilities: () => new Promise(() => {}) });
+  const render = vi.spyOn(state.main, 'renderWorkspaceTools');
+  const rendered: HTMLElement = await state.controller.render();
+  document.body.append(rendered);
+  expect(render).toHaveBeenCalledTimes(4);
+  render.mockClear();
+  await state.maps[0].parse();
+  expect(render).not.toHaveBeenCalled();
 });
 it('renders the essential native page without waiting for pending capabilities and preserves settings on unrelated saves', async () => {
   const state = setup({ getUiCapabilities: () => new Promise(() => {}) });
