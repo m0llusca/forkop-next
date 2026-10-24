@@ -26,7 +26,7 @@ live device, remote server or an untested future core release.
 | Extended REALITY with old/current Xray | `test_extended_reality.py`, `test_extended_reality_generation.py` | Official SHA-pinned Extended 2.7.3, actual generated connections against Xray 26.6.27 / 26.9.30 / 26.10.21, strict certificate/authentication negatives, explicit legacy mode; native Linux amd64 |
 | Preserve Extended through updates | `test_extended_update_safety.py` | Verified official release content and exact local runtime rollback; package database registration remains separate |
 | Selected-section compatibility preflight | `test_compatibility.py`, `test_probe.py` | Generated mixed listener and outbound association; mismatches blocked, secrets omitted, HTTPS evidence required |
-| Usable desktop/mobile UI | Frontend component tests, native LuCI bundle integration and four browser captures | Simple/detailed modes, themes, reconnect states, actionable read failures, narrow screens |
+| Six-section desktop/mobile workspace | Frontend component tests, native LuCI Map/Grid/Value fixture, executed native bundle and labeled synthetic browser preview | Draft retention, native save/reset and validation locations, lazy focused tools, theme scoping, outgoing selection, readable metrics, stale-reply rejection; real-device acceptance remains separate |
 | Verified release inputs | `test_release_download.py` | SDK hashes checked before use; translation tool built from pinned official LuCI commit |
 
 ## Deployment acceptance still requires a real target

@@ -40,6 +40,10 @@
 
 ### Task 2: Connection-first overview and readable telemetry
 
+Native preview clarification: outgoing selector cards currently expose only a clickable div. Include `tabs/dashboard/partials/renderSections.ts` and a focused test: add a clearly labeled native button for selecting an available server, distinguish selected/unavailable/pending, and keep copy/info actions independent. Place connections before optional telemetry widgets in `tabs/dashboard/render.ts` so Servers leads with its purpose; preserve controller switching guards.
+
+Probe evidence must name its captured target and become stale after route/service changes. Invalidate prior evidence on selected outbound signature change and reject obsolete pending replies after navigation/configuration invalidation; no automatic probes.
+
 **Files:** Modify `next/render.ts`, `next/traffic.ts`, `next/styles.ts`, tests under `next/tests/`; create metric helper if useful; native `next.js` supplies workspace mode. Record `docs/tdd/full-interface-overview.md`.
 
 **Interfaces:** Keep `renderNextPanel(request?, loadConnections?, adapters?)` and `createTrafficMonitor` public compatibility. Add `workspace?: boolean` in adapters to suppress duplicate standalone theme/advanced controls in native workspace. Render compact real metrics into a semantic definition list; selected primary connection is distinct from additional groups. Actions still use native tab links.
@@ -49,6 +53,10 @@
 - [ ] Run overview/traffic/native tests, full suite; commit own paths and TDD evidence.
 
 ### Task 3: Focused tools and all advanced destinations
+
+Append new pure UI sections after existing ones to preserve stored native tab indices. Preserve Task1 renderContents rebind hook and Task2 optional ConnectionLoader metadata. Dispose lazy hosts removed before first visit, avoid irrelevant area startup reads, and show device route labels where available without online claims. These are lifecycle clarifications to the interfaces below.
+
+Provide a Servers action to open the native rules/source editor. Replace unlabeled novice-facing UCI-name entry for new rules/inbounds with a clear Add action using unique named IDs and a friendly editable label in the native modal; preserve existing IDs, named persistence, read-only/collision guards and native cancellation. Add behavioral tests, no duplicate configuration editor.
 
 **Files:** Modify `next/advanced.ts`, `next/tools.ts`, native `forkop.js`, `src/main.ts`, optional focused workspace tool module; relevant tests. Record `docs/tdd/full-interface-tools.md`.
 
