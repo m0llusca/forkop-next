@@ -1,3 +1,4 @@
+import { navigateToRule } from '../../../next/workflows';
 import {
   renderLoaderCircleIcon24,
   renderCopyIcon24,
@@ -8,6 +9,34 @@ import { isCopyableProxyLink, svgEl } from '../../../../helpers';
 import { prettyBytes } from '../../../../helpers/prettyBytes';
 import { Forkop } from '../../../types';
 import { renderFlagEmojis } from './renderFlagEmojis';
+import { renderSourceEvidence } from './sourceEvidence';
+
+// Only the mounted dashboard session owns this display preference. It is never
+// written to UCI or used to choose URLTest members or latency targets.
+const localSearch = new Map<string, string>();
+
+export function replaceSectionsPreservingSearch(
+  container: HTMLElement,
+  nodes: HTMLElement[],
+) {
+  const active =
+    document.activeElement instanceof HTMLInputElement &&
+    container.contains(document.activeElement)
+      ? document.activeElement
+      : null;
+  const section = active?.dataset.nodeSearch;
+  const start = active?.selectionStart,
+    end = active?.selectionEnd;
+  container.replaceChildren(...nodes);
+  if (section) {
+    const replacement = [
+      ...container.querySelectorAll<HTMLInputElement>('[data-node-search]'),
+    ].find((input) => input.dataset.nodeSearch === section);
+    replacement?.focus({ preventScroll: true });
+    if (replacement && start != null && end != null)
+      replacement.setSelectionRange(start, end);
+  }
+}
 
 interface IRenderSectionsProps {
   loading: boolean;
@@ -343,7 +372,7 @@ function renderDefaultState({
     ]
       .filter(Boolean)
       .join(' ');
-    return E(
+    const node = E(
       'div',
       {
         class: className,
@@ -466,6 +495,8 @@ function renderDefaultState({
         ...(section.withTagSelect ? [selectionButton] : []),
       ],
     );
+    node.setAttribute('data-outbound-row', outbound.code);
+    return node;
   }
 
   const metadataNodes = (section.subscriptionMetadata || [])
@@ -477,67 +508,165 @@ function renderDefaultState({
     onUpdateSubscription,
   );
 
-  return E('div', { class: 'fkp_dashboard-page__outbound-section' }, [
-    // Title with test latency
-    E('div', { class: 'fkp_dashboard-page__outbound-section__title-section' }, [
-      E(
-        'div',
-        {
-          class: 'fkp_dashboard-page__outbound-section__title-section__title',
-        },
-        section.displayName,
-      ),
-      E(
-        'div',
-        {
-          class: 'fkp_dashboard-page__outbound-section__title-section__actions',
-        },
-        [
-          ...(subscriptionUpdateAction ? [subscriptionUpdateAction] : []),
-          E(
-            'button',
-            {
-              type: 'button',
-              class: 'btn dashboard-sections-grid-item-test-latency',
-              'data-latency-section': section.sectionName,
-              disabled: latencyFetching ? true : undefined,
-              click: (event: MouseEvent) => {
-                event.preventDefault();
-                event.stopPropagation();
-                if (latencyFetching) {
-                  return;
-                }
+  const rows = [...section.outbounds]
+    .sort((a, b) => Number(b.selected) - Number(a.selected))
+    .map((outbound) => ({ outbound, node: renderOutbound(outbound) }));
+  const count = E('span', { role: 'status' });
+  count.setAttribute('aria-live', 'polite');
+  const pinned = E('span', {}, 'Выбранный узел закреплён');
+  const search = E('input', {
+    type: 'search',
+    'aria-label': `Поиск узлов: ${section.displayName}`,
+    placeholder: 'Имя, страна или тип',
+  }) as HTMLInputElement;
+  search.setAttribute('data-node-search', section.sectionName);
+  search.value = localSearch.get(section.sectionName) || '';
+  const updateSearch = () => {
+    const query = search.value.trim().toLocaleLowerCase();
+    let found = 0;
+    let selectedOutsideSearch = false;
+    for (const { outbound, node } of rows) {
+      const matches = [outbound.displayName, outbound.country, outbound.type]
+        .filter(Boolean)
+        .join(' ')
+        .toLocaleLowerCase()
+        .includes(query);
+      if (matches) found++;
+      node.hidden = !matches && !outbound.selected;
+      if (!matches && outbound.selected) selectedOutsideSearch = true;
+    }
+    count.textContent = `Найдено ${found} из ${rows.length}`;
+    pinned.hidden = !selectedOutsideSearch;
+    localSearch.set(section.sectionName, search.value);
+  };
+  search.addEventListener('input', updateSearch);
+  updateSearch();
+  const searchControls = E('div', { class: 'fkp-node-search' }, [
+    search,
+    count,
+    pinned,
+    E(
+      'small',
+      {},
+      'Поиск меняет только список на экране. Состав URLTest сохраняется.',
+    ),
+  ]);
 
-                testLatency();
-              },
+  return E(
+    'div',
+    {
+      class: 'fkp_dashboard-page__outbound-section',
+      'data-connection-section': section.sectionName,
+    },
+    [
+      // Title with test latency
+      E(
+        'div',
+        { class: 'fkp_dashboard-page__outbound-section__title-section' },
+        [
+          E(
+            'div',
+            {
+              class:
+                'fkp_dashboard-page__outbound-section__title-section__title',
             },
-            latencyFetching
-              ? [
-                  renderLoaderCircleIcon24(),
-                  E(
-                    'span',
-                    {
-                      class: 'dashboard-sections-grid-item-test-latency__label',
-                    },
-                    getLatencyTestLabel(latencyProgress),
-                  ),
-                ]
-              : E(
-                  'span',
-                  {
-                    class: 'dashboard-sections-grid-item-test-latency__label',
+            section.displayName,
+          ),
+          E(
+            'div',
+            {
+              class:
+                'fkp_dashboard-page__outbound-section__title-section__actions',
+            },
+            [
+              E(
+                'button',
+                {
+                  type: 'button',
+                  click: (event: MouseEvent) => {
+                    const root = event.currentTarget as HTMLElement;
+                    navigateToRule(root, {
+                      kind: 'site',
+                      section: section.sectionName,
+                    });
                   },
-                  _('Test latency'),
-                ),
+                },
+                'Добавить сайт',
+              ),
+              E(
+                'button',
+                {
+                  type: 'button',
+                  click: (event: MouseEvent) => {
+                    const root = event.currentTarget as HTMLElement;
+                    navigateToRule(root, {
+                      kind: 'edit',
+                      section: section.sectionName,
+                      option: 'subscription_url',
+                    });
+                  },
+                },
+                'Изменить источники',
+              ),
+              ...(subscriptionUpdateAction ? [subscriptionUpdateAction] : []),
+              E(
+                'button',
+                {
+                  type: 'button',
+                  class: 'btn dashboard-sections-grid-item-test-latency',
+                  'data-latency-section': section.sectionName,
+                  disabled: latencyFetching ? true : undefined,
+                  click: (event: MouseEvent) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    if (latencyFetching) {
+                      return;
+                    }
+
+                    testLatency();
+                  },
+                },
+                latencyFetching
+                  ? [
+                      renderLoaderCircleIcon24(),
+                      E(
+                        'span',
+                        {
+                          class:
+                            'dashboard-sections-grid-item-test-latency__label',
+                        },
+                        getLatencyTestLabel(latencyProgress),
+                      ),
+                    ]
+                  : E(
+                      'span',
+                      {
+                        class:
+                          'dashboard-sections-grid-item-test-latency__label',
+                      },
+                      _('Test latency'),
+                    ),
+              ),
+            ],
           ),
         ],
       ),
-    ]),
-    E('div', { class: 'fkp_dashboard-page__outbound-grid' }, [
-      ...metadataNodes,
-      ...section.outbounds.map((outbound) => renderOutbound(outbound)),
-    ]),
-  ]);
+      searchControls,
+      ...(section.subscriptionSourceCount
+        ? [
+            renderSourceEvidence(
+              section.sectionName,
+              section.subscriptionSourceCount,
+              section.sourceEvidence,
+            ),
+          ]
+        : []),
+      E('div', { class: 'fkp_dashboard-page__outbound-grid' }, [
+        ...metadataNodes,
+        ...rows.map(({ node }) => node),
+      ]),
+    ],
+  );
 }
 
 export function renderSections(props: IRenderSectionsProps) {

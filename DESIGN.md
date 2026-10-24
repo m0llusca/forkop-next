@@ -96,11 +96,12 @@ components:
 
 ## Overview
 
-Forkop is a Russian-first operating interface inside LuCI. Its approved direction combines a connection-first home with a persistent six-section workspace: Главная, Серверы, Правила, Устройства, Диагностика, Настройки. Local secondary navigation keeps related tools within their task.
+Forkop is a Russian-first operating interface inside LuCI. Its approved direction combines a connection-first home with a six-section workspace: Главная, Серверы, Правила, Устройства, Диагностика, Настройки. Desktop keeps persistent navigation; narrow screens use one labeled section menu. Local secondary navigation keeps related tools within their task.
 
 The visual system uses slate surfaces, a restrained mint/teal accent, local inherited typography, open divisions and explicit native controls. The same hierarchy serves desktop and phone; status text distinguishes evidence from assumptions. No ornamental imagery is part of this system.
 
 **Key Characteristics:**
+
 - Connection state, selected outgoing server and deliberate checking remain distinct.
 - Open sections and thin separators organize dense operational content.
 - Native LuCI forms retain their behavior and draft state.
@@ -128,9 +129,9 @@ Measurements use tabular numerals. Totals and rates use binary Russian units, wi
 
 ## Layout
 
-Desktop uses an internal sidebar (184px) and a flexible `minmax(0,1fr)` main region. Main padding is (24px 32px 32px). At (1050px) and below the sidebar narrows to (160px), main padding becomes (24px), and the status/theme strip can wrap. At (720px) and below the workspace becomes one column; labeled primary navigation scrolls horizontally, main padding becomes (24px 16px), and local navigation remains horizontally scrollable.
+Desktop uses an internal sidebar (184px) and a flexible `minmax(0,1fr)` main region. Main padding is (24px 32px 32px). At (1050px) and below the sidebar narrows to (160px), main padding becomes (24px), and the status strip can wrap. At (720px) and below the workspace becomes one column; one native select exposes all six destinations and names the current section, main padding becomes (16px), and local navigation wraps within the available width.
 
-The shared service/last-check strip and theme control precede the section title. Home puts connectivity checking beside the selected outgoing server, followed by the semantic traffic strip and additional routes. Server choices precede secondary telemetry; incoming listeners remain a separate destination. Section gaps use the established spacing scale, with open divisions rather than nested cards. Traffic metrics use five columns, three at (900px), then two at (720px).
+The shared service/last-check strip precedes the section title. The workspace theme control lives in Settings preferences, outside native editable panes. Home shows status and the selected outgoing connection before its change action and collapsed connectivity-check form, followed by service controls, the semantic traffic strip and additional routes. Embedded home omits repeated status headings; its refresh action follows the main content. Standalone Next retains its theme control. Server choices precede secondary telemetry; incoming listeners remain a separate destination. Section gaps use the established spacing scale, with open divisions rather than nested cards. Traffic metrics use five columns, three at (900px), then two at (720px).
 
 Native form labels occupy (200px) beside a flexible field, with a (24px) gap and controls capped at (42rem). On mobile labels stack above controls and input text is (16px). Rule/server tables become labeled stacked rows with wrapping actions; other wide native tables scroll within their section and retain a (520px) minimum width. Do not apply the stacked-row conversion to every table.
 
@@ -162,13 +163,42 @@ Server choices are discrete field surfaces with selected tint, accent border and
 
 Native rules/settings retain parsing, dependencies, priority, modal editing and save/apply behavior. Settings that are not loaded must not parse empty values. Rebuilding a native map must rebuild the adapter, dispose previous subscriptions and preserve validation-location feedback.
 
+Rule enable controls name their rule. Above/below buttons have at least (44px)
+targets and stage the same native UCI order as optional drag/drop. Moving a row
+keeps draft fields mounted and announces its position and Save/Apply requirement;
+edge buttons disable and keyboard focus stays in the moved row. Rule-grid
+checkboxes are (24px); native dialog controls retain their established sizing.
+
 A probe result names its captured target and scope; route/service/configuration changes invalidate it. Hidden telemetry suspends, reset clears old live readings, requests do not overlap, and stale replies cannot restore obsolete state. Profile activation requires a current comparison.
 
-Implementation sources: [workspace styles](fe-app-forkop/src/forkop/workspace/styles.ts), [Next styles](fe-app-forkop/src/forkop/next/styles.ts), renderers under `fe-app-forkop/src/forkop/workspace/` and `next/`, and native integration under `luci-app-forkop/htdocs/luci-static/resources/view/forkop/`. See [interface guide](docs/INTERFACE.md), [acceptance limits](docs/ACCEPTANCE.md), [surface direction](.impeccable/surfaces/fe-app-forkop-src-forkop-next-render-ts.md) and [finish review](.superpowers/sdd/2026-10-24-full-interface/impeccable-finish-review.md). The review's ship disposition covers its supplied implementation captures, not live installation, measured performance or unobserved runtime behavior.
+Native Save and Apply have separate meaning. Reset rerenders from native cached
+UCI; it does not imply that staged cached ordering was undone. Remaining local
+cache changes retain the unsaved strip. Immediate actions resolve drafts through
+the existing native lifecycle before writing.
+
+Direct connection/site/device flows land in the exact existing editor rather
+than a parallel configuration model. All six source types, Priority/URLTest,
+cascade and local proxy remain accessible. Source history separates attempt,
+successful import and connection evidence. Search is local and pins the active
+node; unknown import counts remain unknown.
+
+Extended composition previews use the authoritative backend resolver against
+draft filters and current level order. Profile impact omits values; component
+impact separates admitted current capabilities from unverified target evidence.
+Protocol/port/basis are explicit in route explanations. Five symptom entries
+lead to one observed result and next step, with separate deliberate network tests.
+
+Masking failure disables safe exports. Raw diagnostic text needs explicit
+disclosure; copy fallback reuses its owned manual field without disturbing
+unrelated content, focus or an unchanged selection. Log failures retain the last
+successful text and time; hidden or closed views stop periodic reads.
+
+Implementation sources: [workspace styles](fe-app-forkop/src/forkop/workspace/styles.ts), [Next styles](fe-app-forkop/src/forkop/next/styles.ts), renderers under `fe-app-forkop/src/forkop/workspace/` and `next/`, and native integration under `luci-app-forkop/htdocs/luci-static/resources/view/forkop/`. See [interface guide](docs/INTERFACE.md), [acceptance limits](docs/ACCEPTANCE.md) and [F01–F20 evidence](docs/tdd/twenty-ux-task-7.md). Synthetic captures do not establish live installation, measured performance or unobserved runtime behavior.
 
 ## Do's and Don'ts
 
 ### Do:
+
 - Do preserve native fields, activation authorities and validation-location feedback.
 - Do use the active theme consistently inside the workspace and identified dialogs.
 - Do keep status meaning explicit and unknown measurements distinct from zero.
@@ -176,6 +206,7 @@ Implementation sources: [workspace styles](fe-app-forkop/src/forkop/workspace/st
 - Do respect reduced motion and visible keyboard focus.
 
 ### Don't:
+
 - Don't infer connection success from a running process, selected server or version check.
 - Don't invent live metrics or expose deployment credentials and private endpoint metadata.
 - Don't let Forkop styling escape into surrounding LuCI applications.

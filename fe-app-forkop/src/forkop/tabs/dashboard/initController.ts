@@ -9,6 +9,7 @@ import { copyToClipboard } from '../../../helpers/copyToClipboard';
 import { showToast } from '../../../helpers/showToast';
 import { prettyBytes } from '../../../helpers/prettyBytes';
 import { renderCopyIcon24 } from '../../../icons';
+import { replaceSectionsPreservingSearch } from './partials/renderSections';
 import { CustomForkopMethods, ForkopShellMethods } from '../../methods';
 import {
   logger,
@@ -1424,6 +1425,7 @@ async function handleUpdateSubscription(section: Forkop.OutboundGroup) {
   }
 
   setSubscriptionUpdating(section.sectionName, true, true);
+  window.dispatchEvent(new CustomEvent('forkop:source-pool-changed'));
   let jobId = '';
   let ownsJobFollow = false;
 
@@ -1639,7 +1641,7 @@ async function renderSectionsWidget() {
   );
 
   return preserveScrollForPage(() => {
-    container.replaceChildren(...renderedWidgets);
+    replaceSectionsPreservingSearch(container, renderedWidgets);
   });
 }
 

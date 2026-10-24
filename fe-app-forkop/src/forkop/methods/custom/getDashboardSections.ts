@@ -1,4 +1,5 @@
 import { latestLatency } from '../../next/latency';
+import { loadSourceEvidence } from '../../tabs/dashboard/partials/sourceEvidence';
 import { getConfigSections } from './getConfigSections';
 import { ClashAPI, Forkop } from '../../types';
 import {
@@ -1396,6 +1397,9 @@ export async function getDashboardSections(
         if (isConnectionAction(sectionAction) && shouldUseProxyGroup(section)) {
           const subscriptionSourceCount = getSubscriptionSourceCount(section);
           const subscriptionEnabled = subscriptionSourceCount > 0;
+          const sourceEvidence = subscriptionEnabled
+            ? await loadSourceEvidence(sectionName)
+            : undefined;
           const dashboardCache = await readDashboardSectionCache(sectionName);
           const outboundMetadata = getOutboundMetadata(dashboardCache);
           const subscriptionMetadata = subscriptionEnabled
@@ -1430,6 +1434,7 @@ export async function getDashboardSections(
             latencyTestCodes,
             proxyConfigType,
             subscriptionSourceCount,
+            sourceEvidence,
             subscriptionMetadata,
             outbounds,
           };

@@ -69,7 +69,9 @@ it('shows configured device route labels without claiming online status', async 
   await tick();
   expect(root.textContent).toContain('192.168.1.7 → Домашний VPN');
   expect(root.textContent).not.toContain('→ vpn');
-  expect(root.textContent).not.toMatch(/онлайн|в сети/i);
+  expect(root.textContent).toContain(
+    'не подтверждает, что устройство сейчас онлайн',
+  );
   expect(calls).not.toContain('profile_list');
   expect(root.querySelector('textarea')).toBeNull();
 });

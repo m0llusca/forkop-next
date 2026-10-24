@@ -166,8 +166,13 @@ function dependsOnRuleConditions(option) {
       option.depends({ action, [condition]: /\S/ }),
     ),
   );
-  ["domain", "community_lists", "_dns_rule_set", "_dns_domain_ip_lists"].forEach(
-    (condition) => option.depends({ action: "dns", [condition]: /\S/ }),
+  [
+    "domain",
+    "community_lists",
+    "_dns_rule_set",
+    "_dns_domain_ip_lists",
+  ].forEach((condition) =>
+    option.depends({ action: "dns", [condition]: /\S/ }),
   );
   return option;
 }
@@ -2537,9 +2542,7 @@ function addUrlTestItemOptions(itemSection, options = {}) {
     form.Flag,
     "interrupt_exist_connections",
     _("Interrupt connections"),
-    _(
-      "Interrupt connections when URLTest switches the selected server",
-    ),
+    _("Interrupt connections when URLTest switches the selected server"),
   );
   o.default = "1";
   o.rmempty = false;
@@ -3397,6 +3400,312 @@ function pendingChildSettings(option, section_id, value, defaults) {
   return store[value];
 }
 
+// Extended preview native snapshot begin
+const extendedPreviewModalStack = [];
+const extendedPreviewBaselines = new Map();
+let extendedPreviewSectionRef = null;
+const extendedPreviewFilterKeys = [
+  "filter_mode",
+  "detect_server_country",
+  "include_countries",
+  "include_outbounds",
+  "include_regex",
+  "include_proxy_parameters",
+  "include_protocols",
+  "include_transports",
+  "include_securities",
+  "exclude_countries",
+  "exclude_outbounds",
+  "exclude_regex",
+  "exclude_proxy_parameters",
+  "exclude_protocols",
+  "exclude_transports",
+  "exclude_securities",
+];
+const extendedPreviewParentKeys = [
+  "urltest_enabled",
+  "detect_server_country",
+  "dashboard_include_groups",
+  "dashboard_exclude_groups",
+  ...["dashboard_", "urltest_"].flatMap((prefix) =>
+    extendedPreviewFilterKeys.map((key) => prefix + key),
+  ),
+];
+const extendedPreviewSourceKeys = [
+  "action",
+  "selector_proxy_links",
+  "subscription_urls",
+  "subscription_url",
+  "interfaces",
+  "interface",
+  "outbound_jsons",
+  "outbound_json",
+  "outbound_detour_enabled",
+  "outbound_detour_section",
+  "subscription_user_agent",
+  "subscription_hwid",
+  "subscription_download_section",
+];
+
+function previewClone(value) {
+  return value == null ? value : JSON.parse(JSON.stringify(value));
+}
+function previewOptionValue(map, sid, key, fallback) {
+  const option =
+    map && typeof map.lookupOption === "function"
+      ? (map.lookupOption(key, sid) || [])[0]
+      : null;
+  if (!option) return previewClone(fallback);
+  if (typeof option.cbid === "function") {
+    const widget = document.getElementById(option.cbid(sid));
+    if (widget && widget.querySelector(".add-item")) {
+      const values = Array.from(
+        widget.querySelectorAll('.item > input[type="hidden"]'),
+      ).map((input) => input.value);
+      const pending = widget.querySelector('.add-item > input[type="text"]');
+      if (
+        pending &&
+        pending.value.trim() &&
+        !pending.classList.contains("cbi-input-invalid")
+      )
+        values.push(pending.value.trim());
+      return values;
+    }
+  }
+  try {
+    const value = option.formvalue(sid);
+    return previewClone(value == null ? fallback : value);
+  } catch (_error) {
+    return previewClone(fallback);
+  }
+}
+function previewSourceSnapshot(sectionId, live) {
+  const row = uci.get(UCI_PACKAGE, sectionId) || {};
+  const parent = {};
+  extendedPreviewSourceKeys.forEach((key) => {
+    let saved = row[key];
+    if (key === "subscription_url")
+      saved = getChildItemIds(sectionId, "subscription_url");
+    if (key === "interfaces") {
+      const children = getChildItemIds(sectionId, "section_interface");
+      if (children.length) saved = children;
+    }
+    if (key === "outbound_detour_enabled") saved = saved || "0";
+    const value = live
+      ? previewOptionValue(
+          extendedPreviewSectionRef?.map,
+          sectionId,
+          key,
+          saved,
+        )
+      : saved;
+    parent[key] = value == null || value === "" ? [] : previewClone(value);
+  });
+  // A hidden native select still chooses its first option. Its target has no
+  // source meaning while cascade is disabled; enabling cascade remains a change.
+  if (parent.outbound_detour_enabled !== "1")
+    parent.outbound_detour_section = [];
+  return {
+    parent,
+    children: ["subscription_url", "section_interface"].flatMap((type) =>
+      uci
+        .sections(UCI_PACKAGE, type)
+        .filter((child) => child.section === sectionId)
+        .map(previewClone),
+    ),
+  };
+}
+function rememberExtendedPreviewContext(sectionRef) {
+  extendedPreviewSectionRef = sectionRef;
+  uci.sections(UCI_PACKAGE, "section").forEach((row) => {
+    if (!extendedPreviewBaselines.has(row[".name"]))
+      extendedPreviewBaselines.set(
+        row[".name"],
+        previewSourceSnapshot(row[".name"], false),
+      );
+  });
+}
+function captureExtendedPreviewDraft(sectionId) {
+  const unavailable = (reason) => ({
+    unavailableReason: reason,
+    revision: "unavailable",
+  });
+  const baseline = extendedPreviewBaselines.get(sectionId);
+  if (!baseline) return unavailable("source_draft_changed");
+  const current = previewSourceSnapshot(sectionId, true);
+  if (JSON.stringify(baseline) !== JSON.stringify(current)) {
+    return unavailable(
+      ["outbound_detour_enabled", "outbound_detour_section"].some(
+        (key) =>
+          JSON.stringify(baseline.parent[key]) !==
+          JSON.stringify(current.parent[key]),
+      )
+        ? "cascade_draft_changed"
+        : "source_draft_changed",
+    );
+  }
+  for (const option of outboundNameSourceOptions.values()) {
+    if (Object.keys(option.pendingChildSettings?.[sectionId] || {}).length)
+      return unavailable("source_draft_changed");
+  }
+  const draft = {
+    section: {},
+    urltest: [],
+    priority_group: [],
+    priority_level: [],
+  };
+  extendedPreviewParentKeys.forEach((key) => {
+    const value = previewOptionValue(
+      extendedPreviewSectionRef?.map,
+      sectionId,
+      key,
+      uci.get(UCI_PACKAGE, sectionId, key),
+    );
+    if (value != null) draft.section[key] = value;
+  });
+  const specs = {
+    urltest: urlTestSettingsKeys(),
+    priority_group: priorityGroupSettingsKeys(),
+    priority_level: priorityLevelSettingsKeys(),
+  };
+  const publicKeys = (type) =>
+    specs[type].filter(
+      (key) =>
+        key === "name" ||
+        key === "order" ||
+        key === "direct" ||
+        [
+          "country",
+          "server_name",
+          "regex",
+          "interrupt_exist_connections",
+          "pin_dashboard",
+          "pick_fastest",
+          "switch_to_faster_same_priority",
+        ].includes(key) ||
+        extendedPreviewFilterKeys.includes(key),
+    );
+  let incomplete = false;
+  const appendRows = (type, owner, values, option, groupId) => {
+    const ownerKey = type === "priority_level" ? "group" : "section";
+    const rows = [];
+    values.forEach((value, index) => {
+      const saved = uci.get(UCI_PACKAGE, value);
+      const existing =
+        saved && saved[".type"] === type && saved[ownerKey] === owner;
+      const active = extendedPreviewModalStack.findLast(
+        (item) =>
+          item.typeName === type &&
+          item.ownerId === owner &&
+          item.itemId === value,
+      );
+      const pending = option?.pendingChildSettings?.[owner]?.[value];
+      if (!existing && !active && !pending) {
+        incomplete = true;
+        return;
+      }
+      const source = existing ? saved : pending || active.initial || {};
+      const id = existing ? value : `preview_${type}_${draft[type].length}`;
+      const row = { ".name": id, ".type": type, [ownerKey]: groupId || owner };
+      publicKeys(type).forEach((key) => {
+        const raw = active
+          ? previewOptionValue(active.map, "settings", key, source[key])
+          : source[key];
+        if (raw != null) row[key] = previewClone(raw);
+      });
+      // Match native Save's afterMaterializeChildItems ordering, including new rows.
+      if (type === "priority_level") row.order = String(index);
+      draft[type].push(row);
+      rows.push({ value, id, active });
+    });
+    return rows;
+  };
+  const valuesFor = (type) => {
+    const values = currentSectionGroupValues(sectionId, type).slice();
+    extendedPreviewModalStack
+      .filter((item) => item.typeName === type && item.ownerId === sectionId)
+      .forEach((item) => {
+        if (!values.includes(item.itemId)) values.push(item.itemId);
+      });
+    return values;
+  };
+  appendRows(
+    "urltest",
+    sectionId,
+    valuesFor("urltest"),
+    sectionGroupSourceOptions.get("urltest"),
+  );
+  const groups = appendRows(
+    "priority_group",
+    sectionId,
+    valuesFor("priority_group"),
+    sectionGroupSourceOptions.get("priority_group"),
+  );
+  groups.forEach((group) => {
+    const levelOption = group.active?.map?.lookupOption(
+      "priority_level",
+      "settings",
+    )?.[0];
+    let values =
+      previewOptionValue(
+        group.active?.map,
+        "settings",
+        "priority_level",
+        getChildItemIds(group.value, "priority_level", "group"),
+      ) || [];
+    values = Array.isArray(values) ? values.slice() : [values];
+    extendedPreviewModalStack
+      .filter(
+        (item) =>
+          item.typeName === "priority_level" && item.ownerId === group.value,
+      )
+      .forEach((item) => {
+        if (!values.includes(item.itemId)) values.push(item.itemId);
+      });
+    appendRows("priority_level", group.value, values, levelOption, group.id);
+  });
+  if (incomplete) return unavailable("pending_child_incomplete");
+  return { draft, revision: JSON.stringify(draft) };
+}
+// Extended preview native snapshot end
+
+let extendedPreviewEventsInstalled = false;
+function mountExtendedPreview(sectionId, host) {
+  if (!extendedPreviewEventsInstalled) {
+    extendedPreviewEventsInstalled = true;
+    const invalidateAll = () =>
+      document
+        .querySelectorAll(".fkp-extended-preview")
+        .forEach((node) =>
+          node.dispatchEvent(new CustomEvent("forkop:preview-invalidated")),
+        );
+    document.addEventListener("input", (event) => {
+      if (event.target.closest(".cbi-map")) invalidateAll();
+    });
+    document.addEventListener("change", (event) => {
+      if (event.target.closest(".cbi-map")) invalidateAll();
+    });
+    window.addEventListener("forkop:configuration-changed", invalidateAll);
+    window.addEventListener("forkop:source-pool-changed", invalidateAll);
+  }
+  const node = main.renderExtendedPreview(sectionId, () =>
+    captureExtendedPreviewDraft(sectionId),
+  );
+  const invalidate = () =>
+    node.dispatchEvent(new CustomEvent("forkop:preview-invalidated"));
+  if (host) {
+    host.addEventListener("input", invalidate);
+    host.addEventListener("change", invalidate);
+  }
+  node.disposePreview = () => {
+    if (host) {
+      host.removeEventListener("input", invalidate);
+      host.removeEventListener("change", invalidate);
+    }
+  };
+  return node;
+}
+
 function renderStackedJsonSettingsModal(title, map, onSave) {
   const modal = document.querySelector("#modal_overlay > .modal.cbi-modal");
   const activeMap = modal ? modal.querySelector(".cbi-map:not(.hidden)") : null;
@@ -3414,6 +3723,13 @@ function renderStackedJsonSettingsModal(title, map, onSave) {
     let closed = false;
     let saveButton;
     let validationSummary;
+    const previewContext = map.forkopPreviewContext;
+    let previewNode;
+    if (previewContext) {
+      extendedPreviewModalStack.push(previewContext);
+      previewNode = mountExtendedPreview(previewContext.sectionId, nodes);
+      nodes.appendChild(previewNode);
+    }
 
     const clearValidationSummary = () => {
       if (validationSummary && validationSummary.parentNode) {
@@ -3459,6 +3775,16 @@ function renderStackedJsonSettingsModal(title, map, onSave) {
       }
 
       closed = true;
+      if (previewContext) {
+        const index = extendedPreviewModalStack.indexOf(previewContext);
+        if (index >= 0) extendedPreviewModalStack.splice(index, 1);
+        previewNode.disposePreview();
+        modal
+          .querySelectorAll(".fkp-extended-preview")
+          .forEach((node) =>
+            node.dispatchEvent(new CustomEvent("forkop:preview-invalidated")),
+          );
+      }
       clearValidationSummary();
 
       if (nodes.parentNode) {
@@ -3548,6 +3874,25 @@ function showChildItemSettingsModal(section_id, itemValue, option, settings) {
     settings: Object.assign({}, initialSettings),
   };
   const map = new form.JSONMap(data);
+  if (
+    ["urltest", "priority_group", "priority_level"].includes(settings.typeName)
+  ) {
+    const parent =
+      settings.typeName === "priority_level"
+        ? extendedPreviewModalStack.findLast(
+            (item) =>
+              item.typeName === "priority_group" && item.itemId === section_id,
+          )?.sectionId || uci.get(UCI_PACKAGE, section_id, "section")
+        : section_id;
+    map.forkopPreviewContext = {
+      sectionId: parent,
+      ownerId: section_id,
+      itemId: value,
+      typeName: settings.typeName,
+      map,
+      initial: initialSettings,
+    };
+  }
   const itemSection = map.section(form.NamedSection, "settings");
   itemSection.anonymous = true;
   itemSection.addremove = false;
@@ -4051,61 +4396,21 @@ function getRuleResolvedAction(section_id) {
 }
 
 function getActionOptionLabel(action) {
-  switch (`${action}`) {
-    case "block":
-      return "Block";
-    case "bypass":
-      return "Bypass";
-    case "connection":
-      return "Connection";
-    case "dns":
-      return "DNS";
-    case "vpn":
-      return "VPN";
-    case "zapret":
-      return "Zapret";
-    case "zapret2":
-      return "Zapret2";
-    case "byedpi":
-      return "ByeDPI";
-    case "outbound":
-      return _("JSON outbound");
-    case "proxy":
-    default:
-      return "Proxy";
-  }
-}
-
-function getRuleActionDisplayValue(section_id) {
-  const action = getRuleResolvedAction(section_id);
-
-  if (action === "zapret") {
-    return "Zapret";
-  }
-
-  if (action === "zapret2") {
-    return "Zapret2";
-  }
-
-  if (action === "byedpi") {
-    return "ByeDPI";
-  }
-
-  return getActionOptionLabel(action);
+  return main.getRuleActionLabel(action);
 }
 
 function getRuleActionDisplayMarkup(section_id) {
-  return getRuleActionDisplayValue(section_id);
+  return main.renderRuleRoute(uci.get(UCI_PACKAGE, section_id));
 }
 
-function populateActionOptionValues(option) {
+function populateActionOptionValues(option, section_id) {
   delete option.keylist;
   delete option.vallist;
 
   option.value("connection", getActionOptionLabel("connection"));
-  option.value("bypass", "Bypass");
-  option.value("block", "Block");
-  option.value("dns", "DNS");
+  option.value("bypass", getActionOptionLabel("bypass"));
+  option.value("block", getActionOptionLabel("block"));
+  option.value("dns", getActionOptionLabel("dns"));
   if (isZapretInstalledForUi()) {
     option.value("zapret", getActionOptionLabel("zapret"));
   }
@@ -4114,6 +4419,10 @@ function populateActionOptionValues(option) {
   }
   if (isByedpiInstalledForUi()) {
     option.value("byedpi", getActionOptionLabel("byedpi"));
+  }
+  const configuredAction = section_id && getRuleConfiguredAction(section_id);
+  if (configuredAction && !option.keylist.includes(configuredAction)) {
+    option.value(configuredAction, getActionOptionLabel(configuredAction));
   }
 }
 
@@ -6820,6 +7129,24 @@ function addTextConditionField(section, config) {
     }
   };
 
+  if (optionName === "domain") {
+    const renderDomain = o.renderWidget;
+    o.renderWidget = function (section_id, option_index, cfgvalue) {
+      const node = renderDomain.call(this, section_id, option_index, cfgvalue);
+      const textarea = node.querySelector("textarea");
+      if (textarea) {
+        const rows = uci.sections(UCI_PACKAGE, "section");
+        node.prepend(
+          main.renderQuickSite(
+            textarea,
+            uci.get(UCI_PACKAGE, section_id, "label") || section_id,
+            rows.findIndex((row) => row[".name"] === section_id) + 1,
+          ),
+        );
+      }
+      return node;
+    };
+  }
   return o;
 }
 
@@ -6967,24 +7294,24 @@ function createSectionContent(section) {
     "settings",
     form.DummyValue,
     "_action_display",
-    _("Action"),
+    "Маршрут и источники",
   );
   o.modalonly = false;
+  o.tableonly = true;
   o.rawhtml = true;
   o.cfgvalue = function (section_id) {
     return getRuleActionDisplayMarkup(section_id);
   };
   o.textvalue = function (section_id) {
-    return getRuleActionDisplayValue(section_id);
+    return getRuleActionDisplayMarkup(section_id);
   };
-  o.width = "7rem";
 
   o = section.taboption(
     "settings",
     form.Value,
     "label",
-    _("Section name"),
-    _("Visible name of this section"),
+    "Название правила",
+    "Помогает узнать правило в списке и при выборе маршрута",
   );
   o.rmempty = false;
   o.modalonly = true;
@@ -6997,7 +7324,7 @@ function createSectionContent(section) {
     form.ListValue,
     "action",
     _("Action"),
-    _("What Forkop should do when this section matches"),
+    "Что делать с обращениями, которые подходят под условия правила",
   );
   populateActionOptionValues(o);
   o.default = "connection";
@@ -7008,7 +7335,7 @@ function createSectionContent(section) {
   };
   o.load = function (section_id) {
     return ensureActionProvidersAvailabilityLoaded().then(() => {
-      populateActionOptionValues(this);
+      populateActionOptionValues(this, section_id);
       return this.cfgvalue(section_id);
     });
   };
@@ -7443,6 +7770,21 @@ function createSectionContent(section) {
 
   o = section.taboption(
     "settings",
+    form.DummyValue,
+    "_extended_preview",
+    _("Состав URLTest и Priority"),
+  );
+  o.modalonly = true;
+  o.depends("action", "connection");
+  o.renderWidget = function (sectionId) {
+    // GridSection clones options into a separate modal map. Read that live map
+    // (also while a child detaches it), without replacing saved source evidence.
+    extendedPreviewSectionRef = this.section;
+    return mountExtendedPreview(sectionId);
+  };
+
+  o = section.taboption(
+    "settings",
     form.Flag,
     "outbound_detour_enabled",
     _("Cascade connection"),
@@ -7789,9 +8131,7 @@ function createSectionContent(section) {
     form.DynamicList,
     "domain_ip_lists",
     _("Domain and IP lists"),
-    _(
-      "Add URLs or local paths to .lst lists containing domains and subnets.",
-    ),
+    _("Add URLs or local paths to .lst lists containing domains and subnets."),
   );
   domainIpListsOption.modalonly = true;
   // Both widgets map to domain_ip_lists, so neither inactive view may erase shared storage.
@@ -7890,6 +8230,53 @@ function loadSectionTableOptions(sectionRef) {
 
 function configureSectionSection(sectionRef, options = {}) {
   setActionProvidersAvailabilityLoader(options.loadActionProvidersAvailability);
+  const renderContents = sectionRef.renderContents;
+  sectionRef.renderContents = function () {
+    const node = renderContents.apply(this, arguments);
+    // LuCI titleFn stringifies sectiontitle for row metadata and modal titles.
+    // Keep that contract textual and decorate only the rendered name cell.
+    node
+      .querySelectorAll("tr.cbi-section-table-row[data-sid]")
+      .forEach((row) => {
+        const titleCell = row.querySelector(
+          ":scope > td.cbi-section-table-titles",
+        );
+        if (titleCell) {
+          const section_id = row.getAttribute("data-sid");
+          titleCell.replaceChildren(
+            main.renderRuleIdentity(
+              uci.get(UCI_PACKAGE, section_id),
+              section_id,
+            ),
+          );
+        }
+      });
+    main.configureRuleOrder(node, (sid, referenceSid, after) =>
+      this.map.data.move(
+        this.uciconfig ?? this.map.config,
+        sid,
+        referenceSid,
+        after,
+      ),
+    );
+    node.addEventListener("forkop:workflow-context", (event) => {
+      event.stopPropagation();
+      event.detail.provide({
+        targets: uci.sections(UCI_PACKAGE, "section").map((row) => ({
+          name: row[".name"],
+          generated: Boolean(row.next_kind),
+          localProxyConfigured:
+            row.mixed_proxy_enabled === "1" &&
+            /^\d+$/.test(row.mixed_proxy_port || "") &&
+            Number(row.mixed_proxy_port) >= 1 &&
+            Number(row.mixed_proxy_port) <= 65535,
+        })),
+        loadDevices: localDevices.loadLocalDeviceChoices,
+      });
+    });
+    return node;
+  };
+  main.configureRuleWorkflow(sectionRef);
 
   const handleRemove = sectionRef.handleRemove;
   sectionRef.handleRemove = function (section_id) {
@@ -7901,6 +8288,9 @@ function configureSectionSection(sectionRef, options = {}) {
   };
 
   sectionRef.load = function () {
+    // Map.load has populated UCI before loading section options. Record the saved
+    // inputs before the editor renders; existing baselines never adopt dirty edits.
+    rememberExtendedPreviewContext(this);
     // The table renders only non-modal fields; the cloned Add/Edit modal loads
     // action/provider details when the user opens it.
     return loadSectionTableOptions(this);

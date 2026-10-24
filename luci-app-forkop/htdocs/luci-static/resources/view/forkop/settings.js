@@ -7,6 +7,10 @@
 
 const UCI_PACKAGE = main.FORKOP_UCI_PACKAGE;
 
+function validateUnsignedInteger(value, max, message) {
+  return /^[0-9]+$/.test(value) && Number(value) <= max ? true : _(message);
+}
+
 function isSingBoxDuration(value) {
   return /^(?=.*[1-9])([0-9]+(?:\.[0-9]+)?(?:ns|us|ms|s|m|h|d))+$/.test(value);
 }
@@ -220,21 +224,18 @@ function createSettingsContent(section, capabilities) {
     form.Value,
     "dns_rewrite_ttl",
     _("DNS Rewrite TTL"),
-    _("Time in seconds for DNS record caching (default: 60)"),
+    _(
+      "Whole seconds, 0–4294967295 (default: 60). Zero rewrites the DNS response TTL to zero.",
+    ),
   );
   o.default = "60";
   o.rmempty = false;
   o.validate = function (section_id, value) {
-    if (!value) {
-      return _("TTL value cannot be empty");
-    }
-
-    const ttl = parseInt(value);
-    if (isNaN(ttl) || ttl < 0) {
-      return _("TTL must be a positive number");
-    }
-
-    return true;
+    return validateUnsignedInteger(
+      value,
+      4294967295,
+      "Enter whole seconds from 0 to 4294967295, without spaces or units.",
+    );
   };
 
   o = section.option(form.ListValue, "dns_strategy", _("DNS Strategy"));
@@ -395,16 +396,19 @@ function createSettingsContent(section, capabilities) {
     form.Value,
     "badwan_reload_delay",
     _("Interface Monitoring Delay"),
-    _("Delay in milliseconds before reloading Forkop after interface UP"),
+    _(
+      "Whole milliseconds, 0–2147483647 before reloading Forkop after interface UP (default: 2000). Zero adds no explicit delay; procd schedules the trigger with its minimum delay.",
+    ),
   );
   o.depends("enable_badwan_interface_monitoring", "1");
   o.default = "2000";
   o.rmempty = false;
   o.validate = function (section_id, value) {
-    if (!value) {
-      return _("Delay value cannot be empty");
-    }
-    return true;
+    return validateUnsignedInteger(
+      value,
+      2147483647,
+      "Enter whole milliseconds from 0 to 2147483647, without spaces or units.",
+    );
   };
 
   o = section.option(
@@ -460,7 +464,8 @@ function createSettingsContent(section, capabilities) {
   o.password = true;
   const yacdSecret = o;
   o.validate = function (section_id, value) {
-    return yacdEnabled.formvalue(section_id) !== "1" || String(value || "").trim()
+    return yacdEnabled.formvalue(section_id) !== "1" ||
+      String(value || "").trim()
       ? true
       : _("Enter a secret key to enable remote YACD access.");
   };

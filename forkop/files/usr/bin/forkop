@@ -130,6 +130,8 @@ function command_spec(command) {
     let commands = {
         next: [ "service/next.uc", "dispatch", 2 ],
         route_explain: [ "service/route_explain.uc", "explain", 1 ],
+        extended_preview: [ "service/extended_preview.uc", "preview", 1 ],
+        source_evidence: [ "subscription/evidence.uc", "read-section", 1 ],
         start: [ "service/lifecycle.uc", "start", 0 ],
         stop: [ "service/lifecycle.uc", "stop", 0 ],
         reload: [ "service/lifecycle.uc", "reload", 1 ],
@@ -184,6 +186,7 @@ function command_spec(command) {
         generate_reality_keypair: [ "server/service.uc", "generate-reality-keypair", 0 ],
         get_tls_certificate_sha256: [ "server/service.uc", "tls-certificate-sha256", 1 ],
         component_action: [ "components/action.uc", "component-action", 2 ],
+        component_preview: [ "components/impact.uc", "preview", 1 ],
         component_action_async: [ "components/updates.uc", "component-action-async", 2 ],
         component_action_status: [ "components/updates.uc", "component-action-status", 1 ],
         component_updates_if_due: [ "components/updates.uc", "component-updates-if-due", 0 ],
@@ -210,6 +213,8 @@ function run_spec(command, spec, user_args) {
     }
 
     let args = [ "ucode", "-L", LIB_DIR, module, spec[1] ];
+    if (command == "extended_preview")
+        args = [ "timeout", "10", "ucode", "-L", LIB_DIR, module, spec[1] ];
     let count = int(spec[2] || 0);
     for (let i = 0; i < count; i++)
         push(args, user_args[i] || "");

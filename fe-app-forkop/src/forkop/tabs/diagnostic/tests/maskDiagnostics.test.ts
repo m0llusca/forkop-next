@@ -6,6 +6,22 @@ import {
 } from '../helpers/maskDiagnostics';
 
 describe('diagnostic masking', () => {
+  it.each([
+    '{"password":"SYNTHETIC_SECRET",',
+    'SYNTHETIC_SECRET',
+    '"SYNTHETIC_SECRET"',
+    'null',
+  ])('fails closed for unsupported configuration %s', (raw) => {
+    expect(() => formatMaskedSingBoxConfig(raw)).toThrow();
+  });
+
+  it('masks nested credentials inside arrays', () => {
+    expect(
+      formatMaskedSingBoxConfig(
+        '{"outbounds":[{"tls":{"password":"SYNTHETIC_SECRET"}}]}',
+      ),
+    ).not.toContain('SYNTHETIC_SECRET');
+  });
   it('masks sensitive sing-box keys without mutating the original config', () => {
     const config = {
       outbounds: [

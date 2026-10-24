@@ -26,10 +26,12 @@ beforeEach(() => {
 afterEach(() => {
   socket.resetAll();
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 it.each(['error', 'message', 'open'])(
   'ignores retired socket %s events after replacement',
   (event) => {
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const url = 'ws://router.example:9090/connections?token=fixture';
     socket.subscribe(url, vi.fn(), vi.fn());
     const old = FakeWebSocket.instances[0];
@@ -45,5 +47,8 @@ it.each(['error', 'message', 'open'])(
     const send = vi.spyOn(replacement, 'send');
     socket.send(url, 'premature');
     expect(send).not.toHaveBeenCalled();
+    expect(warning).toHaveBeenCalledExactlyOnceWith(
+      '[WARN] [SOCKET] Cannot send: not connected to ws://router.example:9090/connections?token=[redacted]',
+    );
   },
 );

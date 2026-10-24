@@ -39,6 +39,25 @@ afterEach(() => {
     .forEach((node) => node.remove());
 });
 
+it('fits actual native widget wrappers', () => {
+  const root = surface();
+  const field = root.querySelector('.cbi-value-field')!;
+  field.innerHTML =
+    '<div id="cbid.forkop.settings.dns_type"><select><option>Длинное название настройки</option></select></div>';
+  expect(getComputedStyle(field.querySelector('select')!).width).toBe('100%');
+});
+it('shows only the active native modal tab', () => {
+  surface();
+  const modal = document.querySelector('.fkp-workspace-modal')!;
+  const panes = document.createElement('div');
+  panes.className = 'cbi-section-node-tabbed';
+  panes.innerHTML =
+    '<div data-tab="settings" data-tab-active="true">Настройки</div><div data-tab="conditions" data-tab-active="false">Условия</div>';
+  modal.append(panes);
+  expect(getComputedStyle(panes.children[0]).display).not.toBe('none');
+  expect(getComputedStyle(panes.children[1]).display).toBe('none');
+});
+
 it.each([
   ['light', '#f6f7f8', '#17252d', '#fff'],
   ['dark', '#16232b', '#eef4f6', '#21333e'],

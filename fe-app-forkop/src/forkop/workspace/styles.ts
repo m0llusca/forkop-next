@@ -33,6 +33,14 @@ export const workspaceStyles = `
 .fkp-workspace-sidebar {min-width:0;padding:24px 12px;align-self:start;position:sticky;top:16px}
 .fkp-workspace-brand {font-size:22px;line-height:1.25;letter-spacing:-.025em;font-weight:700;padding:0 12px;margin-bottom:32px}
 .fkp-workspace-primary {display:flex;flex-direction:column;gap:8px}
+.fkp-workspace .fkp-workspace-mobile-menu {display:none}
+.fkp-workspace .fkp-workspace-preferences {margin-bottom:24px;padding:16px 0;border-bottom:1px solid var(--next-line)}
+.fkp-workspace .fkp-workspace-preferences h3 {font-size:16px;margin:0 0 12px}
+.fkp-workspace .fkp-workspace-preferences[hidden] {display:none}
+.fkp-workspace .fkp-rule-order {display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.fkp-workspace .fkp-rule-order button {min-height:44px;min-width:44px;white-space:normal;overflow-wrap:anywhere}
+.fkp-workspace .fkp-rule-order-status {font-size:13px;overflow-wrap:anywhere;margin:12px 0 0}
+.fkp-workspace .fkp-rule-order-status:empty {margin:0}
 .fkp-workspace-main {min-width:0;border-left:1px solid var(--next-line);padding:24px 32px 32px}
 .fkp-workspace-top {display:flex;align-items:flex-start;justify-content:space-between;gap:24px;padding-bottom:24px;border-bottom:1px solid var(--next-line);margin-bottom:24px}
 .fkp-workspace-status {display:flex;flex-direction:column;gap:4px;min-width:0}
@@ -50,10 +58,25 @@ export const workspaceStyles = `
 .fkp-workspace .fkp-workspace-nav-button[data-errors]::after,.fkp-workspace .fkp-workspace-local-button[data-errors]::after {content:attr(data-errors);display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;margin-left:auto;padding:0 4px;border:1px solid currentColor;border-radius:4px;font-size:12px;font-variant-numeric:tabular-nums;line-height:1}
 .fkp-workspace .fkp-workspace-native-tabs {display:none!important}
 .fkp-workspace-content {min-width:0}
+.fkp-workspace .fkp-workspace-description {font-size:14px;line-height:1.6;color:var(--next-muted);margin:-4px 0 20px;max-width:75ch}
+.fkp-workspace .fkp-form-group,.fkp-workspace-modal .fkp-form-group {min-width:0;margin:0 0 24px;padding:0;border:0}
+.fkp-workspace .fkp-form-group>h3,.fkp-workspace-modal .fkp-form-group>h3 {margin:24px 0 8px;font-size:17px}
+.fkp-workspace .fkp-form-group:first-child>h3,.fkp-workspace-modal .fkp-form-group:first-child>h3 {margin-top:0}
+.fkp-workspace .fkp-form-help,.fkp-workspace-modal .fkp-form-help {font-size:13px;line-height:1.6;color:var(--next-muted);margin:0 0 12px;max-width:75ch}
+.fkp-workspace details.fkp-form-group,.fkp-workspace-modal details.fkp-form-group {border-top:1px solid var(--next-line);border-bottom:1px solid var(--next-line);padding:0;margin-top:24px}
+.fkp-workspace .fkp-form-group>summary,.fkp-workspace-modal .fkp-form-group>summary {padding:14px 0;min-height:48px;cursor:pointer;font-size:14px;font-weight:650;line-height:1.5;overflow-wrap:anywhere}
+.fkp-workspace .fkp-form-group>summary:hover,.fkp-workspace-modal .fkp-form-group>summary:hover {color:var(--next-accent)}
+.fkp-workspace .fkp-rule-name,.fkp-workspace .fkp-rule-action {display:block;font-size:14px;font-weight:650;line-height:1.5}
+.fkp-workspace .fkp-rule-scope,.fkp-workspace .fkp-rule-route {display:block;font-size:12px;font-weight:400;line-height:1.6;color:var(--next-muted);margin-top:4px;max-width:55ch;overflow-wrap:anywhere}
+.fkp-workspace .fkp-rule-state {display:inline-block;font-size:12px;font-weight:400;color:var(--next-muted);margin-top:4px}
+.fkp-workspace #cbi-forkop-section .cbi-section-table-row>:first-child {width:43%;min-width:180px}
+.fkp-workspace #cbi-forkop-section .cbi-section-table-row>:nth-child(2) {width:64px}
+.fkp-workspace #cbi-forkop-section .cbi-section-table-row>:nth-child(3) {min-width:160px}
 .fkp-workspace-content > h2,.fkp-workspace-content > .cbi-map-descr {display:none}
 .fkp-workspace .cbi-map-tabbed {background:transparent;border:0;padding:0;min-width:0}
 .fkp-workspace .cbi-map-tabbed > .cbi-section {padding:0;margin:0;background:transparent;border:0;box-shadow:none;min-width:0}
 .fkp-workspace .cbi-map-tabbed > .cbi-section[data-tab]:not([data-tab-active=true]),.fkp-workspace [hidden],.fkp-workspace-modal [hidden],.fkp-workspace .hidden,.fkp-workspace-modal .hidden {display:none!important}
+.fkp-workspace-modal .cbi-section-node-tabbed > [data-tab]:not([data-tab-active=true]) {display:none!important}
 .fkp-workspace h3,.fkp-workspace-modal h3,.fkp-workspace-modal h4 {color:var(--next-fg);font-weight:650;font-size:19px;line-height:1.3;margin:32px 0 12px;letter-spacing:-.015em;text-wrap:balance}
 .fkp-workspace .cbi-section > h3:first-child {margin-top:0}
 .fkp-workspace p,.fkp-workspace-modal p {max-width:75ch;overflow-wrap:anywhere}
@@ -66,6 +89,7 @@ export const workspaceStyles = `
 .fkp-workspace .cbi-value > .cbi-value-field > :is(input:not([type=checkbox]):not([type=radio]),select,textarea,.cbi-select,.cbi-dropdown,.cbi-dynlist,.control-group),
 .fkp-workspace-modal .cbi-value > .cbi-value-field > :is(input:not([type=checkbox]):not([type=radio]),select,textarea,.cbi-select,.cbi-dropdown,.cbi-dynlist,.control-group) {width:100%;max-width:42rem;min-width:0;height:auto}
 .fkp-workspace .cbi-value .cbi-value-description,.fkp-workspace-modal .cbi-value .cbi-value-description {margin:6px 0 0;line-height:1.5;white-space:normal;max-width:75ch}
+.fkp-workspace .cbi-value-field > [id^="cbid.forkop."] > :is(input:not([type=checkbox]):not([type=radio]):not([type=hidden]),select,textarea),.fkp-workspace-modal .cbi-value-field > [id^="cbid.forkop."] > :is(input:not([type=checkbox]):not([type=radio]):not([type=hidden]),select,textarea) {width:100%;max-width:42rem;min-width:0}
 .fkp-workspace .cbi-value .cbi-dynlist > .add-item,.fkp-workspace-modal .cbi-value .cbi-dynlist > .add-item {display:flex;gap:4px;min-width:0}
 .fkp-workspace .cbi-value .cbi-dynlist > .add-item > :is(input,.cbi-dropdown),.fkp-workspace-modal .cbi-value .cbi-dynlist > .add-item > :is(input,.cbi-dropdown) {flex:1;min-width:0;width:100%}
 .fkp-workspace .cbi-value .cbi-dynlist > .add-item > button,.fkp-workspace-modal .cbi-value .cbi-dynlist > .add-item > button {flex:0 0 42px;min-width:42px}
@@ -77,6 +101,7 @@ export const workspaceStyles = `
 .fkp-workspace textarea,.fkp-workspace-modal textarea {min-height:112px;width:100%;resize:vertical;font-variant-numeric:tabular-nums}
 .fkp-workspace input::placeholder,.fkp-workspace textarea::placeholder,.fkp-workspace-modal input::placeholder,.fkp-workspace-modal textarea::placeholder {color:var(--next-muted);opacity:1}
 .fkp-workspace input[type=checkbox],.fkp-workspace input[type=radio],.fkp-workspace-modal input[type=checkbox],.fkp-workspace-modal input[type=radio] {width:20px;height:20px;min-height:20px;margin:11px 8px 11px 0;vertical-align:middle;accent-color:var(--next-accent)}
+.fkp-workspace #cbi-forkop-section tr[data-sid] input[type=checkbox] {width:24px;height:24px;min-height:24px}
 .fkp-workspace .cbi-checkbox,.fkp-workspace-modal .cbi-checkbox {min-height:42px;display:inline-flex;align-items:center}
 .fkp-workspace button,.fkp-workspace .cbi-button,.fkp-workspace input[type=button],.fkp-workspace input[type=submit],
 .fkp-workspace-modal button,.fkp-workspace-modal .cbi-button,.fkp-workspace-modal input[type=button],.fkp-workspace-modal input[type=submit] {
@@ -102,8 +127,10 @@ export const workspaceStyles = `
 .fkp-workspace .cbi-section-table-row,.fkp-workspace .cbi-section-table-row:nth-child(2n),.fkp-workspace-modal .cbi-section-table-row {background:transparent}
 .fkp-workspace .cbi-section-actions > div,.fkp-workspace-modal .cbi-section-actions > div {display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:8px}
 .fkp-workspace .cbi-section-actions,.fkp-workspace-modal .cbi-section-actions {min-width:104px}
-.fkp-workspace :is(#cbi-forkop-section,#cbi-forkop-server) .td.cbi-section-actions {width:240px!important;min-width:240px!important;white-space:normal}
+.fkp-workspace :is(#cbi-forkop-section,#cbi-forkop-server) :is(td,.td).cbi-section-actions {width:240px!important;min-width:240px!important;white-space:nowrap}
 .fkp-workspace .td.cbi-section-actions > div:not(.cbi-dropdown) {display:flex;justify-content:flex-end;align-items:center;flex-wrap:wrap;gap:8px}
+.fkp-workspace :is(#cbi-forkop-section,#cbi-forkop-server) .cbi-section-actions > div {display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:flex-end}
+.fkp-workspace #cbi-forkop-section .cbi-section-actions :is(button,.cbi-button) {padding-inline:10px}
 .fkp-workspace .td.cbi-section-actions > div:not(.cbi-dropdown) > :is(button,.cbi-button) {flex:0 0 auto;width:auto;margin:0!important}
 .fkp-workspace .cbi-section-create,.fkp-workspace .cbi-page-actions,.fkp-workspace-modal .button-row {display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-top:24px;padding-top:16px}
 .fkp-workspace pre,.fkp-workspace code,.fkp-workspace-modal pre,.fkp-workspace-modal code {background:var(--next-field);color:var(--next-fg);font-size:13px;line-height:1.6;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
@@ -167,13 +194,18 @@ export const workspaceStyles = `
   .fkp-workspace-top {gap:16px;flex-wrap:wrap}
 }
 @media (max-width:720px) {
+  .fkp-workspace #cbi-forkop-section .cbi-section-table-row>:first-child,.fkp-workspace #cbi-forkop-section .cbi-section-table-row>:nth-child(2),.fkp-workspace #cbi-forkop-section .cbi-section-table-row>:nth-child(3) {width:auto;min-width:0}
   .fkp-workspace {display:block;border-radius:8px;margin:16px 0}
   .fkp-workspace-sidebar {position:static;padding:16px 16px 12px;border-bottom:1px solid var(--next-line)}
   .fkp-workspace-brand {font-size:20px;padding:0;margin-bottom:12px}
-  .fkp-workspace-primary {flex-direction:row;overflow-x:auto;gap:4px;padding:4px;scrollbar-width:thin}
+  .fkp-workspace-primary {display:none}
+  .fkp-workspace .fkp-workspace-mobile-menu {display:flex;align-items:center;gap:12px;margin:0;min-width:0}
+  .fkp-workspace .fkp-workspace-mobile-menu select {flex:1;min-width:0;width:100%;max-width:100%;min-height:44px}
+  .fkp-workspace-local {flex-wrap:wrap;overflow:visible}
+  .fkp-workspace .fkp-workspace-local-button {white-space:normal;overflow-wrap:anywhere;max-width:100%}
   .fkp-workspace .fkp-workspace-nav-button {flex-shrink:0;min-height:44px}
-  .fkp-workspace-main {padding:24px 16px;border:0}
-  .fkp-workspace-top {margin-bottom:24px;padding-bottom:16px}
+  .fkp-workspace-main {padding:16px;border:0}
+  .fkp-workspace-top {margin-bottom:16px;padding-bottom:12px}
   .fkp-workspace .fkp-workspace-title {font-size:26px}
   .fkp-workspace .cbi-value,.fkp-workspace-modal .cbi-value {display:block;padding:12px 0}
   .fkp-workspace .cbi-value > label.cbi-value-title,.fkp-workspace-modal .cbi-value > label.cbi-value-title {display:block;width:100%;text-align:left;padding:0;margin:0 0 8px}

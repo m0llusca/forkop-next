@@ -7,6 +7,24 @@ const tick = async () => {
 };
 const button = (name: string) =>
   [...document.querySelectorAll('button')].find((b) => b.textContent === name)!;
+it('keeps update transport errors and retry in their own result without replacing comparison evidence', async () => {
+  document.body.append(
+    renderCompatibilityPanel(async (action) => {
+      if (action === 'status')
+        return { success: true, data: { sections: [{ name: 'main' }] } };
+      throw new Error('synthetic transport');
+    }),
+  );
+  await tick();
+  const [comparison, updates] = document.querySelectorAll('.fkp-next-result');
+  const previous = comparison.textContent;
+  const action = button('Проверить обновления 3x-ui и Xray');
+  action.click();
+  await tick();
+  expect(comparison.textContent).toBe(previous);
+  expect(updates.textContent).toMatch(/Нет связи.*Повторите/);
+  expect(action.disabled).toBe(false);
+});
 function setup() {
   const calls: Array<[string, Record<string, unknown>]> = [];
   document.body.append(

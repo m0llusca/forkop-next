@@ -1,5 +1,32 @@
 import { store } from '../services/store.service';
 import { isServiceTransitionStatus } from '../tabs/diagnostic/serviceTransition';
+import { enhanceForkopForms } from './formGuide';
+
+const pageHelp: Record<string, string> = {
+  next: '',
+  dashboard:
+    'Выберите удалённый сервер для каждого подключения. Проверка задержки и смена сервера выполняются отдельно.',
+  server:
+    'Настройте, как роутер будет принимать подключения других клиентов: протокол, доступ, защита и маршрут трафика.',
+  section:
+    'Определите, какой трафик направлять через подключение, пропускать напрямую или блокировать. Порядок правил задаёт приоритет.',
+  rule_tools:
+    'Добавьте правило на время или просмотрите рекомендации Smart Detect перед их применением.',
+  devices:
+    'Назначьте устройству маршрут или игровой пресет. Условия для отдельных сайтов и исключения находятся в правилах.',
+  diagnostic:
+    'Начните с диагностики: она проверит DNS, ядро и маршрутизацию. Журнал и управление сервисом доступны ниже.',
+  route_tools:
+    'Узнайте, какое правило выбирается для сайта, и отдельно проверьте его доступность.',
+  monitoring:
+    'Посмотрите текущие соединения, трафик и журнал работы. Данные обновляются, пока раздел открыт.',
+  settings:
+    'Настройте DNS, сетевые интерфейсы, доступ к контроллеру и расписание обновлений. Параметры системы собраны отдельно.',
+  updates:
+    'Проверьте версии и управляйте установленными компонентами. Наличие новой версии само по себе не подтверждает совместимость.',
+  advanced:
+    'Проверьте совместимость с 3x-ui и Xray, сравните профили, сохраните конфигурацию или восстановите её.',
+};
 
 const groups = [
   { id: 'home', label: 'Главная', pages: [['next', 'Подключение']] },
@@ -91,7 +118,11 @@ export function mountForkopWorkspace(root: HTMLElement): void {
   const brand = el('div', 'fkp-workspace-brand', 'Forkop');
   const primary = el('nav', 'fkp-workspace-primary');
   primary.setAttribute('aria-label', 'Разделы Forkop');
-  sidebar.append(brand, primary);
+  const mobileLabel = el('label', 'fkp-workspace-mobile-menu', 'Раздел');
+  const mobileMenu = el('select', '');
+  mobileMenu.setAttribute('aria-label', 'Раздел Forkop');
+  mobileLabel.append(mobileMenu);
+  sidebar.append(brand, mobileLabel, primary);
   const main = el('div', 'fkp-workspace-main');
   const top = el('div', 'fkp-workspace-top');
   const status = el('div', 'fkp-workspace-status');
@@ -122,18 +153,25 @@ export function mountForkopWorkspace(root: HTMLElement): void {
   }
   theme.value = previousTheme || 'auto';
   themeLabel.append(theme);
-  top.append(status, themeLabel);
+  top.append(status);
+  // Local preferences live outside native editable panes, so their input/change
+  // events cannot mark a UCI draft or block immediate route actions.
+  const preferences = el('section', 'fkp-workspace-preferences');
+  preferences.dataset.workspacePreferences = '';
+  preferences.append(el('h3', '', 'Предпочтения'), themeLabel);
   const heading = el('h2', 'fkp-workspace-title');
+  const description = el('p', 'fkp-workspace-description');
   const secondary = el('div', 'fkp-workspace-secondary');
   const content = el('div', 'fkp-workspace-content');
   content.append(...originalContent);
-  main.append(top, heading, secondary, content);
+  main.append(top, heading, description, secondary, preferences, content);
   root.append(sidebar, main);
 
   let disposed = false;
   let wasConnected = root.isConnected;
   let navigationSignature = '';
   const markedModals = new Set<HTMLElement>();
+  const modalContent = new WeakMap<HTMLElement, Element>();
   function surroundingTheme(): string {
     for (
       let parent: HTMLElement | null = root.parentElement || document.body;
@@ -181,6 +219,14 @@ export function mountForkopWorkspace(root: HTMLElement): void {
       }
       if (modal.dataset.theme !== root.dataset.theme)
         modal.dataset.theme = root.dataset.theme;
+      const content =
+        modal.querySelector(':scope > h4') || modal.firstElementChild;
+      const newContent = content != null && modalContent.get(modal) !== content;
+      enhanceForkopForms(modal);
+      if (newContent && content) {
+        modalContent.set(modal, content);
+        modal.scrollTop = 0;
+      }
     }
     for (const modal of markedModals)
       if (!modal.isConnected) markedModals.delete(modal);
@@ -247,10 +293,14 @@ export function mountForkopWorkspace(root: HTMLElement): void {
       menu!.querySelector<HTMLElement>('.cbi-tab:not(.cbi-tab-disabled)')
         ?.dataset.tab ||
       '';
+    setText(description, pageHelp[active] || '');
+    description.hidden = !description.textContent;
+    preferences.hidden = active !== 'settings';
     const signature = [...tabs.keys()].join(',');
     if (signature !== navigationSignature) {
       navigationSignature = signature;
       primary.replaceChildren();
+      mobileMenu.replaceChildren();
       secondary.replaceChildren();
       for (const group of groups) {
         const pages = group.pages.filter(([id]) => tabs.has(id));
@@ -259,6 +309,9 @@ export function mountForkopWorkspace(root: HTMLElement): void {
         button.type = 'button';
         button.dataset.workspaceSection = group.id;
         primary.append(button);
+        const option = el('option', '', group.label);
+        option.value = group.id;
+        mobileMenu.append(option);
         const local = el('nav', 'fkp-workspace-local');
         local.setAttribute('aria-label', `${group.label}: страницы`);
         local.dataset.workspaceGroup = group.id;
@@ -292,6 +345,20 @@ export function mountForkopWorkspace(root: HTMLElement): void {
           .join('; '),
         group.label,
       );
+      const mobileOption = [...mobileMenu.options].find(
+        (option) => option.value === group.id,
+      );
+      if (mobileOption) {
+        const count = invalidPages.reduce(
+          (total, page) => total + page.count,
+          0,
+        );
+        setText(
+          mobileOption,
+          count ? `${group.label} — ошибки: ${count}` : group.label,
+        );
+      }
+      if (current) mobileMenu.value = group.id;
       const local = secondary.querySelector<HTMLElement>(
         `[data-workspace-group="${group.id}"]`,
       );
@@ -359,11 +426,38 @@ export function mountForkopWorkspace(root: HTMLElement): void {
   }
   primary.addEventListener('click', navigate);
   secondary.addEventListener('click', navigate);
+  function navigateMobile() {
+    const group = groups.find((item) => item.id === mobileMenu.value);
+    const tabs = availableTabs();
+    const id = group?.pages.find(([page]) => tabs.has(page))?.[0];
+    if (id) tabs.get(id)?.click();
+    sync();
+  }
+  mobileMenu.addEventListener('change', navigateMobile);
   theme.addEventListener('change', applyTheme);
   const unsubscribeService = store.subscribe((_next, _previous, diff) => {
     if (diff.servicesInfoWidget) sync();
   });
   const observer = new MutationObserver((records) => {
+    if (
+      records.some((record) => {
+        const target =
+          record.target instanceof Element
+            ? record.target
+            : record.target.parentElement;
+        return (
+          target?.matches(
+            '.cbi-value,.cbi-input-invalid,[aria-invalid="true"]',
+          ) ||
+          [...record.addedNodes].some(
+            (node) =>
+              node instanceof Element &&
+              (node.matches('.cbi-value') || node.querySelector('.cbi-value')),
+          )
+        );
+      })
+    )
+      enhanceForkopForms(root);
     // Telemetry tables can replace hundreds of rows. Only native navigation,
     // pane replacement and overview evidence affect this shell.
     if (
@@ -397,6 +491,7 @@ export function mountForkopWorkspace(root: HTMLElement): void {
       'data-errors',
       'data-tooltip',
       'data-tooltip-style',
+      'aria-invalid',
     ],
   });
   const media = window.matchMedia?.('(prefers-color-scheme: dark)');
@@ -440,6 +535,7 @@ export function mountForkopWorkspace(root: HTMLElement): void {
     unsubscribeService();
     primary.removeEventListener('click', navigate);
     secondary.removeEventListener('click', navigate);
+    mobileMenu.removeEventListener('change', navigateMobile);
     theme.removeEventListener('change', applyTheme);
     media?.removeEventListener('change', applyTheme);
     for (const modal of markedModals) {
@@ -457,8 +553,14 @@ export function mountForkopWorkspace(root: HTMLElement): void {
     theme: () => theme.value,
     dispose,
   });
-  lifecycle.observe(document.body, { childList: true, subtree: true });
+  lifecycle.observe(document.body, {
+    childList: true,
+    subtree: true,
+    attributes: true,
+    attributeFilter: ['class', 'aria-invalid', 'hidden', 'style'],
+  });
   applyTheme();
+  enhanceForkopForms(root);
   markModals();
   sync();
 }

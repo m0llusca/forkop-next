@@ -10,6 +10,28 @@ afterEach(() => {
   document.body.replaceChildren();
   vi.restoreAllMocks();
 });
+it('puts the selected connection before a collapsed probe form and preserves its domain across disclosure', async () => {
+  const request = vi.fn(async () => ({ success: true, data: {} }));
+  const panel = renderNextPanel(request, undefined, { workspace: true });
+  document.body.append(panel);
+  const details = panel.querySelector<HTMLDetailsElement>('.fkp-next-probe');
+  expect(details?.tagName).toBe('DETAILS');
+  expect(details!.open).toBe(false);
+  const selected = panel.querySelector('.fkp-next-primary')!;
+  expect(
+    selected.compareDocumentPosition(details!) &
+      Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
+  const domain = details!.querySelector<HTMLInputElement>('input')!;
+  details!.open = true;
+  domain.value = 'example.org';
+  details!.open = false;
+  details!.open = true;
+  expect(domain.value).toBe('example.org');
+  await tick();
+  expect(request).not.toHaveBeenCalled();
+  expect(panel.querySelector('select')).toBeNull();
+});
 it('renders connection actions immediately and defers every advanced read until expanded', async () => {
   const request = vi.fn(async () => ({ success: true, data: { items: [] } }));
   const panel = renderNextPanel(request);
@@ -20,7 +42,8 @@ it('renders connection actions immediately and defers every advanced read until 
   expect(button(panel, 'Изменить сервер')).toBeDefined();
   expect(panel.textContent).toContain('Трафик пока недоступен');
   expect(request).not.toHaveBeenCalled();
-  const details = panel.querySelector('details')!;
+  const details =
+    panel.querySelector<HTMLDetailsElement>('.fkp-next-advanced')!;
   details.open = true;
   details.dispatchEvent(new Event('toggle'));
   await tick();
@@ -100,7 +123,7 @@ it('loads each advanced area only on first open and preserves profile review saf
     };
   });
   document.body.append(panel);
-  const outer = panel.querySelector('details')!;
+  const outer = panel.querySelector<HTMLDetailsElement>('.fkp-next-advanced')!;
   outer.open = true;
   outer.dispatchEvent(new Event('toggle'));
   await tick();
@@ -166,7 +189,8 @@ it('shows the main runtime state while advanced status remains unresolved', asyn
     readRuntime: async () => ({ running: true }),
   });
   document.body.append(panel);
-  const advanced = panel.querySelector('details')!;
+  const advanced =
+    panel.querySelector<HTMLDetailsElement>('.fkp-next-advanced')!;
   advanced.open = true;
   advanced.dispatchEvent(new Event('toggle'));
   await tick();

@@ -47,6 +47,12 @@ export {
 } from './forkop/workspace/tools';
 export { configureNamedSectionCreation } from './forkop/workspace/namedCreation';
 export {
+  getRuleActionLabel,
+  renderRuleIdentity,
+  renderRuleRoute,
+  configureRuleOrder,
+} from './forkop/workspace/rules';
+export {
   refreshRuntimeUiState,
   subscribeRuntimeUiState,
 } from './forkop/services/runtimeUiState.service';
@@ -54,3 +60,10 @@ export {
 export { registerConfigurationReload } from './forkop/next/configReload';
 
 export { getDashboardSections } from './forkop/methods/custom/getDashboardSections';
+export { renderExtendedPreview } from './forkop/next/extendedPreview';
+
+export {
+  navigateToRule,
+  configureRuleWorkflow,
+  renderQuickSite,
+} from './forkop/next/workflows';

@@ -2,6 +2,7 @@
 
 let fs = require("fs");
 let common = require("core.common");
+let preview_basis = require("singbox.preview_basis");
 let subscription_share_link = require("subscription.share_link");
 
 let as_string = common.as_string;
@@ -63,7 +64,7 @@ function parse_source_entry(entry) {
 }
 
 function file_first_line(path) {
-    let data = fs.readfile(path);
+    let data = preview_basis.read(path);
     if (data == null)
         return "";
 
@@ -316,7 +317,9 @@ function source_json_path(source_section) {
 }
 
 function read_source_outbounds(source_section) {
-    let subscription = object_or_empty(read_json_file(source_json_path(source_section)));
+    let raw = preview_basis.read(source_json_path(source_section));
+    let subscription = {};
+    try { subscription = object_or_empty(json(raw)); } catch (e) {}
     return array_or_empty(subscription.outbounds);
 }
 

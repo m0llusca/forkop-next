@@ -1,4 +1,5 @@
 import { onMount, preserveScrollForPage } from '../../../helpers';
+import { showComponentImpact } from './componentImpact';
 import { FORKOP_ACTION_PROVIDERS_AVAILABILITY_EVENT } from '../../../constants';
 import { normalizeCompiledVersion } from '../../../helpers/normalizeCompiledVersion';
 import { showToast } from '../../../helpers/showToast';
@@ -81,6 +82,10 @@ let componentActionStateUnsubscribe: (() => void) | null = null;
 let componentActionStateRefreshPromise: Promise<void> | null = null;
 const followedComponentJobs = new Set<string>();
 const handledComponentJobs = new Set<string>();
+const componentOutcomes = new Map<
+  Forkop.ComponentName,
+  { version: string; at: string; service: string }
+>();
 
 if (typeof window !== 'undefined') {
   window.addEventListener('pagehide', () => {
@@ -465,6 +470,29 @@ async function applyCompletedComponentAction({
 
   patchSystemInfoAfterMutation(result);
   setActionLoading(key, false);
+  const outcome = {
+    version:
+      result.action === 'remove'
+        ? 'компонент удалён'
+        : result.current_version || result.latest_version || 'не подтверждено',
+    at: new Date().toLocaleString(),
+    service: 'не подтверждено',
+  };
+  componentOutcomes.set(result.component, outcome);
+  renderUpdatesComponents();
+  void refreshRuntimeUiState({ force: true })
+    .then((snapshot) => {
+      if (componentOutcomes.get(result.component) !== outcome) return;
+      const running = snapshot?.service?.forkop?.running;
+      outcome.service =
+        running === 1
+          ? 'запущена'
+          : running === 0
+            ? 'остановлена'
+            : 'не подтверждено';
+      if (updatesMounted) renderUpdatesComponents();
+    })
+    .catch(() => undefined);
 
   if (result.component === 'forkop' && result.action === 'install') {
     if (notify && result.message) {
@@ -660,6 +688,28 @@ function stopComponentActionStateWatcher() {
 
   componentActionStateUnsubscribe();
   componentActionStateUnsubscribe = null;
+}
+
+function previewComponentAction(button: ComponentActionButton) {
+  if (button.action === 'check_update')
+    return void handleComponentAction(button);
+  const card = getComponentCards().find(
+    (item) => item.component === button.component,
+  );
+  if (!card) return;
+  showComponentImpact({
+    component: button.component,
+    action: button.action,
+    currentVersion: card.version,
+    // The sing-box UI cache has no variant/source binding. It cannot name this target.
+    latestVersion:
+      button.component === 'sing_box' ? undefined : card.latestVersion,
+    available: () =>
+      !isAnyActionLoading() &&
+      !isServiceRuntimeActionLoading() &&
+      !isSystemInfoLoading(),
+    proceed: () => void handleComponentAction(button),
+  });
 }
 
 async function handleComponentAction(button: ComponentActionButton) {
@@ -984,6 +1034,15 @@ function renderComponentCard(card: ComponentCard) {
 
   // 2. Details (renders status messages for check results)
   const detailsChildren: Node[] = [];
+  const outcome = componentOutcomes.get(card.component);
+  if (outcome)
+    detailsChildren.push(
+      E(
+        'p',
+        { role: 'status' },
+        `Применённая версия: ${outcome.version} · ${outcome.at}. Состояние службы: ${outcome.service}. Сетевой результат: не проверялся — запустите отдельную проверку в диагностике.`,
+      ),
+    );
   const checkResult = getVisibleCheckResult(card.component);
 
   if (checkResult && checkResult.status) {
@@ -1106,7 +1165,7 @@ function renderComponentCard(card: ComponentCard) {
         systemInfoLoading ||
         serviceRuntimeActionLoading ||
         (anyActionLoading && !loading),
-      onClick: () => void handleComponentAction(action),
+      onClick: () => previewComponentAction(action),
     });
   });
 
@@ -1122,7 +1181,7 @@ function renderComponentCard(card: ComponentCard) {
         systemInfoLoading ||
         serviceRuntimeActionLoading ||
         (anyActionLoading && !loading),
-      onClick: () => void handleComponentAction(action),
+      onClick: () => previewComponentAction(action),
     });
   });
 
@@ -1147,7 +1206,7 @@ function renderComponentCard(card: ComponentCard) {
           systemInfoLoading ||
           serviceRuntimeActionLoading ||
           (anyActionLoading && !loading),
-        onClick: () => void handleComponentAction(action),
+        onClick: () => previewComponentAction(action),
       });
     });
 

@@ -1,4 +1,6 @@
 import { onMount, preserveScrollForPage } from '../../../helpers';
+import { renderSymptomGuide } from './symptomGuide';
+import { diagnosticRead } from './symptomRead';
 import { runDnsCheck } from './checks/runDnsCheck';
 import { runSingBoxCheck } from './checks/runSingBoxCheck';
 import { runInboundsCheck } from './checks/runInboundsCheck';
@@ -717,7 +719,7 @@ async function handleViewLogs() {
         _('View logs'),
         renderModal(viewLogs.data as string, 'view_logs', {
           getText: getLatestLogs,
-          refreshMs: 250,
+          refreshMs: 3000,
           initialAutoRefresh: true,
           showAutoRefreshToggle: true,
           startAtEnd: true,
@@ -743,14 +745,10 @@ async function handleShowSingBoxConfig() {
       const rawSingBoxConfigText = stringifySingBoxConfig(
         showSingBoxConfig.data,
       );
-      const maskedSingBoxConfigText = formatMaskedSingBoxConfig(
-        showSingBoxConfig.data,
-      );
-
       ui.showModal(
         _('Show sing-box config'),
         renderModal(rawSingBoxConfigText, 'show_sing_box_config', {
-          maskText: () => maskedSingBoxConfigText,
+          maskText: formatMaskedSingBoxConfig,
           initialAutoRefresh: false,
           showMaskValuesToggle: true,
         }),
@@ -1290,8 +1288,23 @@ export async function initController(): Promise<void> {
   }
 
   diagnosticControllerInitialized = true;
+  document.addEventListener(
+    'forkop:diagnostic-logs',
+    () => void handleViewLogs(),
+  );
 
   onMount('diagnostic-status').then(() => {
+    const host = document.getElementById('diagnostic-status');
+    if (host && !document.querySelector('[data-native-symptom-guide]')) {
+      const guide = renderSymptomGuide(
+        diagnosticRead,
+        () => void handleViewLogs(),
+      );
+      guide.dataset.nativeSymptomGuide = '';
+      (host.querySelector('.fkp_diagnostic-page__left-bar') || host).prepend(
+        guide,
+      );
+    }
     logger.debug('[DIAGNOSTIC]', 'initController', 'onMount');
     registerLifecycleListeners();
     if (

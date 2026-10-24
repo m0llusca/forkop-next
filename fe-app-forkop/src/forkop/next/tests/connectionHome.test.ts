@@ -141,6 +141,33 @@ it('distinguishes native main from additional groups including unselected routes
   expect(panel.querySelector('header')).toBeNull();
 });
 
+it('names the primary group once when its label already appears in the heading, retaining the selected node and other groups', async () => {
+  const panel = renderNextPanel(
+    undefined,
+    async () => ({
+      success: true,
+      data: [
+        {
+          ...group('main', 'Primary server'),
+          displayName: 'Основное подключение',
+        },
+        { ...group('games', 'Game server'), displayName: 'Игры' },
+      ],
+    }),
+    { workspace: true },
+  );
+  document.body.append(panel);
+  await tick();
+  const primary = panel.querySelector('.fkp-next-primary')!;
+  expect(primary.textContent!.match(/Основное подключение/g)).toHaveLength(1);
+  expect(primary.querySelector('.fkp-next-selected-name')!.textContent).toBe(
+    'Primary server',
+  );
+  expect(panel.querySelector('.fkp-next-routes')!.textContent).toContain(
+    'Игры: Game server',
+  );
+});
+
 it('recognizes the first native Add connection with its real section_1 identity', async () => {
   const panel = renderNextPanel(
     undefined,
@@ -224,8 +251,10 @@ it('keeps an unselected first connection truthful instead of promoting a selecte
 it('omits duplicate workspace theme and advanced controls but retains standalone disclosure', () => {
   const workspace = renderNextPanel(undefined, undefined, { workspace: true });
   expect(workspace.querySelector('select')).toBeNull();
-  expect(workspace.querySelector('details')).toBeNull();
-  expect(renderNextPanel().querySelector('details>summary')).not.toBeNull();
+  expect(workspace.querySelector('.fkp-next-advanced')).toBeNull();
+  expect(
+    renderNextPanel().querySelector('.fkp-next-advanced>summary'),
+  ).not.toBeNull();
 });
 
 it('names the captured probe target while pending and after the field changes', async () => {

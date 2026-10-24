@@ -14,6 +14,13 @@ const match = source.match(
 assert(match, 'configureSectionSection not found');
 
 const cleanupCalls = [];
+let workflowSection;
+let orderNode;
+let moveRule;
+const main = {
+  configureRuleWorkflow(section) { workflowSection = section; },
+  configureRuleOrder(node, move) { orderNode = node; moveRule = move; },
+};
 function setActionProvidersAvailabilityLoader() {}
 function loadSectionTableOptions() {}
 function cleanupRemovedChildItems(...args) {
@@ -25,7 +32,11 @@ const event = {};
 const result = {};
 let parentArgs;
 let parentThis;
+const rendered = { querySelectorAll: () => [], addEventListener() {} };
+const moveCalls = [];
 const sectionRef = {
+  map: { config: 'forkop', data: { move(...args) { moveCalls.push(args); return true; } } },
+  renderContents() { return rendered; },
   handleRemove(...args) {
     parentArgs = args;
     parentThis = this;
@@ -33,6 +44,11 @@ const sectionRef = {
   },
 };
 configureSectionSection(sectionRef);
+assert.strictEqual(workflowSection, sectionRef);
+assert.strictEqual(sectionRef.renderContents(), rendered);
+assert.strictEqual(orderNode, rendered);
+assert.strictEqual(moveRule('first', 'second', true), true);
+assert.deepStrictEqual(moveCalls, [['forkop', 'first', 'second', true]]);
 
 assert.strictEqual(sectionRef.handleRemove('parent', event), result);
 assert.deepStrictEqual(cleanupCalls, [
