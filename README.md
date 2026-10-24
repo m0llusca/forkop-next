@@ -1,9 +1,9 @@
 # Forkop Next
 
 Форк [Forkop](https://github.com/ushan0v/forkop) для OpenWrt.
-Готовится выпуск **1.2.0**; итоговая приёмка и публикация пакетов ещё впереди.
+Версия **1.2.0** объединяет улучшения интерфейса, диагностики и работы с правилами.
 [Изменения 1.2.0](docs/releases/1.2.0.md) · [Документация](docs/README.md)
-· [Опубликованный релиз 1.1.4](https://github.com/m0llusca/forkop-next/releases/tag/1.1.4).
+· [История 1.1.4](https://github.com/m0llusca/forkop-next/releases/tag/1.1.4).
 Сохраняются конфигурация `/etc/config/forkop`, служба и страницы LuCI.
 
 ## Возможности

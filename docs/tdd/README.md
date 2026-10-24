@@ -1,10 +1,15 @@
 # Verification scope
 
-The prepared 1.2.0 frontend gate passed 912 tests in 89 files, full source
+The 1.2.0 frontend gate passed 913 tests in 90 files, full source
 types/lint/format checks, generated LuCI execution smoke and native syntax.
 [Task 7](twenty-ux-task-7.md) records exact source/bundle identities and the
-F01–F20 matrix. Final integrated backend/package CI, whole-branch review,
-remaining browser acceptance and device installation are separate pending gates.
+F01–F20 matrix. The full Linux backend release gate passed, including 16 Extended
+preview and 4 component-impact tests. IPK/APK generation passed in run
+`40142529145`, job `121017552548`, for the exact runtime candidate recorded in
+Task 7; PR publication was skipped. Published assets require the final
+release-tree workflow.
+Native browser scope and unmeasured zoom/screen-reader/hardware behavior remain
+explicit. Device installation is a separate acceptance step.
 
 Forkop Next 1.1.4 has behavioral regression coverage for configuration transactions,
 recovery, routing explanations, TLS intent, network guards, core updates and UI.
