@@ -108,3 +108,62 @@ TypeScript, ESLint with zero warnings, targeted Prettier, whitespace checks,
 bundle build and native LuCI bundle smoke check passed. Latest local bundle:
 **543.72 KB**, bundler build phase **45 ms**. Generated `main.js` remains
 uncommitted for the controller's consolidated build. No browser/router action.
+
+## Post-review CI localization parity gate
+
+CI run `40092185207`, job `120866949948`, failed the byte comparison in
+`tests/luci_localization.sh`. The source catalog was an exact prefix of the
+packaged catalog; the only additional package bytes were the four translations
+introduced by `e918389` (Name, Connection, Bypass, Block), totaling 188 bytes.
+
+RED: local byte comparison exited 1 and printed:
+
+```text
+source 88598 63507bd2a336dd86bd102187a090137026b677a81697d554864a7151a7986674
+package 88786 4dccdf49cf53e6c9c616db92445373de7bc2bb2815d7a0c6606d7bcb8cfd5ea6
+source is exact package prefix: true
+FAIL: source and packaged Russian catalogs must stay synchronized
+```
+
+Copied exactly that verified four-entry suffix into the source catalog, retaining
+package ordering, encoding and newline bytes. No packaged labels or test logic
+changed. Frontend checks were not rerun for this catalog-only fix.
+
+GREEN: Bash is unavailable locally; ran all assertions from the existing gate
+through this exact Node equivalent from the repository root (PowerShell):
+
+```powershell
+@'
+import fs from 'node:fs';
+import crypto from 'node:crypto';
+import assert from 'node:assert/strict';
+const read = (path) => fs.readFileSync(path, 'utf8');
+const section = read('luci-app-forkop/htdocs/luci-static/resources/view/forkop/section.js');
+const paths = ['fe-app-forkop/locales/forkop.ru.po', 'luci-app-forkop/po/ru/forkop.po'];
+const texts = [section, ...paths.map(read), read('fe-app-forkop/locales/forkop.pot'), read('luci-app-forkop/po/templates/forkop.pot'), read('fe-app-forkop/locales/calls.json')];
+assert(!section.includes('_("Dismiss")'));
+assert(section.includes('_("Close")'));
+assert(texts.every((text) => !text.includes('http(s)://, hy2/hysteria2:// links')));
+assert(section.includes('socks4/5://, hy2/hysteria2:// links'));
+for (const path of paths) {
+  const po = read(path);
+  assert(/^msgid "Close"\r?\nmsgstr "Закрыть"$/m.test(po));
+  assert(!/^msgid "Dismiss"\r?\nmsgstr "Отмена"$/m.test(po));
+  assert(/^msgid "Cannot save settings"\r?\nmsgstr "Не удалось сохранить настройки"$/m.test(po));
+}
+const source = fs.readFileSync(paths[0]);
+const packaged = fs.readFileSync(paths[1]);
+assert(source.equals(packaged), 'source and packaged Russian catalogs must stay synchronized');
+console.log('LuCI localization checks passed (Node equivalent of tests/luci_localization.sh)');
+console.log('Catalog bytes:', source.length);
+console.log('Source and package SHA256:', crypto.createHash('sha256').update(source).digest('hex'));
+'@ | node --input-type=module
+```
+
+Exit 0; output:
+
+```text
+LuCI localization checks passed (Node equivalent of tests/luci_localization.sh)
+Catalog bytes: 88786
+Source and package SHA256: 4dccdf49cf53e6c9c616db92445373de7bc2bb2815d7a0c6606d7bcb8cfd5ea6
+```
