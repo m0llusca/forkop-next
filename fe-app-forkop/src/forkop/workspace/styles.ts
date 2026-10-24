@@ -36,6 +36,8 @@ export const workspaceStyles = `
 .fkp-workspace .fkp-workspace-nav-button,.fkp-workspace .fkp-workspace-local-button {border:0;background:transparent;box-shadow:none;white-space:nowrap;cursor:pointer;font:inherit;font-weight:550;min-height:44px;padding:10px 12px;text-align:left;border-radius:6px;color:var(--next-muted);margin:0}
 .fkp-workspace .fkp-workspace-local-button {font-size:13px}
 .fkp-workspace .fkp-workspace-nav-button[aria-current=page],.fkp-workspace .fkp-workspace-local-button[aria-current=page] {background:var(--fkp-selected);color:var(--next-accent);font-weight:650}
+.fkp-workspace .fkp-workspace-nav-button[data-errors],.fkp-workspace .fkp-workspace-local-button[data-errors] {display:flex;align-items:center;gap:8px;color:var(--fkp-danger)}
+.fkp-workspace .fkp-workspace-nav-button[data-errors]::after,.fkp-workspace .fkp-workspace-local-button[data-errors]::after {content:attr(data-errors);display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;margin-left:auto;padding:0 4px;border:1px solid currentColor;border-radius:4px;font-size:12px;font-variant-numeric:tabular-nums;line-height:1}
 .fkp-workspace .fkp-workspace-native-tabs {display:none!important}
 .fkp-workspace-content {min-width:0}
 .fkp-workspace-content > h2,.fkp-workspace-content > .cbi-map-descr {display:none}

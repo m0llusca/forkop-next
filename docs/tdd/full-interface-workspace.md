@@ -68,3 +68,43 @@ unrelated LuCI dialogs are untouched.
 The controller owns the final desktop/mobile visual inspection using the local
 native LuCI preview. This task's passing DOM/build checks do not certify live
 router deployment, latency, data correctness or all production modal variants.
+
+## Review fix round 1 — map lifecycle and invalid-tab recovery
+
+Accepted findings: the initial adapter was lost when native `renderContents()`
+cleared the same root after save/reset, and hidden original tabs carried validation
+feedback that the replacement navigation did not mirror.
+
+Replaced the native-shell test's hand-built map rendering with focused captured
+LuCI `Map.renderContents`, `render`, `save`, `reset`, `ui.tabs.initTabGroup`,
+`updateTabs`, `switchTab` and GridSection `handleModalSave` method bodies. The
+committed fixture contains source URLs, snapshot SHA256 values and the upstream
+Apache license. Tests use only that fixture; they do not read local preview files.
+Only DOM/UCI boundaries, child-section construction and session selection storage
+are supplied by the harness. In particular, the genuine native
+`dom.content(mapEl, null)` path clears the same connected root on each rebuild.
+
+RED: the native shell test run reported **4 failures / 14**: save, reset and
+GridSection parent reset each left zero workspace navigations; the invalid-page
+case had no visible group error count. The existing ten tests remained green
+after correcting their obsolete assumption that every inactive pane has a literal
+`false` attribute.
+
+GREEN: **27 passed** across native shell (14) and workspace (13). The tests verify
+one shell after each native rebuild; new native anchor/pane activation; correct
+computed pane visibility; original native field reconstruction; retired controls
+and store listeners no longer handling events; intact mounting remains idempotent.
+Validation coverage invokes native `updateTabs` on invalid fields in inactive
+panes, checks summed group counts, destination count/tooltip/accessibility, opens
+the invalid page with its unsaved input intact, then verifies feedback clears.
+
+The adapter now runs after every completed native map render and disposes the
+previous binding before attaching to reconstructed native children. Intact mounts
+are retained; selected workspace appearance survives a rebuild. Native validation
+remains authoritative; visible buttons mirror its counts and tooltips.
+
+Final full suite: **657 passed in 62 files**, zero failures (4.35 seconds).
+TypeScript, ESLint with zero warnings, targeted Prettier, whitespace checks,
+bundle build and native LuCI bundle smoke check passed. Latest local bundle:
+**543.72 KB**, bundler build phase **45 ms**. Generated `main.js` remains
+uncommitted for the controller's consolidated build. No browser/router action.

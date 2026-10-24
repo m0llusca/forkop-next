@@ -405,6 +405,15 @@ const EntryPoint = {
       _("Configuration for Forkop service"),
     );
     forkopMap.tabbed = true;
+    const originalRenderContents = forkopMap.renderContents;
+    forkopMap.renderContents = function () {
+      return Promise.resolve(
+        originalRenderContents.apply(this, arguments),
+      ).then(function (rendered) {
+        main.mountForkopWorkspace(rendered);
+        return rendered;
+      });
+    };
     const originalHandleSaveApply = forkopMap.handleSaveApply;
     forkopMap.handleSaveApply = function (ev, mode) {
       const refreshUiState = function () {
@@ -606,7 +615,6 @@ const EntryPoint = {
     void loadUiCapabilities().catch(showCapabilityError);
 
     const rendered = await forkopMap.render();
-    main.mountForkopWorkspace(rendered);
     mapRendered = true;
     if (uiCapabilities.loaded)
       void initializeSettings().catch(showCapabilityError);

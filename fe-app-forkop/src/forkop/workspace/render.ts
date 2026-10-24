@@ -43,7 +43,16 @@ const groups = [
     ],
   },
 ];
-const mounted = new WeakSet<HTMLElement>();
+interface WorkspaceMount {
+  menu: HTMLElement;
+  panes: HTMLElement;
+  main: HTMLElement;
+  content: HTMLElement;
+  disposed: () => boolean;
+  theme: () => string;
+  dispose: () => void;
+}
+const mounted = new WeakMap<HTMLElement, WorkspaceMount>();
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
   className: string,
@@ -60,11 +69,21 @@ function setText(node: HTMLElement, text: string) {
 
 /** Adapt the native map in place: LuCI owns fields, parsing and tab activation. */
 export function mountForkopWorkspace(root: HTMLElement): void {
-  if (mounted.has(root)) return;
+  const previous = mounted.get(root);
+  const intact =
+    previous &&
+    root.contains(previous.menu) &&
+    root.contains(previous.panes) &&
+    root.contains(previous.main);
+  if (intact && !previous.disposed()) return;
+  const previousTheme = previous?.theme();
+  previous?.dispose();
+  // A detached and later reused map may still have its original shell. Unwrap
+  // only that intact instance; native renderContents() already clears its root.
+  if (intact) root.replaceChildren(...previous.content.childNodes);
   const menu = root.querySelector<HTMLElement>('.cbi-tabmenu');
   const panes = root.querySelector<HTMLElement>('.cbi-map-tabbed');
   if (!menu || !panes) return;
-  mounted.add(root);
   root.classList.add('fkp-workspace');
   menu.classList.add('fkp-workspace-native-tabs');
   const originalContent = [...root.childNodes];
@@ -101,6 +120,7 @@ export function mountForkopWorkspace(root: HTMLElement): void {
     option.value = value;
     theme.append(option);
   }
+  theme.value = previousTheme || 'auto';
   themeLabel.append(theme);
   top.append(status, themeLabel);
   const heading = el('h2', 'fkp-workspace-title');
@@ -191,6 +211,36 @@ export function mountForkopWorkspace(root: HTMLElement): void {
   function sync() {
     if (disposed) return;
     const tabs = availableTabs();
+    const errors = (id: string) => {
+      const native = tabs.get(id)?.closest<HTMLElement>('[data-tab]');
+      const count = Number(native?.dataset.errors || 0);
+      return {
+        count: Number.isFinite(count) && count > 0 ? Math.trunc(count) : 0,
+        tooltip: native?.dataset.tooltip || '',
+      };
+    };
+    const markErrors = (
+      control: Element | null,
+      count: number,
+      description: string,
+      label: string,
+    ) => {
+      if (!control) return;
+      if (count) {
+        control.setAttribute('data-errors', String(count));
+        control.setAttribute('data-tooltip', description);
+        control.setAttribute('data-tooltip-style', 'error');
+        control.setAttribute('aria-label', `${label}: ${description}`);
+      } else {
+        for (const attr of [
+          'data-errors',
+          'data-tooltip',
+          'data-tooltip-style',
+          'aria-label',
+        ])
+          control.removeAttribute(attr);
+      }
+    };
     const active =
       panes!.querySelector<HTMLElement>(':scope > [data-tab-active="true"]')
         ?.dataset.tab ||
@@ -228,6 +278,20 @@ export function mountForkopWorkspace(root: HTMLElement): void {
       );
       if (current) button?.setAttribute('aria-current', 'page');
       else button?.removeAttribute('aria-current');
+      const invalidPages = group.pages
+        .map(([id, label]) => ({ ...errors(id), label }))
+        .filter((page) => page.count);
+      markErrors(
+        button,
+        invalidPages.reduce((total, page) => total + page.count, 0),
+        invalidPages
+          .map(
+            (page) =>
+              `${page.label}: ${page.tooltip || `${page.count} — ошибки в полях`}`,
+          )
+          .join('; '),
+        group.label,
+      );
       const local = secondary.querySelector<HTMLElement>(
         `[data-workspace-group="${group.id}"]`,
       );
@@ -243,6 +307,13 @@ export function mountForkopWorkspace(root: HTMLElement): void {
       if (tab.dataset.workspaceTab === active)
         tab.setAttribute('aria-current', 'page');
       else tab.removeAttribute('aria-current');
+      const error = errors(tab.dataset.workspaceTab!);
+      markErrors(
+        tab,
+        error.count,
+        error.tooltip || `${error.count} — ошибки в полях`,
+        tab.textContent || '',
+      );
     }
     const overview = root.querySelector('.fkp-next-overview');
     const sharedService = store.get().servicesInfoWidget;
@@ -323,6 +394,9 @@ export function mountForkopWorkspace(root: HTMLElement): void {
       'style',
       'class',
       'aria-hidden',
+      'data-errors',
+      'data-tooltip',
+      'data-tooltip-style',
     ],
   });
   const media = window.matchMedia?.('(prefers-color-scheme: dark)');
@@ -336,20 +410,7 @@ export function mountForkopWorkspace(root: HTMLElement): void {
   const lifecycle = new MutationObserver((records) => {
     if (root.isConnected) wasConnected = true;
     if (wasConnected && !root.isConnected) {
-      disposed = true;
-      observer.disconnect();
-      lifecycle.disconnect();
-      themeObserver.disconnect();
-      unsubscribeService();
-      primary.removeEventListener('click', navigate);
-      secondary.removeEventListener('click', navigate);
-      theme.removeEventListener('change', applyTheme);
-      media?.removeEventListener('change', applyTheme);
-      for (const modal of markedModals) {
-        modal.classList.remove('fkp-workspace-modal');
-        delete modal.dataset.theme;
-      }
-      markedModals.clear();
+      dispose();
       return;
     }
     if (
@@ -369,6 +430,32 @@ export function mountForkopWorkspace(root: HTMLElement): void {
       })
     )
       markModals();
+  });
+  function dispose() {
+    if (disposed) return;
+    disposed = true;
+    observer.disconnect();
+    lifecycle.disconnect();
+    themeObserver.disconnect();
+    unsubscribeService();
+    primary.removeEventListener('click', navigate);
+    secondary.removeEventListener('click', navigate);
+    theme.removeEventListener('change', applyTheme);
+    media?.removeEventListener('change', applyTheme);
+    for (const modal of markedModals) {
+      modal.classList.remove('fkp-workspace-modal');
+      delete modal.dataset.theme;
+    }
+    markedModals.clear();
+  }
+  mounted.set(root, {
+    menu,
+    panes,
+    main,
+    content,
+    disposed: () => disposed,
+    theme: () => theme.value,
+    dispose,
   });
   lifecycle.observe(document.body, { childList: true, subtree: true });
   applyTheme();
