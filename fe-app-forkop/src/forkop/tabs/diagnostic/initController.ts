@@ -717,7 +717,7 @@ async function handleViewLogs() {
         _('View logs'),
         renderModal(viewLogs.data as string, 'view_logs', {
           getText: getLatestLogs,
-          refreshMs: 250,
+          refreshMs: 3000,
           initialAutoRefresh: true,
           showAutoRefreshToggle: true,
           startAtEnd: true,
@@ -743,14 +743,10 @@ async function handleShowSingBoxConfig() {
       const rawSingBoxConfigText = stringifySingBoxConfig(
         showSingBoxConfig.data,
       );
-      const maskedSingBoxConfigText = formatMaskedSingBoxConfig(
-        showSingBoxConfig.data,
-      );
-
       ui.showModal(
         _('Show sing-box config'),
         renderModal(rawSingBoxConfigText, 'show_sing_box_config', {
-          maskText: () => maskedSingBoxConfigText,
+          maskText: formatMaskedSingBoxConfig,
           initialAutoRefresh: false,
           showMaskValuesToggle: true,
         }),

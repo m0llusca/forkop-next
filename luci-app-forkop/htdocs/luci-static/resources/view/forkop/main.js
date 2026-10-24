@@ -2603,6 +2603,9 @@ function showToast(message, type, duration = 3e3) {
   }
   const toast = document.createElement("div");
   toast.className = `toast toast-${type}`;
+  toast.setAttribute("role", type === "error" ? "alert" : "status");
+  toast.setAttribute("aria-live", type === "error" ? "assertive" : "polite");
+  toast.setAttribute("aria-atomic", "true");
   toast.textContent = message;
   container.appendChild(toast);
   setTimeout(() => toast.classList.add("visible"), 100);
@@ -2613,19 +2616,68 @@ function showToast(message, type, duration = 3e3) {
 }
 
 // src/helpers/copyToClipboard.ts
-function copyToClipboard(text) {
-  const textarea = document.createElement("textarea");
-  textarea.value = text;
-  document.body.appendChild(textarea);
-  textarea.select();
+async function copyToClipboard(text, feedback) {
+  const previousFocus = document.activeElement;
+  const selection = window.getSelection();
+  const ranges = selection ? Array.from(
+    { length: selection.rangeCount },
+    (_2, i) => selection.getRangeAt(i).cloneRange()
+  ) : [];
+  let textarea;
+  let usedSelection = false;
+  const manualText = () => {
+    textarea ?? (textarea = document.createElement("textarea"));
+    textarea.value = text;
+    textarea.readOnly = true;
+    textarea.setAttribute("aria-label", _("Text to copy manually"));
+    return textarea;
+  };
+  const announce = (message, failed2) => {
+    if (feedback) {
+      feedback.setAttribute("role", failed2 ? "alert" : "status");
+      feedback.setAttribute("aria-live", failed2 ? "assertive" : "polite");
+      feedback.textContent = message;
+    } else showToast(message, failed2 ? "error" : "success");
+  };
   try {
-    document.execCommand("copy");
-    showToast(_("Copied"), "success");
-  } catch (_err) {
-    showToast(_("Failed to copy!"), "error");
-    console.error("copyToClipboard - e", _err);
+    feedback?.replaceChildren();
+    if (navigator.clipboard?.writeText)
+      await navigator.clipboard.writeText(text);
+    else {
+      document.body.append(manualText());
+      usedSelection = true;
+      textarea.select();
+      if (!document.execCommand("copy")) throw new Error("Clipboard refused");
+    }
+    textarea?.remove();
+    announce(_("Copied"), false);
+    return true;
+  } catch {
+    announce(
+      _("Failed to copy! Select the text and copy manually, or retry."),
+      true
+    );
+    const host = feedback ?? document.createElement("div");
+    if (!feedback) {
+      host.className = "fkp-copy-feedback";
+      (previousFocus?.parentElement ?? document.body).append(host);
+    }
+    const select2 = document.createElement("button");
+    select2.type = "button";
+    select2.textContent = _("Select text");
+    select2.onclick = () => {
+      textarea.focus();
+      textarea.select();
+    };
+    host.append(manualText(), select2);
+    return false;
+  } finally {
+    if (usedSelection) previousFocus?.focus({ preventScroll: true });
+    if (usedSelection && selection && ranges.length) {
+      selection.removeAllRanges();
+      for (const range of ranges) selection.addRange(range);
+    }
   }
-  document.body.removeChild(textarea);
 }
 
 // src/forkop/methods/custom/getConfigSections.ts
@@ -9003,256 +9055,284 @@ function renderButton({
 function renderModal(text, name, options) {
   let rawText = text ?? "";
   let currentText = "";
+  let exportReady = false;
   let refreshInFlight = false;
-  let pendingRefresh = false;
+  let copyInFlight = false;
   let pendingForcedRefresh = false;
-  let refreshSessionId = 0;
+  let pendingResume = false;
+  let session = 0;
+  let mounted2 = false;
+  let closed = false;
   let timer;
-  let observer;
   let autoRefreshEnabled = options?.initialAutoRefresh ?? Boolean(options?.getText);
   let maskValuesEnabled = options?.initialMaskValues ?? true;
   let shouldScrollToBottomOnMount = Boolean(options?.startAtEnd);
-  let autoRefreshInput;
-  let maskValuesInput;
-  const getDisplayText = (value) => {
-    if (maskValuesEnabled && options?.maskText) {
-      return options.maskText(value);
-    }
-    return value;
-  };
+  let lastSuccess = (/* @__PURE__ */ new Date()).toLocaleString();
+  const baseDelay = Math.max(1e3, options?.refreshMs ?? 3e3);
+  let delay = baseDelay;
   const codeEl = E("code", {}, "");
+  codeEl.tabIndex = 0;
   const contentEl = E(
     "pre",
     { class: "fkp-partial-modal__content" },
     codeEl
   );
-  const stopRefreshTimer = () => {
-    if (timer) {
-      clearInterval(timer);
-      timer = void 0;
+  const maskStatus = E("p", { role: "status" }, "");
+  const refreshStatus = E("p", { role: "status" }, "");
+  const copyStatus = E("div", { role: "status" }, "");
+  for (const status of [maskStatus, refreshStatus, copyStatus])
+    status.setAttribute("aria-live", "polite");
+  const announce = (node, message, failed2 = false) => {
+    node.setAttribute("role", failed2 ? "alert" : "status");
+    node.setAttribute("aria-live", failed2 ? "assertive" : "polite");
+    node.textContent = message;
+  };
+  const updateText = (value) => {
+    const stick = shouldScrollToBottomOnMount || contentEl.scrollTop + contentEl.clientHeight >= contentEl.scrollHeight - 16;
+    if (value !== currentText) {
+      currentText = value;
+      codeEl.textContent = value;
     }
-  };
-  const destroyLiveRefresh = () => {
-    refreshSessionId += 1;
-    pendingRefresh = false;
-    pendingForcedRefresh = false;
-    stopRefreshTimer();
-    observer?.disconnect();
-    observer = void 0;
-  };
-  const scrollToBottom = () => {
-    contentEl.scrollTop = contentEl.scrollHeight;
-  };
-  const scheduleInitialScrollToBottom = () => {
-    if (!shouldScrollToBottomOnMount || !body.isConnected) {
-      return;
-    }
-    shouldScrollToBottomOnMount = false;
-    requestAnimationFrame(() => {
-      scrollToBottom();
-    });
-  };
-  const updateText = (nextText) => {
-    const normalizedText = nextText ?? "";
-    const shouldStickToBottom = shouldScrollToBottomOnMount || contentEl.scrollTop + contentEl.clientHeight >= contentEl.scrollHeight - 16;
-    if (normalizedText === currentText) {
-      if (shouldStickToBottom) {
-        requestAnimationFrame(() => {
-          scrollToBottom();
-        });
-      }
-      return;
-    }
-    currentText = normalizedText;
-    codeEl.textContent = currentText;
-    if (shouldStickToBottom) {
+    if (stick)
       requestAnimationFrame(() => {
-        scrollToBottom();
+        contentEl.scrollTop = contentEl.scrollHeight;
       });
-    }
   };
-  const updateDisplayedTextFromRaw = () => {
-    updateText(getDisplayText(rawText));
+  const updateDisplayedText = () => {
+    copyStatus.replaceChildren();
+    try {
+      const value = maskValuesEnabled && options?.maskText ? options.maskText(rawText) : rawText;
+      if (typeof value !== "string") throw new Error("Missing masked text");
+      updateText(value);
+      exportReady = true;
+      announce(
+        maskStatus,
+        options?.showMaskValuesToggle ? maskValuesEnabled ? _("Known sensitive values hidden. Review before sharing.") : _(
+          "Raw view \u2014 may contain passwords and other secrets. Copy and download include them."
+        ) : ""
+      );
+    } catch {
+      exportReady = false;
+      updateText("");
+      announce(
+        maskStatus,
+        _(
+          "Masking failed. Safe copy and download are unavailable. Raw view may contain secrets."
+        ),
+        true
+      );
+    }
+    copyButton.disabled = !exportReady;
+    downloadButton.disabled = !exportReady;
+  };
+  const nativeModalClosed = () => body.closest("#modal_overlay") !== null && !document.body.classList.contains("modal-overlay-active");
+  const active = () => !closed && body.isConnected && !document.hidden && !nativeModalClosed();
+  const stopTimer = () => {
+    if (timer !== void 0) clearTimeout(timer);
+    timer = void 0;
+  };
+  const schedule = () => {
+    stopTimer();
+    if (options?.getText && autoRefreshEnabled && active() && !refreshInFlight)
+      timer = setTimeout(() => {
+        timer = void 0;
+        void refreshText();
+      }, delay);
   };
   const refreshText = async (force = false) => {
-    if (!options?.getText || !force && !autoRefreshEnabled || refreshInFlight) {
+    if (!options?.getText || !active() || !force && !autoRefreshEnabled)
+      return;
+    if (refreshInFlight) {
+      if (force) pendingForcedRefresh = true;
       return;
     }
-    if (!body.isConnected) {
-      return;
-    }
+    stopTimer();
     refreshInFlight = true;
-    const sessionId = refreshSessionId;
+    refreshButton.disabled = true;
+    const capturedSession = session;
+    announce(
+      refreshStatus,
+      `${_("Refreshing\u2026")} ${_("Last success:")} ${lastSuccess}`
+    );
     try {
-      const nextText = await options.getText({
+      const value = await options.getText({
         maskValues: options.maskText ? false : maskValuesEnabled
       });
-      if (!body.isConnected || !force && !autoRefreshEnabled) {
-        return;
-      }
-      if (sessionId !== refreshSessionId) {
-        return;
-      }
-      const normalizedText = nextText ?? "";
-      rawText = normalizedText;
-      updateText(getDisplayText(normalizedText));
-    } catch (error) {
-      console.warn("[renderModal] failed to refresh modal content", error);
+      if (!active() || capturedSession !== session) return;
+      const changed = value !== rawText;
+      rawText = value ?? "";
+      if (changed || !exportReady) updateDisplayedText();
+      lastSuccess = (/* @__PURE__ */ new Date()).toLocaleString();
+      delay = changed ? baseDelay : Math.min(delay * 2, 3e4);
+      announce(refreshStatus, `${_("Last success:")} ${lastSuccess}`);
+    } catch {
+      if (!active() || capturedSession !== session) return;
+      delay = Math.min(delay * 2, 3e4);
+      announce(
+        refreshStatus,
+        `${_("Refresh failed. The last successful text is retained. Retry with Refresh.")} ${_("Last success:")} ${lastSuccess}`,
+        true
+      );
     } finally {
       refreshInFlight = false;
-      if (pendingRefresh) {
-        const shouldForceRefresh = pendingForcedRefresh;
-        pendingRefresh = false;
-        pendingForcedRefresh = false;
-        if ((shouldForceRefresh || autoRefreshEnabled) && body.isConnected) {
-          void refreshText(shouldForceRefresh);
-        }
-      }
+      refreshButton.disabled = false;
+      if (active() && (pendingForcedRefresh || pendingResume && autoRefreshEnabled)) {
+        const forced = pendingForcedRefresh;
+        pendingForcedRefresh = pendingResume = false;
+        void refreshText(forced);
+      } else schedule();
     }
   };
-  const requestRefresh = () => {
-    if (!options?.getText || !autoRefreshEnabled) {
-      return;
+  const onVisibility = () => {
+    session++;
+    stopTimer();
+    pendingForcedRefresh = pendingResume = false;
+    if (document.hidden) {
+      announce(
+        refreshStatus,
+        `${_("Auto refresh paused while this tab is hidden.")} ${_("Last success:")} ${lastSuccess}`
+      );
+    } else if (autoRefreshEnabled) {
+      if (refreshInFlight) pendingResume = true;
+      else void refreshText();
     }
-    if (refreshInFlight) {
-      pendingRefresh = true;
-      return;
-    }
-    void refreshText();
   };
-  const requestForcedRefresh = () => {
-    if (!options?.getText) {
-      return;
-    }
-    if (refreshInFlight) {
-      pendingRefresh = true;
-      pendingForcedRefresh = true;
-      return;
-    }
-    void refreshText(true);
+  const destroy = () => {
+    closed = true;
+    session++;
+    pendingForcedRefresh = pendingResume = false;
+    stopTimer();
+    observer.disconnect();
+    document.removeEventListener("visibilitychange", onVisibility);
   };
-  const startRefreshTimer = () => {
-    if (!options?.getText || !autoRefreshEnabled || timer || typeof document === "undefined") {
-      return;
+  const downloadButton = renderButton({
+    text: _("Download"),
+    classNames: ["cbi-button-apply"],
+    onClick: () => {
+      if (exportReady) downloadAsTxt(currentText, name);
     }
-    timer = setInterval(() => {
-      requestRefresh();
-    }, options.refreshMs ?? 3e3);
-  };
-  const setAutoRefreshEnabled = (nextValue) => {
-    autoRefreshEnabled = nextValue;
-    refreshSessionId += 1;
-    pendingRefresh = false;
-    pendingForcedRefresh = false;
-    if (autoRefreshInput) {
-      autoRefreshInput.checked = nextValue;
-    }
-    if (nextValue) {
-      startRefreshTimer();
-      requestRefresh();
-      return;
-    }
-    stopRefreshTimer();
-  };
-  const setMaskValuesEnabled = (nextValue) => {
-    maskValuesEnabled = nextValue;
-    refreshSessionId += 1;
-    pendingRefresh = false;
-    pendingForcedRefresh = false;
-    if (maskValuesInput) {
-      maskValuesInput.checked = nextValue;
-    }
-    if (options?.maskText) {
-      updateDisplayedTextFromRaw();
-      return;
-    }
-    requestForcedRefresh();
-  };
-  const footerChildren = [
-    renderButton({
-      classNames: ["cbi-button-apply"],
-      text: _("Download"),
-      onClick: () => downloadAsTxt(currentText, name)
-    }),
-    renderButton({
-      classNames: ["cbi-button-apply"],
-      text: _("Copy"),
-      onClick: () => copyToClipboard(`\`\`\`${name}
+  });
+  const copyButton = renderButton({
+    text: _("Copy"),
+    classNames: ["cbi-button-apply"],
+    onClick: async () => {
+      if (!exportReady || copyInFlight) return;
+      copyInFlight = true;
+      copyButton.setAttribute("aria-busy", "true");
+      const feedback = document.createElement("div");
+      copyStatus.replaceChildren(feedback);
+      await copyToClipboard(`\`\`\`${name}
 ${currentText}
-\`\`\``)
-    }),
+\`\`\``, feedback);
+      copyInFlight = false;
+      copyButton.removeAttribute("aria-busy");
+    }
+  });
+  const refreshButton = renderButton({
+    text: _("Refresh"),
+    onClick: () => {
+      void refreshText(true);
+    }
+  });
+  const footer = [downloadButton, copyButton];
+  if (options?.getText) footer.push(refreshButton);
+  footer.push(
     renderButton({
-      classNames: ["cbi-button-remove"],
       text: _("Close"),
+      classNames: ["cbi-button-remove"],
       onClick: () => {
-        destroyLiveRefresh();
+        destroy();
         ui.hideModal();
       }
     })
-  ];
-  if (options?.getText && options?.showAutoRefreshToggle) {
-    autoRefreshInput = document.createElement("input");
-    autoRefreshInput.type = "checkbox";
-    autoRefreshInput.className = "cbi-input-checkbox";
-    autoRefreshInput.checked = autoRefreshEnabled;
-    autoRefreshInput.addEventListener("change", () => {
-      setAutoRefreshEnabled(autoRefreshInput.checked);
-    });
-    footerChildren.unshift(
-      E("label", { class: "fkp-partial-modal__checkbox" }, [
-        autoRefreshInput,
-        E(
-          "span",
-          { class: "fkp-partial-modal__checkbox-text" },
-          options.autoRefreshLabel ?? _("Auto refresh")
-        )
-      ])
+  );
+  const toggle = (label, initial, changed) => {
+    const input2 = document.createElement("input");
+    input2.type = "checkbox";
+    input2.className = "cbi-input-checkbox";
+    input2.checked = initial;
+    input2.addEventListener("change", () => changed(input2.checked));
+    return E("label", { class: "fkp-partial-modal__checkbox" }, [
+      input2,
+      E("span", { class: "fkp-partial-modal__checkbox-text" }, label)
+    ]);
+  };
+  if (options?.getText && options.showAutoRefreshToggle)
+    footer.unshift(
+      toggle(
+        options.autoRefreshLabel ?? _("Auto refresh"),
+        autoRefreshEnabled,
+        (value) => {
+          autoRefreshEnabled = value;
+          session++;
+          pendingForcedRefresh = pendingResume = false;
+          stopTimer();
+          if (value) {
+            if (refreshInFlight) pendingResume = true;
+            else void refreshText();
+          } else
+            announce(
+              refreshStatus,
+              `${_("Auto refresh paused.")} ${_("Last success:")} ${lastSuccess}`
+            );
+        }
+      )
     );
-  }
-  if ((options?.getText || options?.maskText) && options?.showMaskValuesToggle) {
-    maskValuesInput = document.createElement("input");
-    maskValuesInput.type = "checkbox";
-    maskValuesInput.className = "cbi-input-checkbox";
-    maskValuesInput.checked = maskValuesEnabled;
-    maskValuesInput.addEventListener("change", () => {
-      setMaskValuesEnabled(maskValuesInput.checked);
-    });
-    footerChildren.unshift(
-      E("label", { class: "fkp-partial-modal__checkbox" }, [
-        maskValuesInput,
-        E(
-          "span",
-          { class: "fkp-partial-modal__checkbox-text" },
-          options.maskValuesLabel ?? _("Hide values")
-        )
-      ])
+  if ((options?.getText || options?.maskText) && options.showMaskValuesToggle)
+    footer.unshift(
+      toggle(
+        options.maskValuesLabel ?? _("Hide values"),
+        maskValuesEnabled,
+        (value) => {
+          maskValuesEnabled = value;
+          if (options.maskText) updateDisplayedText();
+          else {
+            session++;
+            exportReady = false;
+            updateText("");
+            copyButton.disabled = downloadButton.disabled = true;
+            void refreshText(true);
+          }
+        }
+      )
     );
-  }
   const body = E("div", { class: "fkp-partial-modal__body" }, [
-    E("div", {}, [
-      contentEl,
-      E("div", { class: "fkp-partial-modal__footer" }, footerChildren)
-    ])
+    maskStatus,
+    refreshStatus,
+    contentEl,
+    copyStatus,
+    E("div", { class: "fkp-partial-modal__footer" }, footer)
   ]);
-  if ((options?.getText || options?.startAtEnd) && typeof document !== "undefined") {
-    observer = new MutationObserver(() => {
-      if (!body.isConnected) {
-        destroyLiveRefresh();
-        return;
+  const observer = new MutationObserver(() => {
+    if (mounted2 && nativeModalClosed()) {
+      destroy();
+      return;
+    }
+    if (!body.isConnected) {
+      if (mounted2) destroy();
+      return;
+    }
+    if (!mounted2) {
+      mounted2 = true;
+      if (shouldScrollToBottomOnMount) {
+        requestAnimationFrame(() => {
+          contentEl.scrollTop = contentEl.scrollHeight;
+        });
+        shouldScrollToBottomOnMount = false;
       }
-      scheduleInitialScrollToBottom();
-    });
-    observer.observe(document.body, {
-      childList: true,
-      subtree: true
-    });
-    scheduleInitialScrollToBottom();
-  }
-  if (options?.getText && typeof document !== "undefined") {
-    startRefreshTimer();
-    requestRefresh();
-  }
-  updateDisplayedTextFromRaw();
+      if (options?.getText) {
+        document.addEventListener("visibilitychange", onVisibility);
+        void refreshText();
+      }
+    }
+  });
+  observer.observe(document.body, {
+    childList: true,
+    subtree: true,
+    attributes: true,
+    attributeFilter: ["class"]
+  });
+  updateDisplayedText();
   return body;
 }
 
@@ -10059,14 +10139,10 @@ function stringifySingBoxConfig(value) {
   return typeof value === "string" ? value : JSON.stringify(value, null, 2);
 }
 function formatMaskedSingBoxConfig(value) {
-  if (typeof value === "string") {
-    try {
-      return JSON.stringify(maskSingBoxConfigValue(JSON.parse(value)), null, 2);
-    } catch (_error) {
-      return value;
-    }
-  }
-  return JSON.stringify(maskSingBoxConfigValue(value), null, 2);
+  const config = typeof value === "string" ? JSON.parse(value) : value;
+  if (!isRecord2(config))
+    throw new Error("Unsupported diagnostic configuration");
+  return JSON.stringify(maskSingBoxConfigValue(config), null, 2);
 }
 function maskGlobalCheckText(text = "") {
   let inMaskedMultiline = false;
@@ -10579,7 +10655,7 @@ async function handleViewLogs() {
         _("View logs"),
         renderModal(viewLogs.data, "view_logs", {
           getText: getLatestLogs,
-          refreshMs: 250,
+          refreshMs: 3e3,
           initialAutoRefresh: true,
           showAutoRefreshToggle: true,
           startAtEnd: true
@@ -10602,13 +10678,10 @@ async function handleShowSingBoxConfig() {
       const rawSingBoxConfigText = stringifySingBoxConfig(
         showSingBoxConfig.data
       );
-      const maskedSingBoxConfigText = formatMaskedSingBoxConfig(
-        showSingBoxConfig.data
-      );
       ui.showModal(
         _("Show sing-box config"),
         renderModal(rawSingBoxConfigText, "show_sing_box_config", {
-          maskText: () => maskedSingBoxConfigText,
+          maskText: formatMaskedSingBoxConfig,
           initialAutoRefresh: false,
           showMaskValuesToggle: true
         })
@@ -15071,7 +15144,7 @@ function renderCompatibilityPanel(request, initialRequest = request, showHeading
     help,
     result
   );
-  function button(label, work) {
+  function button(label, work, feedback = result) {
     const b = text("button", label);
     b.type = "button";
     b.onclick = async () => {
@@ -15079,7 +15152,7 @@ function renderCompatibilityPanel(request, initialRequest = request, showHeading
       try {
         await work();
       } catch {
-        result.textContent = "\u041D\u0435\u0442 \u0441\u0432\u044F\u0437\u0438 \u0441 \u0440\u043E\u0443\u0442\u0435\u0440\u043E\u043C. \u041F\u043E\u0432\u0442\u043E\u0440\u0438\u0442\u0435 \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0443.";
+        feedback.textContent = "\u041D\u0435\u0442 \u0441\u0432\u044F\u0437\u0438 \u0441 \u0440\u043E\u0443\u0442\u0435\u0440\u043E\u043C. \u041F\u043E\u0432\u0442\u043E\u0440\u0438\u0442\u0435 \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0443.";
       } finally {
         b.disabled = b === handshake && !outbound.value;
       }
@@ -15261,51 +15334,56 @@ function renderCompatibilityPanel(request, initialRequest = request, showHeading
   xrayVersion.name = "compatibility_xray_version";
   xrayVersionLabel.append(xrayVersion);
   root.append(panelVersionLabel, xrayVersionLabel);
-  button("\u041F\u0440\u043E\u0432\u0435\u0440\u0438\u0442\u044C \u043E\u0431\u043D\u043E\u0432\u043B\u0435\u043D\u0438\u044F 3x-ui \u0438 Xray", async () => {
-    updates.textContent = "\u041F\u0440\u043E\u0432\u0435\u0440\u044F\u0435\u043C \u043E\u0444\u0438\u0446\u0438\u0430\u043B\u044C\u043D\u044B\u0435 \u0440\u0435\u043B\u0438\u0437\u044B\u2026";
-    const installed = {};
-    if (panelVersion.value.trim()) installed.panel = panelVersion.value.trim();
-    if (xrayVersion.value.trim()) installed.xray = xrayVersion.value.trim();
-    const response = await request(
-      "compatibility_updates",
-      Object.keys(installed).length ? { installed } : {}
-    );
-    if (!response.success) {
-      updates.textContent = `\u041F\u0440\u043E\u0432\u0435\u0440\u043A\u0430 \u043E\u0431\u043D\u043E\u0432\u043B\u0435\u043D\u0438\u0439 \u043D\u0435 \u0432\u044B\u043F\u043E\u043B\u043D\u0435\u043D\u0430: ${response.error || "\u043D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043D\u0430\u044F \u043E\u0448\u0438\u0431\u043A\u0430"}`;
-      return;
-    }
-    updates.replaceChildren();
-    const d = object(response.data);
-    for (const raw of Array.isArray(d.updates) ? d.updates : []) {
-      const u = object(raw);
-      const status = u.status === "update_available" ? "\u0414\u043E\u0441\u0442\u0443\u043F\u043D\u043E \u043E\u0431\u043D\u043E\u0432\u043B\u0435\u043D\u0438\u0435" : u.status === "current" ? "\u0423\u0441\u0442\u0430\u043D\u043E\u0432\u043B\u0435\u043D\u0430 \u0430\u043A\u0442\u0443\u0430\u043B\u044C\u043D\u0430\u044F \u0432\u0435\u0440\u0441\u0438\u044F" : "\u0421\u0442\u0430\u0442\u0443\u0441 \u043E\u0431\u043D\u043E\u0432\u043B\u0435\u043D\u0438\u044F \u043D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u0435\u043D";
+  button(
+    "\u041F\u0440\u043E\u0432\u0435\u0440\u0438\u0442\u044C \u043E\u0431\u043D\u043E\u0432\u043B\u0435\u043D\u0438\u044F 3x-ui \u0438 Xray",
+    async () => {
+      updates.textContent = "\u041F\u0440\u043E\u0432\u0435\u0440\u044F\u0435\u043C \u043E\u0444\u0438\u0446\u0438\u0430\u043B\u044C\u043D\u044B\u0435 \u0440\u0435\u043B\u0438\u0437\u044B\u2026";
+      const installed = {};
+      if (panelVersion.value.trim())
+        installed.panel = panelVersion.value.trim();
+      if (xrayVersion.value.trim()) installed.xray = xrayVersion.value.trim();
+      const response = await request(
+        "compatibility_updates",
+        Object.keys(installed).length ? { installed } : {}
+      );
+      if (!response.success) {
+        updates.textContent = `\u041F\u0440\u043E\u0432\u0435\u0440\u043A\u0430 \u043E\u0431\u043D\u043E\u0432\u043B\u0435\u043D\u0438\u0439 \u043D\u0435 \u0432\u044B\u043F\u043E\u043B\u043D\u0435\u043D\u0430: ${response.error || "\u043D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043D\u0430\u044F \u043E\u0448\u0438\u0431\u043A\u0430"}`;
+        return;
+      }
+      updates.replaceChildren();
+      const d = object(response.data);
+      for (const raw of Array.isArray(d.updates) ? d.updates : []) {
+        const u = object(raw);
+        const status = u.status === "update_available" ? "\u0414\u043E\u0441\u0442\u0443\u043F\u043D\u043E \u043E\u0431\u043D\u043E\u0432\u043B\u0435\u043D\u0438\u0435" : u.status === "current" ? "\u0423\u0441\u0442\u0430\u043D\u043E\u0432\u043B\u0435\u043D\u0430 \u0430\u043A\u0442\u0443\u0430\u043B\u044C\u043D\u0430\u044F \u0432\u0435\u0440\u0441\u0438\u044F" : "\u0421\u0442\u0430\u0442\u0443\u0441 \u043E\u0431\u043D\u043E\u0432\u043B\u0435\u043D\u0438\u044F \u043D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u0435\u043D";
+        updates.append(
+          text(
+            "p",
+            `${u.component}: ${status}. \u0423\u0441\u0442\u0430\u043D\u043E\u0432\u043B\u0435\u043D\u043E: ${u.installed || "\u043D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043D\u043E"}, \u043F\u043E\u0441\u043B\u0435\u0434\u043D\u044F\u044F: ${u.latest || "\u043D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043D\u043E"}`
+          )
+        );
+        if (typeof u.url === "string") {
+          try {
+            const url = new URL(u.url);
+            if (url.protocol === "https:" && url.hostname === "github.com") {
+              const link = text("a", "\u041E\u0444\u0438\u0446\u0438\u0430\u043B\u044C\u043D\u044B\u0439 \u0440\u0435\u043B\u0438\u0437");
+              link.href = url.href;
+              link.target = "_blank";
+              link.rel = "noopener noreferrer";
+              updates.append(link);
+            }
+          } catch {
+          }
+        }
+      }
       updates.append(
         text(
           "p",
-          `${u.component}: ${status}. \u0423\u0441\u0442\u0430\u043D\u043E\u0432\u043B\u0435\u043D\u043E: ${u.installed || "\u043D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043D\u043E"}, \u043F\u043E\u0441\u043B\u0435\u0434\u043D\u044F\u044F: ${u.latest || "\u043D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043D\u043E"}`
+          "\u0410\u0432\u0442\u043E\u043C\u0430\u0442\u0438\u0447\u0435\u0441\u043A\u0430\u044F \u0443\u0441\u0442\u0430\u043D\u043E\u0432\u043A\u0430 \u043E\u0442\u043A\u043B\u044E\u0447\u0435\u043D\u0430. \u041E\u0431\u043D\u043E\u0432\u043B\u0435\u043D\u0438\u0435 \u0441\u0435\u0440\u0432\u0435\u0440\u0430 \u0432\u044B\u043F\u043E\u043B\u043D\u044F\u0435\u0442\u0441\u044F \u043E\u0442\u0434\u0435\u043B\u044C\u043D\u043E \u043F\u043E\u0441\u043B\u0435 \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0438 \u0440\u0435\u0437\u0435\u0440\u0432\u043D\u043E\u0439 \u043A\u043E\u043F\u0438\u0438."
         )
       );
-      if (typeof u.url === "string") {
-        try {
-          const url = new URL(u.url);
-          if (url.protocol === "https:" && url.hostname === "github.com") {
-            const link = text("a", "\u041E\u0444\u0438\u0446\u0438\u0430\u043B\u044C\u043D\u044B\u0439 \u0440\u0435\u043B\u0438\u0437");
-            link.href = url.href;
-            link.target = "_blank";
-            link.rel = "noopener noreferrer";
-            updates.append(link);
-          }
-        } catch {
-        }
-      }
-    }
-    updates.append(
-      text(
-        "p",
-        "\u0410\u0432\u0442\u043E\u043C\u0430\u0442\u0438\u0447\u0435\u0441\u043A\u0430\u044F \u0443\u0441\u0442\u0430\u043D\u043E\u0432\u043A\u0430 \u043E\u0442\u043A\u043B\u044E\u0447\u0435\u043D\u0430. \u041E\u0431\u043D\u043E\u0432\u043B\u0435\u043D\u0438\u0435 \u0441\u0435\u0440\u0432\u0435\u0440\u0430 \u0432\u044B\u043F\u043E\u043B\u043D\u044F\u0435\u0442\u0441\u044F \u043E\u0442\u0434\u0435\u043B\u044C\u043D\u043E \u043F\u043E\u0441\u043B\u0435 \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0438 \u0440\u0435\u0437\u0435\u0440\u0432\u043D\u043E\u0439 \u043A\u043E\u043F\u0438\u0438."
-      )
-    );
-  });
+    },
+    updates
+  );
   root.append(updates);
   let routesGeneration = 0;
   function refreshRoutes(read = request) {

@@ -56,7 +56,7 @@ export function renderCompatibilityPanel(
     help,
     result,
   );
-  function button(label: string, work: () => Promise<void>) {
+  function button(label: string, work: () => Promise<void>, feedback = result) {
     const b = text('button', label);
     b.type = 'button';
     b.onclick = async () => {
@@ -64,7 +64,7 @@ export function renderCompatibilityPanel(
       try {
         await work();
       } catch {
-        result.textContent = 'Нет связи с роутером. Повторите проверку.';
+        feedback.textContent = 'Нет связи с роутером. Повторите проверку.';
       } finally {
         b.disabled = b === handshake && !outbound.value;
       }
@@ -254,57 +254,62 @@ export function renderCompatibilityPanel(
   xrayVersion.name = 'compatibility_xray_version';
   xrayVersionLabel.append(xrayVersion);
   root.append(panelVersionLabel, xrayVersionLabel);
-  button('Проверить обновления 3x-ui и Xray', async () => {
-    updates.textContent = 'Проверяем официальные релизы…';
-    const installed: Obj = {};
-    if (panelVersion.value.trim()) installed.panel = panelVersion.value.trim();
-    if (xrayVersion.value.trim()) installed.xray = xrayVersion.value.trim();
-    const response = await request(
-      'compatibility_updates',
-      Object.keys(installed).length ? { installed } : {},
-    );
-    if (!response.success) {
-      updates.textContent = `Проверка обновлений не выполнена: ${response.error || 'неизвестная ошибка'}`;
-      return;
-    }
-    updates.replaceChildren();
-    const d = object(response.data);
-    for (const raw of Array.isArray(d.updates) ? d.updates : []) {
-      const u = object(raw);
-      const status =
-        u.status === 'update_available'
-          ? 'Доступно обновление'
-          : u.status === 'current'
-            ? 'Установлена актуальная версия'
-            : 'Статус обновления неизвестен';
+  button(
+    'Проверить обновления 3x-ui и Xray',
+    async () => {
+      updates.textContent = 'Проверяем официальные релизы…';
+      const installed: Obj = {};
+      if (panelVersion.value.trim())
+        installed.panel = panelVersion.value.trim();
+      if (xrayVersion.value.trim()) installed.xray = xrayVersion.value.trim();
+      const response = await request(
+        'compatibility_updates',
+        Object.keys(installed).length ? { installed } : {},
+      );
+      if (!response.success) {
+        updates.textContent = `Проверка обновлений не выполнена: ${response.error || 'неизвестная ошибка'}`;
+        return;
+      }
+      updates.replaceChildren();
+      const d = object(response.data);
+      for (const raw of Array.isArray(d.updates) ? d.updates : []) {
+        const u = object(raw);
+        const status =
+          u.status === 'update_available'
+            ? 'Доступно обновление'
+            : u.status === 'current'
+              ? 'Установлена актуальная версия'
+              : 'Статус обновления неизвестен';
+        updates.append(
+          text(
+            'p',
+            `${u.component}: ${status}. Установлено: ${u.installed || 'неизвестно'}, последняя: ${u.latest || 'неизвестно'}`,
+          ),
+        );
+        if (typeof u.url === 'string') {
+          try {
+            const url = new URL(u.url);
+            if (url.protocol === 'https:' && url.hostname === 'github.com') {
+              const link = text('a', 'Официальный релиз');
+              link.href = url.href;
+              link.target = '_blank';
+              link.rel = 'noopener noreferrer';
+              updates.append(link);
+            }
+          } catch {
+            /* Invalid source URLs remain unlinked. */
+          }
+        }
+      }
       updates.append(
         text(
           'p',
-          `${u.component}: ${status}. Установлено: ${u.installed || 'неизвестно'}, последняя: ${u.latest || 'неизвестно'}`,
+          'Автоматическая установка отключена. Обновление сервера выполняется отдельно после проверки резервной копии.',
         ),
       );
-      if (typeof u.url === 'string') {
-        try {
-          const url = new URL(u.url);
-          if (url.protocol === 'https:' && url.hostname === 'github.com') {
-            const link = text('a', 'Официальный релиз');
-            link.href = url.href;
-            link.target = '_blank';
-            link.rel = 'noopener noreferrer';
-            updates.append(link);
-          }
-        } catch {
-          /* Invalid source URLs remain unlinked. */
-        }
-      }
-    }
-    updates.append(
-      text(
-        'p',
-        'Автоматическая установка отключена. Обновление сервера выполняется отдельно после проверки резервной копии.',
-      ),
-    );
-  });
+    },
+    updates,
+  );
   root.append(updates);
   let routesGeneration = 0;
   function refreshRoutes(read = request) {

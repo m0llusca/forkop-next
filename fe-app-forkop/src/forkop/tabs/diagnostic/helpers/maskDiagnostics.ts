@@ -196,15 +196,10 @@ export function stringifySingBoxConfig(value: unknown) {
 }
 
 export function formatMaskedSingBoxConfig(value: unknown) {
-  if (typeof value === 'string') {
-    try {
-      return JSON.stringify(maskSingBoxConfigValue(JSON.parse(value)), null, 2);
-    } catch (_error) {
-      return value;
-    }
-  }
-
-  return JSON.stringify(maskSingBoxConfigValue(value), null, 2);
+  const config = typeof value === 'string' ? JSON.parse(value) : value;
+  if (!isRecord(config))
+    throw new Error('Unsupported diagnostic configuration');
+  return JSON.stringify(maskSingBoxConfigValue(config), null, 2);
 }
 
 export function maskGlobalCheckText(text: string = '') {

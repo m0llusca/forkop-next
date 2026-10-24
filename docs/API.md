@@ -10,6 +10,63 @@ replacement with durable recovery. Existing `/etc/config/forkop` remains authori
 Manual server choices persist; automatic health decisions do not cause flash churn.
 Smart Detect only proposes rules until the user explicitly accepts a recommendation.
 
+## Native UI mutation and evidence lifecycle
+
+`nextRequest(action, payload = {})` keeps the existing command envelope. Active
+configuration mutations are serialized in the current page. Before invoking the
+shell they dispatch cancelable `forkop:configuration-changing` with
+`{action, waitUntil(Promise<void>)}`. Listeners register asynchronous preflight
+work synchronously during dispatch. Rejection or cancellation prevents the shell
+operation. A second active mutation returns `native_mutation_busy` and does not
+release the first operation's lock.
+
+The native adapter rejects unsaved DOM or local/remote staged UCI changes with
+`native_pending_changes`; users must apply or explicitly discard their changes
+before retrying. It does not merge independently staged configurations.
+`forkop:configuration-changed`, with the same waiting contract, follows a
+successful mutation and refreshes the native UCI/map instead of reloading the
+page. Connected tool hosts and active tab survive this refresh. A failed refresh
+is reported separately from backend success; native saves remain blocked until
+an explicit editor refresh succeeds. `forkop:configuration-settled {action}`
+releases temporary UI locks on every terminal path. No event contains request
+payloads, server JSON or credentials.
+
+`registerConfigurationReload(target = window, adapter?)` retains its public name;
+the optional adapter exposes `beforeChange`, `changed`, and `settled`. Repeated
+registration replaces the adapter without duplicating listeners. There is no
+automatic page-reload fallback. The guarded action set includes `profile_apply`,
+`rollback`, `recover`, `device_set`, `gaming_apply`, `temporary_add`,
+`temporary_delete`, `recommendation_accept`, and `smart_detect_configure`.
+Read actions and profile save/import do not apply configuration.
+
+Compatibility, route and probe results capture the target, selected connection,
+origin and check time. Relevant edits or newer requests invalidate old evidence;
+a late reply cannot verify the current inputs. A route explanation remains a
+configured-policy result, separate from connectivity. Existing profile current
+and saved-profile digest guards remain mandatory. Interrupted transaction
+recovery uses the existing `recover` operation, distinct from ordinary rollback.
+
+## Diagnostic presentation boundaries
+
+Malformed, truncated, primitive or non-JSON sing-box configuration cannot be
+presented as masked configuration. The masker fails closed; the modal displays
+an explicit error and disables safe copy/download until a supported result is
+available. Explicit raw view remains secret-bearing. Known-key redaction is not
+a guarantee that arbitrary diagnostic prose contains no private data.
+
+`copyToClipboard(text, feedback?)` returns `Promise<boolean>` after actual browser
+confirmation or the checked legacy result. Existing one-argument callers remain
+valid. Failure provides selectable manual text without a false success. Mode
+changes discard secret-bearing fallback content and obsolete asynchronous results.
+Log reads are completion-based, single-flight, and suspended/disposed while the
+document is hidden or the native modal is closed. The last successful text/time
+and local retry survive refresh errors; unchanged text retains manual selection.
+
+Native UI numeric validation accepts DNS TTL `0..4294967295` seconds and BadWAN
+delay `0..2147483647` milliseconds as complete unsigned decimal strings. Zero
+retains the existing downstream meaning. These UI checks do not add backend-wide
+validation to direct CLI-written UCI values.
+
 Before adding APIs, document final CLI method names and JSON shape here
 and coordinate with maintainers. Reuse proven Trafira equivalents where suitable,
 with all `trafira` runtime namespaces adapted to `forkop` and attribution retained.
