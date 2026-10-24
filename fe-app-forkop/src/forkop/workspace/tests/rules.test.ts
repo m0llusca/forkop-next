@@ -14,6 +14,9 @@ type Option = {
   cfgvalue: (id: string) => unknown;
   textvalue?: (id: string) => unknown;
   load?: (id: string) => Promise<unknown>;
+  renderWidget: (id: string, index: number, value: string) => HTMLElement;
+  validate: (id: string, value: string) => boolean;
+  write: (id: string, value: string) => void;
 };
 
 afterEach(() => document.body.replaceChildren());
@@ -99,6 +102,13 @@ function fixture(rule: Rule) {
     }
     depends() {}
     cfgvalue() {}
+    renderWidget(_id: string, _index: number, value: string) {
+      const wrapper = document.createElement('div');
+      const textarea = document.createElement('textarea');
+      textarea.value = value;
+      wrapper.append(textarea);
+      return wrapper;
+    }
   }
   const form = Object.fromEntries(
     [
@@ -156,6 +166,12 @@ function fixture(rule: Rule) {
       get: (_config: string, id: string, key?: string) =>
         key ? entries[id]?.[key] : entries[id],
       sections: () => Object.values(entries),
+      set: (_config: string, id: string, key: string, value: unknown) => {
+        entries[id][key] = value;
+      },
+      unset: (_config: string, id: string, key: string) => {
+        delete entries[id][key];
+      },
     },
     { ...publicHelpers, DOMAIN_LIST_OPTIONS: {} },
     {},
@@ -453,4 +469,36 @@ it('retains every native modal field and keeps only enable and route as ordinary
   expect(
     section.children.filter((o) => !o.modalonly).map((o) => o.option),
   ).toEqual(['enabled', '_action_display']);
+});
+
+it('uses the actual native domain widget and write cleanup for a quick URL addition without copying sources', () => {
+  const { section, entries } = fixture({
+    label: 'VPN',
+    subscription_url: ['child_subscription'],
+    domain: 'regex:^old\\.example/path$\nfull:keep.example',
+    domain_suffix: ['legacy.example'],
+  });
+  const option = section.children.find((o) => o.option === 'domain')!;
+  const widget = option.renderWidget(
+    'example',
+    0,
+    String(entries.example.domain),
+  );
+  document.body.append(widget);
+  const input = widget.querySelector<HTMLInputElement>(
+    '[aria-label="Сайт или адрес страницы"]',
+  )!;
+  input.value = 'https://shop.example.org/path?token=secret';
+  input.dispatchEvent(new Event('input'));
+  widget.querySelector('button')!.click();
+  const textarea = widget.querySelector('textarea')!;
+  expect(textarea.value).toBe(
+    'regex:^old\\.example/path$\nfull:keep.example\nshop.example.org',
+  );
+  expect(option.validate('example', textarea.value)).toBe(true);
+  option.write('example', textarea.value);
+  expect(entries.example.domain).toBe(textarea.value);
+  expect(entries.example.subscription_url).toEqual(['child_subscription']);
+  expect(Object.keys(entries)).toEqual(['example']);
+  expect(entries.example.domain_suffix).toBeUndefined();
 });

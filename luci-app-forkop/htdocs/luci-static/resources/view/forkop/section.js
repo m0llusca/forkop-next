@@ -6787,6 +6787,24 @@ function addTextConditionField(section, config) {
     }
   };
 
+  if (optionName === "domain") {
+    const renderDomain = o.renderWidget;
+    o.renderWidget = function (section_id, option_index, cfgvalue) {
+      const node = renderDomain.call(this, section_id, option_index, cfgvalue);
+      const textarea = node.querySelector("textarea");
+      if (textarea) {
+        const rows = uci.sections(UCI_PACKAGE, "section");
+        node.prepend(
+          main.renderQuickSite(
+            textarea,
+            uci.get(UCI_PACKAGE, section_id, "label") || section_id,
+            rows.findIndex((row) => row[".name"] === section_id) + 1,
+          ),
+        );
+      }
+      return node;
+    };
+  }
   return o;
 }
 
@@ -7876,8 +7894,24 @@ function configureSectionSection(sectionRef, options = {}) {
           );
         }
       });
+    node.addEventListener("forkop:workflow-context", (event) => {
+      event.stopPropagation();
+      event.detail.provide({
+        targets: uci.sections(UCI_PACKAGE, "section").map((row) => ({
+          name: row[".name"],
+          generated: Boolean(row.next_kind),
+          localProxyConfigured:
+            row.mixed_proxy_enabled === "1" &&
+            /^\d+$/.test(row.mixed_proxy_port || "") &&
+            Number(row.mixed_proxy_port) >= 1 &&
+            Number(row.mixed_proxy_port) <= 65535,
+        })),
+        loadDevices: localDevices.loadLocalDeviceChoices,
+      });
+    });
     return node;
   };
+  main.configureRuleWorkflow(sectionRef);
 
   const handleRemove = sectionRef.handleRemove;
   sectionRef.handleRemove = function (section_id) {

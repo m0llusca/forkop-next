@@ -59,3 +59,9 @@ export {
 export { registerConfigurationReload } from './forkop/next/configReload';
 
 export { getDashboardSections } from './forkop/methods/custom/getDashboardSections';
+
+export {
+  navigateToRule,
+  configureRuleWorkflow,
+  renderQuickSite,
+} from './forkop/next/workflows';

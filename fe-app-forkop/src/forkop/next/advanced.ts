@@ -1,3 +1,10 @@
+import {
+  targetEligibility,
+  workflowContext,
+  navigateToRule,
+  type WorkflowTarget,
+  type TargetUse,
+} from './workflows';
 import { renderDeviceProfileTools } from './tools';
 import { renderCompatibilityPanel } from './compatibility';
 import { nextRequest, type NextResponse } from './api';
@@ -154,10 +161,10 @@ export function renderAdvancedPanel(
     previewProfileDigest = '';
     apply.disabled = true;
   }
-  const sectionSelects: HTMLSelectElement[] = [];
-  function connection(label = 'Подключение') {
+  const sectionSelects = new Map<HTMLSelectElement, TargetUse>();
+  function connection(label = 'Подключение', use: TargetUse = 'route') {
     const s = select(label, sections);
-    sectionSelects.push(s.node);
+    sectionSelects.set(s.node, use);
     return s;
   }
   function panel(title: string, help: string, part: ToolArea) {
@@ -370,7 +377,8 @@ export function renderAdvancedPanel(
   };
   device.node.oninput = invalidateRoute;
   probeSection.node.onchange = invalidateProbe;
-  route.append(probeSection.wrap, probeAction, probeResult);
+  const probeSettings = el('div');
+  route.append(probeSection.wrap, probeAction, probeResult, probeSettings);
   const profiles = panel(
     'Профили и восстановление',
     'Сначала сравните профиль. При применении сохраняется предыдущая рабочая конфигурация.',
@@ -489,6 +497,10 @@ export function renderAdvancedPanel(
     ts.wrap,
     ttl.wrap,
     action('Добавить временное правило', async () => {
+      if (!ts.node.value || ts.node.selectedOptions[0]?.disabled) {
+        message.textContent = 'Выберите доступный маршрут.';
+        return;
+      }
       await invoke('temporary_add', {
         domain: td.node.value.trim(),
         section: ts.node.value,
@@ -503,8 +515,10 @@ export function renderAdvancedPanel(
     'Только рекомендации на основе наблюдений. Применение — по вашему решению.',
     'rules',
   );
-  const rs = connection();
+  const rs = connection('Подключение', 'smart');
   const recList = el('div');
+  const proxySettings = el('div');
+  recommendations.append(proxySettings);
   const recommendationDomain = input(
     'recommendation_domain',
     'Домен для сравнения',
@@ -529,6 +543,11 @@ export function renderAdvancedPanel(
   autoResult.setAttribute('aria-live', 'polite');
   scanResult.setAttribute('aria-live', 'polite');
   const scanAction = action('Проверить другой маршрут', async () => {
+    if (!rs.node.value || rs.node.selectedOptions[0]?.disabled) {
+      scanResult.textContent =
+        'Выберите доступное подключение с настроенным локальным прокси.';
+      return;
+    }
     const generation = ++scanGeneration;
     const key = scanKey();
     const context = `Цель: ${recommendationDomain.node.value.trim()} · Подключение: ${rs.node.selectedOptions[0]?.textContent || rs.node.value} · Источник: с роутера, не с клиентского устройства · ${new Date().toLocaleString()}`;
@@ -562,6 +581,14 @@ export function renderAdvancedPanel(
       'Поиск выполняется раз в минуту после включения. Маршруты меняются только после принятия рекомендации.',
     ),
     action('Сохранить автоматический поиск', async () => {
+      if (
+        autoDetect.node.checked &&
+        (!rs.node.value || rs.node.selectedOptions[0]?.disabled)
+      ) {
+        autoResult.textContent =
+          'Выберите доступное подключение с настроенным локальным прокси.';
+        return;
+      }
       const r = await invoke('smart_detect_configure', {
         enabled: autoDetect.node.checked,
         section: rs.node.value,
@@ -616,32 +643,92 @@ export function renderAdvancedPanel(
       },
     );
     if (temporaryItems) showTemporary();
-    const probeChoice = probeSection.node.value;
-    probeSection.node.replaceChildren();
-    for (const [value, label] of [
-      ['', 'Текущий маршрут роутера'],
-      ...sections,
-    ]) {
-      const option = el('option', label);
-      option.value = value;
-      probeSection.node.append(option);
-    }
-    probeSection.node.value = probeChoice;
-    if (probeSection.node.value !== probeChoice) invalidateProbe();
-    for (const s of sectionSelects) {
-      const old = s.value;
-      s.replaceChildren();
-      for (const [value, label] of sections) {
-        const o = el('option', label);
-        o.value = value;
-        s.append(o);
+    const capabilities = workflowContext(root).targets || [];
+    const targets: WorkflowTarget[] = (
+      Array.isArray(d.sections) ? d.sections : []
+    ).map((raw: unknown) => {
+      const row = object(raw);
+      return {
+        name: String(row.name),
+        label: String(row.label || row.name),
+        action: typeof row.action === 'string' ? row.action : undefined,
+        generated: capabilities.find((c) => c.name === row.name)?.generated,
+        localProxyConfigured: capabilities.find((c) => c.name === row.name)
+          ?.localProxyConfigured,
+      };
+    });
+    const fillTargets = (
+      select: HTMLSelectElement,
+      use: TargetUse,
+      current = false,
+    ) => {
+      const old = select.value;
+      select.replaceChildren();
+      const placeholder = el(
+        'option',
+        current ? 'Текущий маршрут роутера' : 'Выберите подключение',
+      );
+      placeholder.value = '';
+      select.append(placeholder);
+      for (const target of targets) {
+        const eligibility = targetEligibility(target, use);
+        if (use === 'route' && !eligibility.eligible) continue;
+        const option = el(
+          'option',
+          `${target.label}${eligibility.reason ? ' — ' + eligibility.reason : ''}`,
+        );
+        option.value = target.name;
+        option.disabled = !eligibility.eligible;
+        select.append(option);
       }
-      s.value = sections.some(([value]) => value === old)
+      select.value = targets.some(
+        (t) => t.name === old && targetEligibility(t, use).eligible,
+      )
         ? old
-        : sections[0]?.[0] || '';
-    }
-    if (sections.some(([name]) => name === smart.section))
+        : current
+          ? ''
+          : targets.find((t) => targetEligibility(t, use).eligible)?.name || '';
+    };
+    const probeChoice = probeSection.node.value;
+    fillTargets(probeSection.node, 'probe', true);
+    if (probeSection.node.value !== probeChoice) invalidateProbe();
+    for (const [select, use] of sectionSelects) fillTargets(select, use);
+    if (
+      targets.some(
+        (t) =>
+          t.name === smart.section && targetEligibility(t, 'smart').eligible,
+      )
+    )
       rs.node.value = String(smart.section);
+    for (const [settings, use, result] of [
+      [proxySettings, 'smart', scanResult],
+      [probeSettings, 'probe', probeResult],
+    ] as const) {
+      settings.replaceChildren();
+      for (const target of targets.filter(
+        (t) => !targetEligibility(t, use).eligible,
+      )) {
+        const option = targetEligibility(target, use).settingsOption;
+        const supportsProxy = option === 'mixed_proxy_enabled';
+        const b = el(
+          'button',
+          `${supportsProxy ? 'Настроить локальный прокси' : 'Настроить действие правила'}: ${target.label}`,
+        );
+        b.type = 'button';
+        b.onclick = () => {
+          if (
+            !navigateToRule(root, {
+              kind: 'edit',
+              section: target.name,
+              option,
+            })
+          )
+            result.textContent =
+              'Откройте это правило и настройте действие и локальный прокси.';
+        };
+        settings.append(b);
+      }
+    }
   }
   async function refreshProfiles(read: Request = request) {
     const current = ++profilesGeneration;
@@ -706,6 +793,10 @@ export function renderAdvancedPanel(
           `${rec.domain} · ошибки текущего маршрута: ${rec.current_route_failures ?? '—'}, успешных через выбранное подключение: ${rec.proxy_successes ?? '—'}`,
         ),
         action('Принять рекомендацию', async () => {
+          if (!rs.node.value || rs.node.selectedOptions[0]?.disabled) {
+            message.textContent = 'Выберите доступное подключение.';
+            return;
+          }
           await invoke('recommendation_accept', {
             id: rec.id,
             section: rs.node.value,

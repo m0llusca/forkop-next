@@ -143,7 +143,7 @@ the document or native `[data-tab-active="false"]` pane is hidden or removed.
 Rates require two valid samples and positive monotonic elapsed time; counter
 resets, failures and visibility changes reset the baseline. Missing telemetry
 stays unavailable. `openRules` navigates to existing connection/rule editing;
-without it, the native `section` tab is used. Probe inputs require a domain before
+without it, the native `section` creation flow opens the subscription field. Probe inputs require a domain before
 any backend request.
 
 The generated Clash controller listens on `127.0.0.1:9090` by default. Remote YACD
@@ -193,3 +193,68 @@ An explicit custom install requires an admitted compressed runtime or no install
 Generic check/install remains on the selected custom source. Explicit official/stable/tiny transitions that would lose record capability are refused before stopping the service. Component result/cache evidence adds `source`; late cross-source results are not cached or displayed. Source-less historical official results remain compatible only when the official source is selected.
 
 `tls.reality.record_fragment_size` accepts an integer 0..16384 only with exact record-capable runtime admission. For admitted Chrome REALITY outbounds, generation adds 256 only if the field is absent. Explicit zero opts out. Official cores receive no new field, and other outbound/TLS settings remain unchanged.
+
+## Direct native workflows (UX task 3)
+
+These frontend helpers do not add a write API or change UCI identity/lifecycle.
+`device_set {address, section:""}` removes that exact IPv4 from all explicit
+`fully_routed_ips` assignments and restores ordinary rules. It is distinct from
+`section:"direct"`, which creates/uses the priority bypass rule `nxt_direct`.
+The UI uses `inherit` only as its local selection sentinel; the empty placeholder
+never submits a reset. Existing IPv6/CIDR assignments use the exact native rule
+editor because this endpoint accepts only an explicit IPv4.
+
+`src/forkop/next/workflows.ts` exports:
+
+- `navigateToRule(root, {kind:"create"|"edit"|"site", section?, option?})` activates
+  the existing native rules tab and dispatches cancelable `forkop:navigate-rule`
+  on its pane. `section` is the existing UCI ID, not its label; `option` is an
+  existing native option such as `subscription_url`, `domain`,
+  `mixed_proxy_enabled` or `fully_routed_ips`. The return value means the native
+  adapter accepted navigation, not that a save or apply completed. Exact
+  navigation failures are displayed in the destination. Native
+  `handleAdd`/`renderMoreOptionsModal`/`getActiveModalMap` and existing
+  save/parse/cancel behavior are retained. The native bundle exports this helper,
+  `configureRuleWorkflow`, and `renderQuickSite`.
+- `targetEligibility(target, use)` returns `{eligible, reason, settingsOption?}` for a
+  `WorkflowTarget` (`name`, optional `label`, `action`,
+  `localProxyConfigured`, `generated`). `use:"device"` follows device_set's
+  broader enabled-section contract. `use:"route"` (gaming/temporary) admits
+  connection/proxy/outbound/vpn/bypass/block but rejects generated targets.
+  `use:"smart"` requires a connection alias and configured mixed proxy;
+  `use:"probe"` requires configured mixed proxy without imposing a new action
+  restriction. Failed Smart Detect/probe eligibility supplies `settingsOption`
+  (`action` or `mixed_proxy_enabled`) for exact native recovery. An unsupported
+  Smart Detect action always points to `action`, even when its proxy is configured.
+  Gaming/temporary selectors show only eligible targets; device choices retain
+  their broader contract. Missing capability is unknown and unavailable, not verified.
+  Native status already excludes `next_kind` rows; the optional generated flag
+  also protects consumers combining a transient/native context with that list.
+- `workflowContext(root)` asks the native rules pane for `forkop:workflow-context`.
+  Its synchronous detail callback `provide(context)` supplies only
+  `targets:[{name,localProxyConfigured,generated}]` and
+  `loadDevices():Promise<Record<IPv4OrIPv6Address,name>>`. The native projection
+  derives proxy configuration from enabled flag plus valid port and omits
+  credentials, links, ports and arbitrary UCI options. It is configuration
+  evidence, not proof that the applied listener is available: backend probe
+  validation remains authoritative. The device picker filters hints to IPv4 and
+  labels them as DHCP hints, not live presence. Manual IPv4 entry remains usable.
+- `renderQuickSite(textarea,label,priority)` appends a previewed hostname/exact
+  match to the existing native domain draft, emits its native input/change
+  events, and preserves full/keyword/regex expressions. It never copies or
+  creates source sections. Native validation and saving remain authoritative.
+
+Dashboard groups expose `data-connection-section=<native sectionName>` for exact
+return/focus after application; this anchor is available for subsequent local
+search/collapse enhancements. Navigation never runs a probe or chooses a node.
+The Home empty-state CTA now starts the same native creation flow when no custom
+`openRules` adapter is supplied.
+
+Device, profile-exchange and route-selector reads discard obsolete generations,
+retain the last successful list on refresh failure and display refresh time.
+`forkop:refresh-tools` still accepts optional `{read}`; all three lists use that
+read wave. Gaming scope requires explicit `all` or `selected`; only `all` omits
+`payload.device`. A selected empty/invalid/IPv6 address never expands scope.
+Known native guard codes are preserved by the API and rendered as actionable
+local wording beside device/game actions. Task 1 mutation/refresh events and
+Task 2 evidence semantics remain unchanged.

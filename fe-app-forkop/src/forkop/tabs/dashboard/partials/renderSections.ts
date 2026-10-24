@@ -1,3 +1,4 @@
+import { navigateToRule } from '../../../next/workflows';
 import {
   renderLoaderCircleIcon24,
   renderCopyIcon24,
@@ -477,67 +478,111 @@ function renderDefaultState({
     onUpdateSubscription,
   );
 
-  return E('div', { class: 'fkp_dashboard-page__outbound-section' }, [
-    // Title with test latency
-    E('div', { class: 'fkp_dashboard-page__outbound-section__title-section' }, [
+  return E(
+    'div',
+    {
+      class: 'fkp_dashboard-page__outbound-section',
+      'data-connection-section': section.sectionName,
+    },
+    [
+      // Title with test latency
       E(
         'div',
-        {
-          class: 'fkp_dashboard-page__outbound-section__title-section__title',
-        },
-        section.displayName,
-      ),
-      E(
-        'div',
-        {
-          class: 'fkp_dashboard-page__outbound-section__title-section__actions',
-        },
+        { class: 'fkp_dashboard-page__outbound-section__title-section' },
         [
-          ...(subscriptionUpdateAction ? [subscriptionUpdateAction] : []),
           E(
-            'button',
+            'div',
             {
-              type: 'button',
-              class: 'btn dashboard-sections-grid-item-test-latency',
-              'data-latency-section': section.sectionName,
-              disabled: latencyFetching ? true : undefined,
-              click: (event: MouseEvent) => {
-                event.preventDefault();
-                event.stopPropagation();
-                if (latencyFetching) {
-                  return;
-                }
-
-                testLatency();
-              },
+              class:
+                'fkp_dashboard-page__outbound-section__title-section__title',
             },
-            latencyFetching
-              ? [
-                  renderLoaderCircleIcon24(),
-                  E(
-                    'span',
-                    {
-                      class: 'dashboard-sections-grid-item-test-latency__label',
-                    },
-                    getLatencyTestLabel(latencyProgress),
-                  ),
-                ]
-              : E(
-                  'span',
-                  {
-                    class: 'dashboard-sections-grid-item-test-latency__label',
+            section.displayName,
+          ),
+          E(
+            'div',
+            {
+              class:
+                'fkp_dashboard-page__outbound-section__title-section__actions',
+            },
+            [
+              E(
+                'button',
+                {
+                  type: 'button',
+                  click: (event: MouseEvent) => {
+                    const root = event.currentTarget as HTMLElement;
+                    navigateToRule(root, {
+                      kind: 'site',
+                      section: section.sectionName,
+                    });
                   },
-                  _('Test latency'),
-                ),
+                },
+                'Добавить сайт',
+              ),
+              E(
+                'button',
+                {
+                  type: 'button',
+                  click: (event: MouseEvent) => {
+                    const root = event.currentTarget as HTMLElement;
+                    navigateToRule(root, {
+                      kind: 'edit',
+                      section: section.sectionName,
+                      option: 'subscription_url',
+                    });
+                  },
+                },
+                'Изменить источники',
+              ),
+              ...(subscriptionUpdateAction ? [subscriptionUpdateAction] : []),
+              E(
+                'button',
+                {
+                  type: 'button',
+                  class: 'btn dashboard-sections-grid-item-test-latency',
+                  'data-latency-section': section.sectionName,
+                  disabled: latencyFetching ? true : undefined,
+                  click: (event: MouseEvent) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    if (latencyFetching) {
+                      return;
+                    }
+
+                    testLatency();
+                  },
+                },
+                latencyFetching
+                  ? [
+                      renderLoaderCircleIcon24(),
+                      E(
+                        'span',
+                        {
+                          class:
+                            'dashboard-sections-grid-item-test-latency__label',
+                        },
+                        getLatencyTestLabel(latencyProgress),
+                      ),
+                    ]
+                  : E(
+                      'span',
+                      {
+                        class:
+                          'dashboard-sections-grid-item-test-latency__label',
+                      },
+                      _('Test latency'),
+                    ),
+              ),
+            ],
           ),
         ],
       ),
-    ]),
-    E('div', { class: 'fkp_dashboard-page__outbound-grid' }, [
-      ...metadataNodes,
-      ...section.outbounds.map((outbound) => renderOutbound(outbound)),
-    ]),
-  ]);
+      E('div', { class: 'fkp_dashboard-page__outbound-grid' }, [
+        ...metadataNodes,
+        ...section.outbounds.map((outbound) => renderOutbound(outbound)),
+      ]),
+    ],
+  );
 }
 
 export function renderSections(props: IRenderSectionsProps) {

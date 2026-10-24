@@ -1,11 +1,24 @@
 // @vitest-environment happy-dom
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, beforeEach, expect, it } from 'vitest';
 import { renderCompatibilityPanel } from '../compatibility';
 import { renderAdvancedPanel, type Request } from '../advanced';
 const tick = async () => {
   for (let i = 0; i < 40; i++) await Promise.resolve();
 };
-afterEach(() => document.body.replaceChildren());
+const capability = (event: Event) =>
+  (event as CustomEvent).detail.provide({
+    targets: [
+      { name: 'main', localProxyConfigured: true },
+      { name: 'other', localProxyConfigured: true },
+    ],
+  });
+beforeEach(() =>
+  document.body.addEventListener('forkop:workflow-context', capability),
+);
+afterEach(() => {
+  document.body.removeEventListener('forkop:workflow-context', capability);
+  document.body.replaceChildren();
+});
 const button = (name: string) =>
   [...document.querySelectorAll('button')].find((b) => b.textContent === name)!;
 const status = {
@@ -15,8 +28,8 @@ const status = {
     recovery_pending: false,
     previous_available: true,
     sections: [
-      { name: 'main', label: 'Основное' },
-      { name: 'other', label: 'Другое' },
+      { name: 'main', label: 'Основное', action: 'connection' },
+      { name: 'other', label: 'Другое', action: 'connection' },
     ],
   },
 };

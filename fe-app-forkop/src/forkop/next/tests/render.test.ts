@@ -20,7 +20,7 @@ function setup() {
         success: true,
         data: {
           digest: 'abc123',
-          sections: [{ name: 'main', label: 'Основное' }],
+          sections: [{ name: 'main', label: 'Основное', action: 'connection' }],
           previous_available: true,
           versions: { forkop: 'next-dev', sing_box: '1.13.18' },
         },
@@ -73,6 +73,11 @@ function setup() {
     return { success: true, data: { items: [] } };
   };
   const panel = renderNextPanel(request);
+  panel.addEventListener('forkop:workflow-context', (event) =>
+    (event as CustomEvent).detail.provide({
+      targets: [{ name: 'main', localProxyConfigured: true }],
+    }),
+  );
   document.body.append(panel);
   return { panel, calls };
 }
@@ -523,13 +528,20 @@ it('explains that automatic comparison requires a local SOCKS inbound when backe
           success: true,
           data: {
             versions: {},
-            sections: [{ name: 'main', label: 'Основное' }],
+            sections: [
+              { name: 'main', label: 'Основное', action: 'connection' },
+            ],
             smart_detect: { enabled: false, section: '' },
           },
         }
       : action === 'smart_detect_configure'
         ? { success: false, error: 'section_probe_unavailable' }
         : { success: true, data: { items: [] } },
+  );
+  panel.addEventListener('forkop:workflow-context', (event) =>
+    (event as CustomEvent).detail.provide({
+      targets: [{ name: 'main', localProxyConfigured: true }],
+    }),
   );
   document.body.append(panel);
   await tick();

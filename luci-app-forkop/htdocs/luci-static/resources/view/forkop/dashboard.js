@@ -26,7 +26,22 @@ function createDashboardContent(section) {
         .closest(".cbi-map")
         ?.querySelector('.cbi-tabmenu [data-tab="section"] a')
         ?.click();
-    sources.append(help, edit);
+    const add = document.createElement("button");
+    add.type = "button";
+    add.textContent = "Добавить подключение";
+    const status = document.createElement("p");
+    status.setAttribute("role", "status");
+    add.onclick = () => {
+      if (
+        !main.navigateToRule(root, {
+          kind: "create",
+          option: "subscription_url",
+        })
+      )
+        status.textContent =
+          "Не удалось открыть создание подключения. Повторите действие в правилах.";
+    };
+    sources.append(add, help, edit, status);
     root.append(sources, main.DashboardTab.render());
     return root;
   };

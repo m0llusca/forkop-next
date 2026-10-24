@@ -1116,6 +1116,300 @@ function renderFlagEmojis(value) {
   );
 }
 
+// src/forkop/next/workflows.ts
+function targetEligibility(target, use) {
+  const connection = ["connection", "proxy", "outbound", "vpn"].includes(
+    target.action || ""
+  );
+  if (use === "device") return { eligible: true, reason: "" };
+  if (use === "route" && target.generated === true)
+    return {
+      eligible: false,
+      reason: "\u0421\u0433\u0435\u043D\u0435\u0440\u0438\u0440\u043E\u0432\u0430\u043D\u043D\u043E\u0435 \u043F\u0440\u0430\u0432\u0438\u043B\u043E \u043D\u0435\u043B\u044C\u0437\u044F \u0438\u0441\u043F\u043E\u043B\u044C\u0437\u043E\u0432\u0430\u0442\u044C \u043A\u0430\u043A \u0446\u0435\u043B\u044C \u043D\u043E\u0432\u043E\u0433\u043E \u043F\u0440\u0430\u0432\u0438\u043B\u0430"
+    };
+  if (use === "route")
+    return connection || ["bypass", "block"].includes(target.action || "") ? { eligible: true, reason: "" } : {
+      eligible: false,
+      reason: target.action ? "\u042D\u0442\u043E \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u0435 \u043D\u0435 \u043F\u043E\u0434\u0434\u0435\u0440\u0436\u0438\u0432\u0430\u0435\u0442 \u0442\u0430\u043A\u043E\u0439 \u043C\u0430\u0440\u0448\u0440\u0443\u0442" : "\u0422\u0438\u043F \u043C\u0430\u0440\u0448\u0440\u0443\u0442\u0430 \u043D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u0435\u043D \u2014 \u043E\u0442\u043A\u0440\u043E\u0439\u0442\u0435 \u043D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438"
+    };
+  if (use === "smart" && !connection)
+    return {
+      eligible: false,
+      reason: "Smart Detect \u0442\u0440\u0435\u0431\u0443\u0435\u0442 \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435 \u0441 \u043B\u043E\u043A\u0430\u043B\u044C\u043D\u044B\u043C \u043F\u0440\u043E\u043A\u0441\u0438",
+      settingsOption: "action"
+    };
+  return target.localProxyConfigured === true ? { eligible: true, reason: "" } : {
+    eligible: false,
+    reason: target.localProxyConfigured === false ? "\u041D\u0430\u0441\u0442\u0440\u043E\u0439\u0442\u0435 \u043B\u043E\u043A\u0430\u043B\u044C\u043D\u044B\u0439 \u043F\u0440\u043E\u043A\u0441\u0438 \u0432 \u044D\u0442\u043E\u043C \u043F\u0440\u0430\u0432\u0438\u043B\u0435" : "\u041D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0430 \u043B\u043E\u043A\u0430\u043B\u044C\u043D\u043E\u0433\u043E \u043F\u0440\u043E\u043A\u0441\u0438 \u043D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043D\u0430 \u2014 \u043E\u0442\u043A\u0440\u043E\u0439\u0442\u0435 \u043F\u0440\u0430\u0432\u0438\u043B\u043E",
+    settingsOption: connection || ["byedpi", "zapret", "zapret2"].includes(target.action || "") ? "mixed_proxy_enabled" : "action"
+  };
+}
+function workflowError(error) {
+  const code = error instanceof Error ? error.message : String(error || "request_failed");
+  return {
+    native_pending_changes: "\u0421\u043D\u0430\u0447\u0430\u043B\u0430 \u043F\u0440\u0438\u043C\u0435\u043D\u0438\u0442\u0435 \u0438\u043B\u0438 \u043E\u0442\u043C\u0435\u043D\u0438\u0442\u0435 \u0438\u0437\u043C\u0435\u043D\u0435\u043D\u0438\u044F \u0432 \u0440\u0435\u0434\u0430\u043A\u0442\u043E\u0440\u0435, \u0437\u0430\u0442\u0435\u043C \u043F\u043E\u0432\u0442\u043E\u0440\u0438\u0442\u0435 \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u0435. \u0427\u0435\u0440\u043D\u043E\u0432\u0438\u043A \u043E\u0441\u0442\u0430\u0451\u0442\u0441\u044F \u0432 \u0440\u0435\u0434\u0430\u043A\u0442\u043E\u0440\u0435.",
+    native_mutation_busy: "\u0414\u043E\u0436\u0434\u0438\u0442\u0435\u0441\u044C \u0437\u0430\u0432\u0435\u0440\u0448\u0435\u043D\u0438\u044F \u0442\u0435\u043A\u0443\u0449\u0435\u0433\u043E \u043F\u0440\u0438\u043C\u0435\u043D\u0435\u043D\u0438\u044F, \u0437\u0430\u0442\u0435\u043C \u043F\u043E\u0432\u0442\u043E\u0440\u0438\u0442\u0435 \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u0435.",
+    native_refresh_required: "\u041E\u0431\u043D\u043E\u0432\u0438\u0442\u0435 \u0440\u0435\u0434\u0430\u043A\u0442\u043E\u0440 \u043A\u043D\u043E\u043F\u043A\u043E\u0439 \xAB\u041E\u0431\u043D\u043E\u0432\u0438\u0442\u044C \u0440\u0435\u0434\u0430\u043A\u0442\u043E\u0440\xBB, \u0437\u0430\u0442\u0435\u043C \u043F\u043E\u0432\u0442\u043E\u0440\u0438\u0442\u0435 \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u0435."
+  }[code] || code;
+}
+function requireIPv4(value) {
+  const address = value.trim();
+  if (!/^\d+\.\d+\.\d+\.\d+$/.test(address) || address.split(".").some(
+    (part) => Number(part) > 255 || part.length > 1 && part[0] === "0"
+  ))
+    throw Error(
+      `\u0410\u0434\u0440\u0435\u0441 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430 \xAB${address}\xBB: \u0432\u0432\u0435\u0434\u0438\u0442\u0435 IPv4, \u043D\u0430\u043F\u0440\u0438\u043C\u0435\u0440 192.168.1.20. \u041D\u0430\u0437\u043D\u0430\u0447\u0435\u043D\u0438\u0435 IPv6 \u0437\u0434\u0435\u0441\u044C \u043F\u043E\u043A\u0430 \u043D\u0435 \u043F\u043E\u0434\u0434\u0435\u0440\u0436\u0438\u0432\u0430\u0435\u0442\u0441\u044F; \u0441\u0443\u0449\u0435\u0441\u0442\u0432\u0443\u044E\u0449\u0438\u0435 \u043D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438 IPv6 \u0441\u043E\u0445\u0440\u0430\u043D\u044F\u044E\u0442\u0441\u044F.`
+    );
+  return address;
+}
+function workflowContext(root) {
+  let context = {};
+  const provider = root.closest(".cbi-map")?.querySelector('.cbi-map-tabbed > [data-tab="section"]') || root;
+  provider.dispatchEvent(
+    new CustomEvent("forkop:workflow-context", {
+      bubbles: true,
+      detail: {
+        provide: (value) => {
+          context = value;
+        }
+      }
+    })
+  );
+  return context;
+}
+var pickerId = 0;
+function attachDevicePicker(input2, root) {
+  const list2 = document.createElement("datalist");
+  list2.id = `fkp-devices-${++pickerId}`;
+  input2.setAttribute("list", list2.id);
+  input2.after(list2);
+  let loading2 = false;
+  input2.addEventListener("focus", async () => {
+    const load = workflowContext(root).loadDevices;
+    if (!load || loading2) return;
+    loading2 = true;
+    try {
+      const choices = await load();
+      list2.replaceChildren();
+      for (const [address, name] of Object.entries(choices)) {
+        try {
+          requireIPv4(address);
+        } catch {
+          continue;
+        }
+        const option = document.createElement("option");
+        option.value = address;
+        option.label = `${name} \u2014 ${address}`;
+        option.textContent = option.label;
+        list2.append(option);
+      }
+    } catch {
+    } finally {
+      loading2 = false;
+    }
+  });
+}
+function navigateToRule(root, destination) {
+  const map = root.closest(".cbi-map") || root;
+  const pane = [
+    ...map.querySelectorAll(".cbi-map-tabbed > [data-tab]")
+  ].find((node) => node.dataset.tab === "section");
+  const tab = map.querySelector(
+    '.cbi-tabmenu [data-tab="section"] a'
+  );
+  if (!pane || !tab) return false;
+  tab.click();
+  return !pane.dispatchEvent(
+    new CustomEvent("forkop:navigate-rule", {
+      cancelable: true,
+      detail: destination
+    })
+  );
+}
+function siteValue(raw, subdomains) {
+  const text = raw.trim();
+  if (/^(full|keyword|regex):/.test(text) && !/[\r\n]/.test(text) && text.indexOf(":") < text.length - 1)
+    return {
+      value: text,
+      description: "\u0421\u043F\u0435\u0446\u0438\u0430\u043B\u044C\u043D\u043E\u0435 \u0443\u0441\u043B\u043E\u0432\u0438\u0435 \u0441\u043E\u0445\u0440\u0430\u043D\u044F\u0435\u0442\u0441\u044F \u0431\u0435\u0437 \u0438\u0437\u043C\u0435\u043D\u0435\u043D\u0438\u0439; \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0430 \u0432\u044B\u043F\u043E\u043B\u043D\u044F\u0435\u0442\u0441\u044F \u043F\u043E\u043B\u043D\u044B\u043C \u0440\u0435\u0434\u0430\u043A\u0442\u043E\u0440\u043E\u043C."
+    };
+  try {
+    if (!text || /\s/.test(text)) throw Error();
+    const url = new URL(/^https?:\/\//i.test(text) ? text : `https://${text}`);
+    const host = url.hostname;
+    if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || !/^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])$/i.test(host) || !host.includes(".") || host.split(".").some(
+      (part) => !part || part.length > 63 || part.startsWith("-") || part.endsWith("-")
+    ) || /^[\d.]+$/.test(host))
+      throw Error();
+    return {
+      value: subdomains ? host : `full:${host}`,
+      description: subdomains ? `${host} \u0438 \u0432\u0441\u0435 \u0435\u0433\u043E \u043F\u043E\u0434\u0434\u043E\u043C\u0435\u043D\u044B` : `\u0422\u043E\u043B\u044C\u043A\u043E ${host}, \u0431\u0435\u0437 \u043F\u043E\u0434\u0434\u043E\u043C\u0435\u043D\u043E\u0432`
+    };
+  } catch {
+    throw Error(
+      `\u0421\u0430\u0439\u0442: \u043D\u0435\u0432\u0435\u0440\u043D\u044B\u0439 \u0444\u0440\u0430\u0433\u043C\u0435\u043D\u0442 \xAB${text.includes("://") || text.includes("@") ? "\u0430\u0434\u0440\u0435\u0441 URL" : text.split(/[/?#]/, 1)[0]}\xBB. \u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u0434\u043E\u043C\u0435\u043D example.org \u0438\u043B\u0438 HTTP(S)-\u0430\u0434\u0440\u0435\u0441 \u0441\u0430\u0439\u0442\u0430 \u0431\u0435\u0437 \u043B\u043E\u0433\u0438\u043D\u0430 \u0438 \u043F\u0430\u0440\u043E\u043B\u044F.`
+    );
+  }
+}
+function renderQuickSite(textarea, label, priority) {
+  const root = document.createElement("section");
+  root.className = "fkp-next-panel";
+  const title = document.createElement("h3");
+  title.textContent = "\u0414\u043E\u0431\u0430\u0432\u0438\u0442\u044C \u0441\u0430\u0439\u0442";
+  const field = document.createElement("label");
+  field.textContent = "\u0421\u0430\u0439\u0442 \u0438\u043B\u0438 \u0430\u0434\u0440\u0435\u0441 \u0441\u0442\u0440\u0430\u043D\u0438\u0446\u044B";
+  const input2 = document.createElement("input");
+  input2.setAttribute("aria-label", "\u0421\u0430\u0439\u0442 \u0438\u043B\u0438 \u0430\u0434\u0440\u0435\u0441 \u0441\u0442\u0440\u0430\u043D\u0438\u0446\u044B");
+  field.append(input2);
+  const scope = document.createElement("label");
+  scope.textContent = "\u0412\u043A\u043B\u044E\u0447\u0430\u044F \u043F\u043E\u0434\u0434\u043E\u043C\u0435\u043D\u044B";
+  const subdomains = document.createElement("input");
+  subdomains.type = "checkbox";
+  subdomains.checked = true;
+  scope.append(subdomains);
+  const context = document.createElement("p");
+  context.textContent = `\u0418\u0437\u043C\u0435\u043D\u044F\u0435\u0442\u0441\u044F \u043F\u0440\u0430\u0432\u0438\u043B\u043E \xAB${label}\xBB, \u043F\u0440\u0438\u043E\u0440\u0438\u0442\u0435\u0442 ${priority}. \u041F\u0440\u0430\u0432\u0438\u043B\u0430 \u0432\u044B\u0448\u0435 \u043F\u0440\u043E\u0432\u0435\u0440\u044F\u044E\u0442\u0441\u044F \u043F\u0435\u0440\u0432\u044B\u043C\u0438; \u043E\u0441\u0442\u0430\u043B\u044C\u043D\u044B\u0435 \u0443\u0441\u043B\u043E\u0432\u0438\u044F \u044D\u0442\u043E\u0433\u043E \u043F\u0440\u0430\u0432\u0438\u043B\u0430 \u0441\u043E\u0445\u0440\u0430\u043D\u044F\u044E\u0442\u0441\u044F. \u042D\u0442\u043E \u0434\u043E\u043F\u043E\u043B\u043D\u0435\u043D\u0438\u0435 \u043A \u0441\u0443\u0449\u0435\u0441\u0442\u0432\u0443\u044E\u0449\u0438\u043C \u0434\u043E\u043C\u0435\u043D\u0430\u043C, \u043D\u0435 \u043E\u0442\u0434\u0435\u043B\u044C\u043D\u043E\u0435 \u043F\u0440\u0430\u0432\u0438\u043B\u043E.`;
+  const preview = document.createElement("output");
+  preview.setAttribute("aria-live", "polite");
+  const add = document.createElement("button");
+  add.type = "button";
+  add.textContent = "\u0414\u043E\u0431\u0430\u0432\u0438\u0442\u044C \u0432 \u0447\u0435\u0440\u043D\u043E\u0432\u0438\u043A \u043F\u0440\u0430\u0432\u0438\u043B\u0430";
+  add.disabled = textarea.disabled || textarea.readOnly;
+  input2.disabled = add.disabled;
+  subdomains.disabled = add.disabled;
+  const update = () => {
+    try {
+      const site = siteValue(input2.value, subdomains.checked);
+      preview.textContent = site.description;
+      input2.removeAttribute("aria-invalid");
+      return site.value;
+    } catch (error) {
+      preview.textContent = workflowError(error);
+      input2.setAttribute("aria-invalid", "true");
+      return void 0;
+    }
+  };
+  input2.oninput = update;
+  subdomains.onchange = update;
+  add.onclick = () => {
+    if (textarea.disabled || textarea.readOnly) return;
+    const value = update();
+    if (!value) return;
+    const lines = textarea.value.split(/\r?\n/).map((line) => line.trim());
+    if (!lines.includes(value)) {
+      textarea.value = `${textarea.value.trimEnd()}${textarea.value.trim() ? "\n" : ""}${value}`;
+      textarea.dispatchEvent(new Event("input", { bubbles: true }));
+      textarea.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+    preview.textContent += " \u0414\u043E\u0431\u0430\u0432\u043B\u0435\u043D\u043E \u0432 \u0447\u0435\u0440\u043D\u043E\u0432\u0438\u043A. \u0421\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u0435 \u0440\u0435\u0434\u0430\u043A\u0442\u043E\u0440, \u0437\u0430\u0442\u0435\u043C \u043F\u0440\u0438\u043C\u0435\u043D\u0438\u0442\u0435 \u0438\u0437\u043C\u0435\u043D\u0435\u043D\u0438\u044F.";
+  };
+  root.append(title, context, field, scope, preview, add);
+  return root;
+}
+function configureRuleWorkflow(section) {
+  let destination;
+  let lastSection = "";
+  let table;
+  const render5 = section.renderContents;
+  const modal = section.renderMoreOptionsModal;
+  const notice = document.createElement("p");
+  notice.setAttribute("role", "status");
+  const returnNotice = document.createElement("p");
+  returnNotice.setAttribute("role", "status");
+  const back = document.createElement("button");
+  back.type = "button";
+  back.textContent = "\u0412\u0435\u0440\u043D\u0443\u0442\u044C\u0441\u044F \u043A \u0432\u044B\u0431\u043E\u0440\u0443 \u0443\u0437\u043B\u0430";
+  back.hidden = true;
+  back.onclick = () => {
+    const map = table.closest(".cbi-map");
+    map?.querySelector('.cbi-tabmenu [data-tab="dashboard"] a')?.click();
+    const target = [
+      ...map?.querySelectorAll("[data-connection-section]") || []
+    ].find((node) => node.dataset.connectionSection === lastSection);
+    returnNotice.remove();
+    if (target) {
+      target.tabIndex = -1;
+      target.focus();
+      target.scrollIntoView?.({ block: "center" });
+      notice.textContent = "";
+    } else {
+      returnNotice.textContent = "\u0413\u0440\u0443\u043F\u043F\u0430 \u043F\u043E\u044F\u0432\u0438\u0442\u0441\u044F \u043D\u0430 \u0441\u0442\u0440\u0430\u043D\u0438\u0446\u0435 \u0441\u0435\u0440\u0432\u0435\u0440\u043E\u0432 \u043F\u043E\u0441\u043B\u0435 \u043F\u0440\u0438\u043C\u0435\u043D\u0435\u043D\u0438\u044F \u0438 \u0443\u0441\u043F\u0435\u0448\u043D\u043E\u0433\u043E \u0440\u0430\u0437\u0431\u043E\u0440\u0430 \u0438\u0441\u0442\u043E\u0447\u043D\u0438\u043A\u043E\u0432. \u041F\u0440\u043E\u0432\u0435\u0440\u044C\u0442\u0435 \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442 \u043E\u0431\u043D\u043E\u0432\u043B\u0435\u043D\u0438\u044F \u043F\u043E\u0434\u043F\u0438\u0441\u043A\u0438.";
+      map?.querySelector('.cbi-map-tabbed > [data-tab="dashboard"]')?.prepend(returnNotice);
+    }
+  };
+  section.renderMoreOptionsModal = function(name, event) {
+    const requested = destination;
+    destination = void 0;
+    return Promise.resolve(modal.call(this, name, event)).then((result) => {
+      if (!requested) return result;
+      lastSection = name;
+      const sourceWorkflow = requested.kind === "create" || requested.kind === "edit" && (!requested.option || [
+        "selector_proxy_links",
+        "subscription_url",
+        "interfaces",
+        "outbound_jsons",
+        "urltest",
+        "priority_group"
+      ].includes(requested.option));
+      back.hidden = !sourceWorkflow;
+      notice.textContent = sourceWorkflow ? "\u0421\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u0435 \u0440\u0435\u0434\u0430\u043A\u0442\u043E\u0440, \u0437\u0430\u0442\u0435\u043C \u043F\u0440\u0438\u043C\u0435\u043D\u0438\u0442\u0435 \u0438\u0437\u043C\u0435\u043D\u0435\u043D\u0438\u044F. \u041F\u043E\u0441\u043B\u0435 \u0440\u0430\u0437\u0431\u043E\u0440\u0430 \u0438\u0441\u0442\u043E\u0447\u043D\u0438\u043A\u043E\u0432 \u0432\u0435\u0440\u043D\u0438\u0442\u0435\u0441\u044C \u043A \u0432\u044B\u0431\u043E\u0440\u0443 \u0443\u0437\u043B\u0430. \u041F\u0440\u043E\u043F\u0443\u0441\u043A\u0438 \u0438 \u043E\u0448\u0438\u0431\u043A\u0438 \u0438\u0441\u0442\u043E\u0447\u043D\u0438\u043A\u043E\u0432 \u0441\u043C\u043E\u0442\u0440\u0438\u0442\u0435 \u0432 \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442\u0435 \u043E\u0431\u043D\u043E\u0432\u043B\u0435\u043D\u0438\u044F \u043F\u043E\u0434\u043F\u0438\u0441\u043A\u0438." : "\u0421\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u0435 \u0440\u0435\u0434\u0430\u043A\u0442\u043E\u0440, \u0437\u0430\u0442\u0435\u043C \u043F\u0440\u0438\u043C\u0435\u043D\u0438\u0442\u0435 \u0438\u0437\u043C\u0435\u043D\u0435\u043D\u0438\u044F \u043F\u0440\u0430\u0432\u0438\u043B\u0430.";
+      const root = this.getActiveModalMap();
+      const option = requested.option || (requested.kind === "site" ? "domain" : "selector_proxy_links");
+      const field = [...root.querySelectorAll("[id]")].find(
+        (node) => node.id === `cbid.${this.uciconfig || this.map.config}.${name}.${option}`
+      );
+      const tab = option === "domain" || option === "fully_routed_ips" ? "conditions" : "settings";
+      root.querySelector(`.cbi-tabmenu [data-tab="${tab}"] a`)?.click();
+      let parent = field?.parentElement;
+      while (parent && parent !== root) {
+        if (parent instanceof HTMLDetailsElement) parent.open = true;
+        parent = parent.parentElement;
+      }
+      const input2 = field?.matches("input,textarea,select") ? field : field?.querySelector("input,textarea,select");
+      input2?.focus();
+      field?.scrollIntoView?.({ block: "center" });
+      return result;
+    });
+  };
+  section.renderContents = function(...args) {
+    table = render5.apply(this, args);
+    table.append(notice, back);
+    table.addEventListener("forkop:navigate-rule", (event) => {
+      event.preventDefault();
+      const requested = event.detail;
+      destination = requested;
+      if (requested.kind === "create") {
+        const create = table.querySelector(
+          ".cbi-section-create button"
+        );
+        if (create && !create.disabled) create.click();
+        else {
+          destination = void 0;
+          notice.textContent = "\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u043E\u0442\u043A\u0440\u044B\u0442\u044C \u0441\u043E\u0437\u0434\u0430\u043D\u0438\u0435: \u0440\u0435\u0434\u0430\u043A\u0442\u043E\u0440 \u043D\u0435\u0434\u043E\u0441\u0442\u0443\u043F\u0435\u043D.";
+        }
+        return;
+      }
+      if (!requested.section || !this.map.data.get(this.uciconfig || this.map.config, requested.section)) {
+        destination = void 0;
+        notice.textContent = "\u041F\u0440\u0430\u0432\u0438\u043B\u043E \u043D\u0435 \u043D\u0430\u0439\u0434\u0435\u043D\u043E. \u041E\u0431\u043D\u043E\u0432\u0438\u0442\u0435 \u0434\u0430\u043D\u043D\u044B\u0435.";
+        return;
+      }
+      void Promise.resolve().then(() => this.renderMoreOptionsModal(requested.section, event)).catch(() => {
+        destination = void 0;
+        notice.textContent = "\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u043E\u0442\u043A\u0440\u044B\u0442\u044C \u0440\u0435\u0434\u0430\u043A\u0442\u043E\u0440. \u041F\u043E\u0432\u0442\u043E\u0440\u0438\u0442\u0435 \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u0435.";
+      });
+    });
+    for (const row of table.querySelectorAll("tr[data-sid]")) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = "\u0414\u043E\u0431\u0430\u0432\u0438\u0442\u044C \u0441\u0430\u0439\u0442";
+      button.onclick = () => navigateToRule(table, { kind: "site", section: row.dataset.sid });
+      (row.querySelector(".cbi-section-actions") || row.lastElementChild)?.append(button);
+    }
+    return table;
+  };
+}
+
 // src/helpers/downloadAsTxt.ts
 function downloadAsTxt(text, filename) {
   const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
@@ -2362,64 +2656,104 @@ function renderDefaultState({
     subscriptionUpdating,
     onUpdateSubscription
   );
-  return E("div", { class: "fkp_dashboard-page__outbound-section" }, [
-    // Title with test latency
-    E("div", { class: "fkp_dashboard-page__outbound-section__title-section" }, [
+  return E(
+    "div",
+    {
+      class: "fkp_dashboard-page__outbound-section",
+      "data-connection-section": section.sectionName
+    },
+    [
+      // Title with test latency
       E(
         "div",
-        {
-          class: "fkp_dashboard-page__outbound-section__title-section__title"
-        },
-        section.displayName
-      ),
-      E(
-        "div",
-        {
-          class: "fkp_dashboard-page__outbound-section__title-section__actions"
-        },
+        { class: "fkp_dashboard-page__outbound-section__title-section" },
         [
-          ...subscriptionUpdateAction ? [subscriptionUpdateAction] : [],
           E(
-            "button",
+            "div",
             {
-              type: "button",
-              class: "btn dashboard-sections-grid-item-test-latency",
-              "data-latency-section": section.sectionName,
-              disabled: latencyFetching ? true : void 0,
-              click: (event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                if (latencyFetching) {
-                  return;
-                }
-                testLatency();
-              }
+              class: "fkp_dashboard-page__outbound-section__title-section__title"
             },
-            latencyFetching ? [
-              renderLoaderCircleIcon24(),
+            section.displayName
+          ),
+          E(
+            "div",
+            {
+              class: "fkp_dashboard-page__outbound-section__title-section__actions"
+            },
+            [
               E(
-                "span",
+                "button",
                 {
-                  class: "dashboard-sections-grid-item-test-latency__label"
+                  type: "button",
+                  click: (event) => {
+                    const root = event.currentTarget;
+                    navigateToRule(root, {
+                      kind: "site",
+                      section: section.sectionName
+                    });
+                  }
                 },
-                getLatencyTestLabel(latencyProgress)
+                "\u0414\u043E\u0431\u0430\u0432\u0438\u0442\u044C \u0441\u0430\u0439\u0442"
+              ),
+              E(
+                "button",
+                {
+                  type: "button",
+                  click: (event) => {
+                    const root = event.currentTarget;
+                    navigateToRule(root, {
+                      kind: "edit",
+                      section: section.sectionName,
+                      option: "subscription_url"
+                    });
+                  }
+                },
+                "\u0418\u0437\u043C\u0435\u043D\u0438\u0442\u044C \u0438\u0441\u0442\u043E\u0447\u043D\u0438\u043A\u0438"
+              ),
+              ...subscriptionUpdateAction ? [subscriptionUpdateAction] : [],
+              E(
+                "button",
+                {
+                  type: "button",
+                  class: "btn dashboard-sections-grid-item-test-latency",
+                  "data-latency-section": section.sectionName,
+                  disabled: latencyFetching ? true : void 0,
+                  click: (event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    if (latencyFetching) {
+                      return;
+                    }
+                    testLatency();
+                  }
+                },
+                latencyFetching ? [
+                  renderLoaderCircleIcon24(),
+                  E(
+                    "span",
+                    {
+                      class: "dashboard-sections-grid-item-test-latency__label"
+                    },
+                    getLatencyTestLabel(latencyProgress)
+                  )
+                ] : E(
+                  "span",
+                  {
+                    class: "dashboard-sections-grid-item-test-latency__label"
+                  },
+                  _("Test latency")
+                )
               )
-            ] : E(
-              "span",
-              {
-                class: "dashboard-sections-grid-item-test-latency__label"
-              },
-              _("Test latency")
-            )
+            ]
           )
         ]
-      )
-    ]),
-    E("div", { class: "fkp_dashboard-page__outbound-grid" }, [
-      ...metadataNodes,
-      ...section.outbounds.map((outbound) => renderOutbound(outbound))
-    ])
-  ]);
+      ),
+      E("div", { class: "fkp_dashboard-page__outbound-grid" }, [
+        ...metadataNodes,
+        ...section.outbounds.map((outbound) => renderOutbound(outbound))
+      ])
+    ]
+  );
 }
 function renderSections(props) {
   if (props.failed) {
@@ -14846,6 +15180,7 @@ function renderDeviceProfileTools(request, initialRequest = request, area = "all
       const option = document.createElement("option");
       option.value = item.value;
       option.textContent = item.label;
+      option.disabled = "disabled" in item && item.disabled === true;
       select2.append(option);
     }
     if (items2.some((item) => item.value === previous)) select2.value = previous;
@@ -14866,7 +15201,7 @@ function renderDeviceProfileTools(request, initialRequest = request, area = "all
       try {
         await task();
       } catch (error) {
-        output.textContent = error instanceof Error ? error.message : "request_failed";
+        output.textContent = workflowError(error);
       } finally {
         b.disabled = false;
         output.setAttribute("aria-busy", "false");
@@ -14887,51 +15222,110 @@ function renderDeviceProfileTools(request, initialRequest = request, area = "all
   const devices = document.createElement("ul");
   group.append(devices);
   const device = field("input", "\u0410\u0434\u0440\u0435\u0441 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430");
+  attachDevicePicker(device, root);
+  note(
+    "\u0412\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u0438\u043C\u044F \u0438 IPv4 \u0438\u0437 \u043F\u043E\u0434\u0441\u043A\u0430\u0437\u043E\u043A DHCP \u0438\u043B\u0438 \u0432\u0432\u0435\u0434\u0438\u0442\u0435 IPv4 \u0432\u0440\u0443\u0447\u043D\u0443\u044E. \u041F\u043E\u0434\u0441\u043A\u0430\u0437\u043A\u0430 DHCP \u043D\u0435 \u043F\u043E\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0430\u0435\u0442, \u0447\u0442\u043E \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u043E \u0441\u0435\u0439\u0447\u0430\u0441 \u043E\u043D\u043B\u0430\u0439\u043D. \u041D\u0430\u0437\u043D\u0430\u0447\u0435\u043D\u0438\u0435 IPv6 \u0437\u0434\u0435\u0441\u044C \u043F\u043E\u043A\u0430 \u043D\u0435 \u043F\u043E\u0434\u0434\u0435\u0440\u0436\u0438\u0432\u0430\u0435\u0442\u0441\u044F."
+  );
   const route = field("select", "\u041C\u0430\u0440\u0448\u0440\u0443\u0442 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430");
   options(route, []);
   const deviceResult = result("\u0420\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430");
   let assignments = [];
-  const routeLabels = /* @__PURE__ */ new Map([["direct", "\u041D\u0430\u043F\u0440\u044F\u043C\u0443\u044E"]]);
+  const routeLabels = /* @__PURE__ */ new Map([
+    ["direct", "\u0412\u0441\u0435\u0433\u0434\u0430 \u043D\u0430\u043F\u0440\u044F\u043C\u0443\u044E"],
+    ["nxt_direct", "\u0412\u0441\u0435\u0433\u0434\u0430 \u043D\u0430\u043F\u0440\u044F\u043C\u0443\u044E"],
+    ["", "\u041F\u043E \u043E\u0431\u0449\u0438\u043C \u043F\u0440\u0430\u0432\u0438\u043B\u0430\u043C"]
+  ]);
   const showDevices = () => {
     devices.replaceChildren();
     for (const item of assignments) {
       const li = document.createElement("li");
       li.textContent = `${item.address} \u2192 ${routeLabels.get(item.section) || item.section}`;
+      try {
+        requireIPv4(item.address);
+      } catch {
+        const native = document.createElement("button");
+        native.type = "button";
+        native.textContent = "\u0418\u0437\u043C\u0435\u043D\u0438\u0442\u044C \u0432 \u043F\u043E\u043B\u043D\u043E\u043C \u0440\u0435\u0434\u0430\u043A\u0442\u043E\u0440\u0435";
+        native.onclick = () => {
+          if (!navigateToRule(root, {
+            kind: "edit",
+            section: item.section,
+            option: "fully_routed_ips"
+          }))
+            deviceResult.textContent = "\u041E\u0442\u043A\u0440\u043E\u0439\u0442\u0435 \u044D\u0442\u043E \u043F\u0440\u0430\u0432\u0438\u043B\u043E \u0432 \u043F\u043E\u043B\u043D\u043E\u043C \u0440\u0435\u0434\u0430\u043A\u0442\u043E\u0440\u0435: IPv6 \u0438 \u043F\u043E\u0434\u0441\u0435\u0442\u0438 \u0441\u043E\u0445\u0440\u0430\u043D\u044F\u044E\u0442\u0441\u044F \u0431\u0435\u0437 \u0438\u0437\u043C\u0435\u043D\u0435\u043D\u0438\u0439.";
+        };
+        li.append(native);
+        devices.append(li);
+        continue;
+      }
+      const edit = document.createElement("button");
+      edit.type = "button";
+      edit.textContent = "\u0418\u0437\u043C\u0435\u043D\u0438\u0442\u044C";
+      edit.onclick = () => {
+        device.value = item.address;
+        route.value = item.section === "nxt_direct" ? "direct" : item.section;
+        device.focus();
+      };
+      const reset = button("\u041F\u043E \u043E\u0431\u0449\u0438\u043C \u043F\u0440\u0430\u0432\u0438\u043B\u0430\u043C", deviceResult, async () => {
+        await saveDevice(item.address, "");
+      });
+      li.append(edit, reset);
       devices.append(li);
     }
     if (!assignments.length)
       devices.textContent = "\u041C\u0430\u0440\u0448\u0440\u0443\u0442\u044B \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432 \u043F\u043E\u043A\u0430 \u043D\u0435 \u0437\u0430\u0434\u0430\u043D\u044B.";
   };
-  const loadDevices = async () => {
-    const data = await call("devices", {});
-    assignments = data.items;
-    showDevices();
+  let deviceGeneration = 0;
+  let devicesUpdated = "";
+  const loadDevices = async (read = request) => {
+    const generation = ++deviceGeneration;
+    try {
+      const data = await call("devices", {}, read);
+      if (generation !== deviceGeneration) return false;
+      if (!Array.isArray(data?.items)) throw Error("invalid_response");
+      assignments = data.items;
+      devicesUpdated = (/* @__PURE__ */ new Date()).toLocaleString();
+      showDevices();
+      deviceResult.textContent = `\u0421\u043F\u0438\u0441\u043E\u043A \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432 \u043E\u0431\u043D\u043E\u0432\u043B\u0451\u043D: ${devicesUpdated}.`;
+      return true;
+    } catch (error) {
+      if (generation !== deviceGeneration) return false;
+      deviceResult.textContent = `${workflowError(error)}. \u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u043E\u0431\u043D\u043E\u0432\u0438\u0442\u044C \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430.${devicesUpdated ? ` \u041F\u043E\u043A\u0430\u0437\u0430\u043D\u044B \u0434\u0430\u043D\u043D\u044B\u0435 \u043E\u0442 ${devicesUpdated}.` : " \u041D\u0430\u0436\u043C\u0438\u0442\u0435 \xAB\u041E\u0431\u043D\u043E\u0432\u0438\u0442\u044C \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430\xBB."}`;
+      return false;
+    }
+  };
+  const saveDevice = async (raw, section) => {
+    const address = requireIPv4(raw);
+    ++deviceGeneration;
+    await call("device_set", { address, section });
+    const refreshed = await loadDevices();
+    deviceResult.textContent = `\u041C\u0430\u0440\u0448\u0440\u0443\u0442 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430 \u0441\u043E\u0445\u0440\u0430\u043D\u0451\u043D \u0438 \u043F\u0440\u0438\u043C\u0435\u043D\u0451\u043D: ${address} \u2192 ${routeLabels.get(section) || section}.${refreshed ? "" : " \u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u043E\u0431\u043D\u043E\u0432\u0438\u0442\u044C \u0441\u043F\u0438\u0441\u043E\u043A \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432; \u043F\u043E\u043A\u0430\u0437\u0430\u043D\u044B \u043F\u0440\u0435\u0436\u043D\u0438\u0435 \u0434\u0430\u043D\u043D\u044B\u0435."}`;
   };
   button("\u0421\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u044C \u043C\u0430\u0440\u0448\u0440\u0443\u0442 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430", deviceResult, async () => {
     if (!device.value.trim() || !route.value)
       throw new Error("\u0422\u0440\u0435\u0431\u0443\u044E\u0442\u0441\u044F \u0430\u0434\u0440\u0435\u0441 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430 \u0438 \u043C\u0430\u0440\u0448\u0440\u0443\u0442");
-    const address = device.value.trim();
-    const section = route.value;
-    await call("device_set", {
-      address,
-      section
-    });
-    deviceResult.textContent = `\u041C\u0430\u0440\u0448\u0440\u0443\u0442 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430 \u0441\u043E\u0445\u0440\u0430\u043D\u0451\u043D: ${address} \u2192 ${routeLabels.get(section) || section}.`;
-    try {
-      await loadDevices();
-    } catch {
-      deviceResult.textContent += " \u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u043E\u0431\u043D\u043E\u0432\u0438\u0442\u044C \u0441\u043F\u0438\u0441\u043E\u043A \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432.";
-    }
+    await saveDevice(
+      device.value,
+      route.value === "inherit" ? "" : route.value
+    );
   });
   button("\u041E\u0431\u043D\u043E\u0432\u0438\u0442\u044C \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430", deviceResult, async () => {
     await loadDevices();
-    deviceResult.textContent = "\u0421\u043F\u0438\u0441\u043E\u043A \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432 \u043E\u0431\u043D\u043E\u0432\u043B\u0451\u043D.";
   });
   heading("\u0418\u0433\u0440\u043E\u0432\u044B\u0435 \u043F\u0440\u0435\u0441\u0435\u0442\u044B");
   note(
     "\u041F\u0440\u0435\u0441\u0435\u0442\u044B \u043D\u0430\u043F\u0440\u0430\u0432\u043B\u044F\u044E\u0442 \u0434\u043E\u043C\u0435\u043D\u044B \u043C\u0430\u0433\u0430\u0437\u0438\u043D\u043E\u0432 \u0438 \u0437\u0430\u0433\u0440\u0443\u0437\u043E\u043A. \u0418\u0433\u0440\u043E\u0432\u044B\u0435 \u0441\u0435\u0441\u0441\u0438\u0438 \u0441\u043E\u0445\u0440\u0430\u043D\u044F\u044E\u0442 \u0442\u0435\u043A\u0443\u0449\u0443\u044E \u043C\u0430\u0440\u0448\u0440\u0443\u0442\u0438\u0437\u0430\u0446\u0438\u044E."
   );
+  const scope = field("select", "\u041E\u0445\u0432\u0430\u0442 \u0438\u0433\u0440\u043E\u0432\u043E\u0433\u043E \u043F\u0440\u0435\u0441\u0435\u0442\u0430");
+  options(scope, [
+    { value: "all", label: "\u0412\u0441\u0435 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430" },
+    { value: "selected", label: "\u0412\u044B\u0431\u0440\u0430\u043D\u043D\u043E\u0435 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u043E" }
+  ]);
   const gamingDevice = field("input", "\u0418\u0433\u0440\u043E\u0432\u043E\u0435 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u043E");
+  attachDevicePicker(gamingDevice, root);
+  note(
+    "\u0414\u043B\u044F \u0432\u044B\u0431\u0440\u0430\u043D\u043D\u043E\u0433\u043E \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430 \u043D\u0443\u0436\u0435\u043D IPv4. \u041F\u043E\u0434\u0441\u043A\u0430\u0437\u043A\u0438 DHCP \u043D\u0435 \u044F\u0432\u043B\u044F\u044E\u0442\u0441\u044F \u043E\u043D\u043B\u0430\u0439\u043D-\u0441\u0442\u0430\u0442\u0443\u0441\u043E\u043C."
+  );
   const preset = field("select", "\u0418\u0433\u0440\u043E\u0432\u043E\u0439 \u043F\u0440\u0435\u0441\u0435\u0442");
   options(preset, [
     { value: "steam", label: "Steam" },
@@ -14940,15 +15334,31 @@ function renderDeviceProfileTools(request, initialRequest = request, area = "all
   ]);
   const gamingRoute = field("select", "\u0418\u0433\u0440\u043E\u0432\u043E\u0439 \u043C\u0430\u0440\u0448\u0440\u0443\u0442");
   options(gamingRoute, []);
+  const gamingPreview = result("\u041F\u0440\u0435\u0434\u0432\u0430\u0440\u0438\u0442\u0435\u043B\u044C\u043D\u044B\u0439 \u043E\u0445\u0432\u0430\u0442 \u043F\u0440\u0435\u0441\u0435\u0442\u0430");
+  const showScope = () => {
+    gamingDevice.disabled = scope.value !== "selected";
+    gamingPreview.textContent = scope.value ? `\u042D\u0442\u043E\u0442 \u043F\u0440\u0435\u0441\u0435\u0442 \u0437\u0430\u0442\u0440\u043E\u043D\u0435\u0442 ${scope.value === "all" ? "\u0432\u0441\u0435 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430" : gamingDevice.value.trim() || "\u0432\u044B\u0431\u0440\u0430\u043D\u043D\u043E\u0435 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u043E \u2014 \u0443\u043A\u0430\u0436\u0438\u0442\u0435 IPv4"} \u2192 ${routeLabels.get(gamingRoute.value) || "\u0432\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u043C\u0430\u0440\u0448\u0440\u0443\u0442"}.` : "\u0412\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u044F\u0432\u043D\u043E: \u0432\u0441\u0435 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430 \u0438\u043B\u0438 \u0432\u044B\u0431\u0440\u0430\u043D\u043D\u043E\u0435 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u043E.";
+  };
+  scope.onchange = showScope;
+  gamingDevice.oninput = showScope;
+  gamingRoute.onchange = showScope;
+  showScope();
   const gamingResult = result("\u0420\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442 \u0438\u0433\u0440\u043E\u0432\u043E\u0433\u043E \u043F\u0440\u0435\u0441\u0435\u0442\u0430");
   button("\u041F\u0440\u0438\u043C\u0435\u043D\u0438\u0442\u044C \u0438\u0433\u0440\u043E\u0432\u043E\u0439 \u043F\u0440\u0435\u0441\u0435\u0442", gamingResult, async () => {
     if (!preset.value || !gamingRoute.value)
       throw new Error("\u0422\u0440\u0435\u0431\u0443\u044E\u0442\u0441\u044F \u0438\u0433\u0440\u043E\u0432\u043E\u0439 \u043F\u0440\u0435\u0441\u0435\u0442 \u0438 \u043C\u0430\u0440\u0448\u0440\u0443\u0442");
+    if (!scope.value)
+      throw new Error(
+        "\u0412\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u043E\u0445\u0432\u0430\u0442 \u0438\u0433\u0440\u043E\u0432\u043E\u0433\u043E \u043F\u0440\u0435\u0441\u0435\u0442\u0430: \u0432\u0441\u0435 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430 \u0438\u043B\u0438 \u0432\u044B\u0431\u0440\u0430\u043D\u043D\u043E\u0435 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u043E"
+      );
+    if (gamingRoute.selectedOptions[0]?.disabled)
+      throw new Error("\u0412\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u0434\u043E\u0441\u0442\u0443\u043F\u043D\u044B\u0439 \u0438\u0433\u0440\u043E\u0432\u043E\u0439 \u043C\u0430\u0440\u0448\u0440\u0443\u0442");
     const payload = {
       preset: preset.value,
       section: gamingRoute.value
     };
-    if (gamingDevice.value.trim()) payload.device = gamingDevice.value.trim();
+    if (scope.value === "selected")
+      payload.device = requireIPv4(gamingDevice.value);
     await call("gaming_apply", payload);
     gamingResult.textContent = "\u0418\u0433\u0440\u043E\u0432\u043E\u0439 \u043F\u0440\u0435\u0441\u0435\u0442 \u043F\u0440\u0438\u043C\u0435\u043D\u0451\u043D.";
   });
@@ -14959,12 +15369,28 @@ function renderDeviceProfileTools(request, initialRequest = request, area = "all
   const exportName = field("select", "\u041F\u0440\u043E\u0444\u0438\u043B\u044C \u0434\u043B\u044F \u044D\u043A\u0441\u043F\u043E\u0440\u0442\u0430");
   options(exportName, []);
   const profileResult = result("\u0420\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442 \u043F\u0440\u043E\u0444\u0438\u043B\u044F");
-  const loadProfiles = async (read = request) => {
-    const data = await call("profile_list", {}, read);
-    options(
-      exportName,
-      data.items.map((item) => ({ value: item.name, label: item.name }))
-    );
+  let profilesGeneration = 0;
+  let profilesUpdated = "";
+  const loadProfiles = async (read = request, announce = true) => {
+    const generation = ++profilesGeneration;
+    try {
+      const data = await call("profile_list", {}, read);
+      if (generation !== profilesGeneration) return false;
+      if (!Array.isArray(data?.items)) throw Error("invalid_response");
+      options(
+        exportName,
+        data.items.map((item) => ({ value: item.name, label: item.name }))
+      );
+      profilesUpdated = (/* @__PURE__ */ new Date()).toLocaleString();
+      if (announce)
+        profileResult.textContent = `\u0421\u043F\u0438\u0441\u043E\u043A \u043F\u0440\u043E\u0444\u0438\u043B\u0435\u0439 \u043E\u0431\u043D\u043E\u0432\u043B\u0451\u043D: ${profilesUpdated}.`;
+      return true;
+    } catch (error) {
+      if (generation !== profilesGeneration) return false;
+      if (announce)
+        profileResult.textContent = `${workflowError(error)}. \u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u043E\u0431\u043D\u043E\u0432\u0438\u0442\u044C \u043F\u0440\u043E\u0444\u0438\u043B\u0438.${profilesUpdated ? ` \u041F\u043E\u043A\u0430\u0437\u0430\u043D\u044B \u0434\u0430\u043D\u043D\u044B\u0435 \u043E\u0442 ${profilesUpdated}.` : " \u041D\u0430\u0436\u043C\u0438\u0442\u0435 \xAB\u041E\u0431\u043D\u043E\u0432\u0438\u0442\u044C \u043F\u0440\u043E\u0444\u0438\u043B\u0438\xBB."}`;
+      return false;
+    }
   };
   button("\u0421\u043A\u0430\u0447\u0430\u0442\u044C \u043F\u0440\u043E\u0444\u0438\u043B\u044C", profileResult, async () => {
     if (!exportName.value) throw new Error("\u0422\u0440\u0435\u0431\u0443\u0435\u0442\u0441\u044F \u043F\u0440\u043E\u0444\u0438\u043B\u044C \u0434\u043B\u044F \u044D\u043A\u0441\u043F\u043E\u0440\u0442\u0430");
@@ -15023,55 +15449,71 @@ function renderDeviceProfileTools(request, initialRequest = request, area = "all
     root.dispatchEvent(
       new CustomEvent("forkop:profiles-changed", { bubbles: true })
     );
-    try {
-      await loadProfiles();
-    } catch {
+    if (!await loadProfiles(request, false))
       profileResult.textContent += " \u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u043E\u0431\u043D\u043E\u0432\u0438\u0442\u044C \u0441\u043F\u0438\u0441\u043E\u043A \u043F\u0440\u043E\u0444\u0438\u043B\u0435\u0439.";
-    }
   });
   button("\u041E\u0431\u043D\u043E\u0432\u0438\u0442\u044C \u043F\u0440\u043E\u0444\u0438\u043B\u0438", profileResult, async () => {
     await loadProfiles();
-    profileResult.textContent = "\u0421\u043F\u0438\u0441\u043E\u043A \u043F\u0440\u043E\u0444\u0438\u043B\u0435\u0439 \u043E\u0431\u043D\u043E\u0432\u043B\u0451\u043D.";
   });
   if (area !== "profiles") {
     deviceResult.textContent = "\u0417\u0430\u0433\u0440\u0443\u0437\u043A\u0430 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u2026";
-    void loadDevices().then(() => {
-      deviceResult.textContent = "";
-    }).catch((error) => {
-      deviceResult.textContent = error instanceof Error ? error.message : "device_read_failed";
-    });
+    void loadDevices(initialRequest);
   }
   if (area !== "devices") {
     profileResult.textContent = "\u0417\u0430\u0433\u0440\u0443\u0437\u043A\u0430 \u043F\u0440\u043E\u0444\u0438\u043B\u0435\u0439\u2026";
-    void loadProfiles(initialRequest).then(() => {
-      profileResult.textContent = "";
-    }).catch((error) => {
-      profileResult.textContent = error instanceof Error ? error.message : "profile_read_failed";
-    });
+    void loadProfiles(initialRequest);
   }
   let routesGeneration = 0;
+  let routesUpdated = "";
+  const routesFreshness = document.createElement("p");
+  routesFreshness.setAttribute("aria-label", "\u0410\u043A\u0442\u0443\u0430\u043B\u044C\u043D\u043E\u0441\u0442\u044C \u043C\u0430\u0440\u0448\u0440\u0443\u0442\u043E\u0432");
+  gamingResult.after(routesFreshness);
   const loadRoutes = (read = request, announce = false) => {
     const generation = ++routesGeneration;
     return call("status", {}, read).then((raw) => {
       if (generation !== routesGeneration) return;
       const data = raw;
+      if (!Array.isArray(data?.sections)) throw Error("invalid_response");
       const items2 = data.sections.map((section) => ({
         value: section.name,
         label: section.label || section.name
       }));
-      for (const item of items2) routeLabels.set(item.value, item.label);
+      for (const item of items2)
+        if (item.value !== "nxt_direct")
+          routeLabels.set(item.value, item.label);
       showDevices();
       options(route, [
-        { value: "direct", label: "\u041D\u0430\u043F\u0440\u044F\u043C\u0443\u044E" },
-        ...items2.filter((item) => item.value !== "direct")
+        { value: "inherit", label: "\u041F\u043E \u043E\u0431\u0449\u0438\u043C \u043F\u0440\u0430\u0432\u0438\u043B\u0430\u043C" },
+        { value: "direct", label: "\u0412\u0441\u0435\u0433\u0434\u0430 \u043D\u0430\u043F\u0440\u044F\u043C\u0443\u044E" },
+        ...items2.filter(
+          (item) => item.value !== "direct" && item.value !== "nxt_direct"
+        )
       ]);
-      options(gamingRoute, items2);
+      const capabilities = workflowContext(root).targets || [];
+      options(
+        gamingRoute,
+        data.sections.flatMap((section) => {
+          const eligibility = targetEligibility(
+            {
+              ...section,
+              generated: capabilities.find(
+                (target) => target.name === section.name
+              )?.generated
+            },
+            "route"
+          );
+          return eligibility.eligible ? [{ value: section.name, label: section.label || section.name }] : [];
+        })
+      );
+      showScope();
+      routesUpdated = (/* @__PURE__ */ new Date()).toLocaleString();
+      routesFreshness.textContent = `\u041C\u0430\u0440\u0448\u0440\u0443\u0442\u044B \u043E\u0431\u043D\u043E\u0432\u043B\u0435\u043D\u044B: ${routesUpdated}.`;
       if (announce) gamingResult.textContent = "\u041C\u0430\u0440\u0448\u0440\u0443\u0442\u044B \u043E\u0431\u043D\u043E\u0432\u043B\u0435\u043D\u044B.";
     }).catch(() => {
       if (generation === routesGeneration) routeError();
     });
   };
-  const routeError = () => gamingResult.textContent = "\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0437\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044C \u043C\u0430\u0440\u0448\u0440\u0443\u0442\u044B. \u041D\u0430\u0436\u043C\u0438\u0442\u0435 \xAB\u041E\u0431\u043D\u043E\u0432\u0438\u0442\u044C \u043C\u0430\u0440\u0448\u0440\u0443\u0442\u044B\xBB.";
+  const routeError = () => gamingResult.textContent = `\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0437\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044C \u043C\u0430\u0440\u0448\u0440\u0443\u0442\u044B. \u041D\u0430\u0436\u043C\u0438\u0442\u0435 \xAB\u041E\u0431\u043D\u043E\u0432\u0438\u0442\u044C \u043C\u0430\u0440\u0448\u0440\u0443\u0442\u044B\xBB.${routesUpdated ? ` \u041F\u043E\u043A\u0430\u0437\u0430\u043D\u044B \u0434\u0430\u043D\u043D\u044B\u0435 \u043E\u0442 ${routesUpdated}.` : ""}`;
   if (area !== "profiles") {
     void loadRoutes(initialRequest);
     group = route.closest("section");
@@ -15082,15 +15524,10 @@ function renderDeviceProfileTools(request, initialRequest = request, area = "all
   root.addEventListener("forkop:refresh-tools", (event) => {
     const read = event.detail?.read || request;
     if (area !== "profiles") {
-      void loadDevices().catch(
-        () => deviceResult.textContent = "\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0437\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044C \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430. \u041D\u0430\u0436\u043C\u0438\u0442\u0435 \xAB\u041E\u0431\u043D\u043E\u0432\u0438\u0442\u044C \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430\xBB."
-      );
+      void loadDevices(read);
       void loadRoutes(read, true);
     }
-    if (area !== "devices")
-      void loadProfiles(read).catch(
-        () => profileResult.textContent = "\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0437\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044C \u043F\u0440\u043E\u0444\u0438\u043B\u0438. \u041D\u0430\u0436\u043C\u0438\u0442\u0435 \xAB\u041E\u0431\u043D\u043E\u0432\u0438\u0442\u044C \u043F\u0440\u043E\u0444\u0438\u043B\u0438\xBB."
-      );
+    if (area !== "devices") void loadProfiles(read);
   });
   return root;
 }
@@ -15548,10 +15985,10 @@ function renderAdvancedPanel(request = nextRequest, loadConnections, lazy = fals
     previewProfileDigest = "";
     apply.disabled = true;
   }
-  const sectionSelects = [];
-  function connection(label = "\u041F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435") {
+  const sectionSelects = /* @__PURE__ */ new Map();
+  function connection(label = "\u041F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435", use = "route") {
     const s = select(label, sections);
-    sectionSelects.push(s.node);
+    sectionSelects.set(s.node, use);
     return s;
   }
   function panel(title2, help, part) {
@@ -15739,7 +16176,8 @@ function renderAdvancedPanel(request = nextRequest, loadConnections, lazy = fals
   };
   device.node.oninput = invalidateRoute;
   probeSection.node.onchange = invalidateProbe;
-  route.append(probeSection.wrap, probeAction, probeResult);
+  const probeSettings = el("div");
+  route.append(probeSection.wrap, probeAction, probeResult, probeSettings);
   const profiles = panel(
     "\u041F\u0440\u043E\u0444\u0438\u043B\u0438 \u0438 \u0432\u043E\u0441\u0441\u0442\u0430\u043D\u043E\u0432\u043B\u0435\u043D\u0438\u0435",
     "\u0421\u043D\u0430\u0447\u0430\u043B\u0430 \u0441\u0440\u0430\u0432\u043D\u0438\u0442\u0435 \u043F\u0440\u043E\u0444\u0438\u043B\u044C. \u041F\u0440\u0438 \u043F\u0440\u0438\u043C\u0435\u043D\u0435\u043D\u0438\u0438 \u0441\u043E\u0445\u0440\u0430\u043D\u044F\u0435\u0442\u0441\u044F \u043F\u0440\u0435\u0434\u044B\u0434\u0443\u0449\u0430\u044F \u0440\u0430\u0431\u043E\u0447\u0430\u044F \u043A\u043E\u043D\u0444\u0438\u0433\u0443\u0440\u0430\u0446\u0438\u044F.",
@@ -15848,6 +16286,10 @@ function renderAdvancedPanel(request = nextRequest, loadConnections, lazy = fals
     ts.wrap,
     ttl.wrap,
     action("\u0414\u043E\u0431\u0430\u0432\u0438\u0442\u044C \u0432\u0440\u0435\u043C\u0435\u043D\u043D\u043E\u0435 \u043F\u0440\u0430\u0432\u0438\u043B\u043E", async () => {
+      if (!ts.node.value || ts.node.selectedOptions[0]?.disabled) {
+        message.textContent = "\u0412\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u0434\u043E\u0441\u0442\u0443\u043F\u043D\u044B\u0439 \u043C\u0430\u0440\u0448\u0440\u0443\u0442.";
+        return;
+      }
       await invoke("temporary_add", {
         domain: td.node.value.trim(),
         section: ts.node.value,
@@ -15862,8 +16304,10 @@ function renderAdvancedPanel(request = nextRequest, loadConnections, lazy = fals
     "\u0422\u043E\u043B\u044C\u043A\u043E \u0440\u0435\u043A\u043E\u043C\u0435\u043D\u0434\u0430\u0446\u0438\u0438 \u043D\u0430 \u043E\u0441\u043D\u043E\u0432\u0435 \u043D\u0430\u0431\u043B\u044E\u0434\u0435\u043D\u0438\u0439. \u041F\u0440\u0438\u043C\u0435\u043D\u0435\u043D\u0438\u0435 \u2014 \u043F\u043E \u0432\u0430\u0448\u0435\u043C\u0443 \u0440\u0435\u0448\u0435\u043D\u0438\u044E.",
     "rules"
   );
-  const rs = connection();
+  const rs = connection("\u041F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435", "smart");
   const recList = el("div");
+  const proxySettings = el("div");
+  recommendations.append(proxySettings);
   const recommendationDomain = input(
     "recommendation_domain",
     "\u0414\u043E\u043C\u0435\u043D \u0434\u043B\u044F \u0441\u0440\u0430\u0432\u043D\u0435\u043D\u0438\u044F"
@@ -15887,6 +16331,10 @@ function renderAdvancedPanel(request = nextRequest, loadConnections, lazy = fals
   autoResult.setAttribute("aria-live", "polite");
   scanResult.setAttribute("aria-live", "polite");
   const scanAction = action("\u041F\u0440\u043E\u0432\u0435\u0440\u0438\u0442\u044C \u0434\u0440\u0443\u0433\u043E\u0439 \u043C\u0430\u0440\u0448\u0440\u0443\u0442", async () => {
+    if (!rs.node.value || rs.node.selectedOptions[0]?.disabled) {
+      scanResult.textContent = "\u0412\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u0434\u043E\u0441\u0442\u0443\u043F\u043D\u043E\u0435 \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435 \u0441 \u043D\u0430\u0441\u0442\u0440\u043E\u0435\u043D\u043D\u044B\u043C \u043B\u043E\u043A\u0430\u043B\u044C\u043D\u044B\u043C \u043F\u0440\u043E\u043A\u0441\u0438.";
+      return;
+    }
     const generation = ++scanGeneration;
     const key = scanKey();
     const context = `\u0426\u0435\u043B\u044C: ${recommendationDomain.node.value.trim()} \xB7 \u041F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435: ${rs.node.selectedOptions[0]?.textContent || rs.node.value} \xB7 \u0418\u0441\u0442\u043E\u0447\u043D\u0438\u043A: \u0441 \u0440\u043E\u0443\u0442\u0435\u0440\u0430, \u043D\u0435 \u0441 \u043A\u043B\u0438\u0435\u043D\u0442\u0441\u043A\u043E\u0433\u043E \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430 \xB7 ${(/* @__PURE__ */ new Date()).toLocaleString()}`;
@@ -15919,6 +16367,10 @@ function renderAdvancedPanel(request = nextRequest, loadConnections, lazy = fals
       "\u041F\u043E\u0438\u0441\u043A \u0432\u044B\u043F\u043E\u043B\u043D\u044F\u0435\u0442\u0441\u044F \u0440\u0430\u0437 \u0432 \u043C\u0438\u043D\u0443\u0442\u0443 \u043F\u043E\u0441\u043B\u0435 \u0432\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u044F. \u041C\u0430\u0440\u0448\u0440\u0443\u0442\u044B \u043C\u0435\u043D\u044F\u044E\u0442\u0441\u044F \u0442\u043E\u043B\u044C\u043A\u043E \u043F\u043E\u0441\u043B\u0435 \u043F\u0440\u0438\u043D\u044F\u0442\u0438\u044F \u0440\u0435\u043A\u043E\u043C\u0435\u043D\u0434\u0430\u0446\u0438\u0438."
     ),
     action("\u0421\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u044C \u0430\u0432\u0442\u043E\u043C\u0430\u0442\u0438\u0447\u0435\u0441\u043A\u0438\u0439 \u043F\u043E\u0438\u0441\u043A", async () => {
+      if (autoDetect.node.checked && (!rs.node.value || rs.node.selectedOptions[0]?.disabled)) {
+        autoResult.textContent = "\u0412\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u0434\u043E\u0441\u0442\u0443\u043F\u043D\u043E\u0435 \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435 \u0441 \u043D\u0430\u0441\u0442\u0440\u043E\u0435\u043D\u043D\u044B\u043C \u043B\u043E\u043A\u0430\u043B\u044C\u043D\u044B\u043C \u043F\u0440\u043E\u043A\u0441\u0438.";
+        return;
+      }
       const r = await invoke("smart_detect_configure", {
         enabled: autoDetect.node.checked,
         section: rs.node.value
@@ -15963,30 +16415,75 @@ function renderAdvancedPanel(request = nextRequest, loadConnections, lazy = fals
       }
     );
     if (temporaryItems) showTemporary();
-    const probeChoice = probeSection.node.value;
-    probeSection.node.replaceChildren();
-    for (const [value, label] of [
-      ["", "\u0422\u0435\u043A\u0443\u0449\u0438\u0439 \u043C\u0430\u0440\u0448\u0440\u0443\u0442 \u0440\u043E\u0443\u0442\u0435\u0440\u0430"],
-      ...sections
-    ]) {
-      const option = el("option", label);
-      option.value = value;
-      probeSection.node.append(option);
-    }
-    probeSection.node.value = probeChoice;
-    if (probeSection.node.value !== probeChoice) invalidateProbe();
-    for (const s of sectionSelects) {
-      const old = s.value;
-      s.replaceChildren();
-      for (const [value, label] of sections) {
-        const o = el("option", label);
-        o.value = value;
-        s.append(o);
+    const capabilities = workflowContext(root).targets || [];
+    const targets = (Array.isArray(d.sections) ? d.sections : []).map((raw) => {
+      const row = object2(raw);
+      return {
+        name: String(row.name),
+        label: String(row.label || row.name),
+        action: typeof row.action === "string" ? row.action : void 0,
+        generated: capabilities.find((c) => c.name === row.name)?.generated,
+        localProxyConfigured: capabilities.find((c) => c.name === row.name)?.localProxyConfigured
+      };
+    });
+    const fillTargets = (select2, use, current2 = false) => {
+      const old = select2.value;
+      select2.replaceChildren();
+      const placeholder = el(
+        "option",
+        current2 ? "\u0422\u0435\u043A\u0443\u0449\u0438\u0439 \u043C\u0430\u0440\u0448\u0440\u0443\u0442 \u0440\u043E\u0443\u0442\u0435\u0440\u0430" : "\u0412\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435"
+      );
+      placeholder.value = "";
+      select2.append(placeholder);
+      for (const target of targets) {
+        const eligibility = targetEligibility(target, use);
+        if (use === "route" && !eligibility.eligible) continue;
+        const option = el(
+          "option",
+          `${target.label}${eligibility.reason ? " \u2014 " + eligibility.reason : ""}`
+        );
+        option.value = target.name;
+        option.disabled = !eligibility.eligible;
+        select2.append(option);
       }
-      s.value = sections.some(([value]) => value === old) ? old : sections[0]?.[0] || "";
-    }
-    if (sections.some(([name]) => name === smart.section))
+      select2.value = targets.some(
+        (t) => t.name === old && targetEligibility(t, use).eligible
+      ) ? old : current2 ? "" : targets.find((t) => targetEligibility(t, use).eligible)?.name || "";
+    };
+    const probeChoice = probeSection.node.value;
+    fillTargets(probeSection.node, "probe", true);
+    if (probeSection.node.value !== probeChoice) invalidateProbe();
+    for (const [select2, use] of sectionSelects) fillTargets(select2, use);
+    if (targets.some(
+      (t) => t.name === smart.section && targetEligibility(t, "smart").eligible
+    ))
       rs.node.value = String(smart.section);
+    for (const [settings, use, result] of [
+      [proxySettings, "smart", scanResult],
+      [probeSettings, "probe", probeResult]
+    ]) {
+      settings.replaceChildren();
+      for (const target of targets.filter(
+        (t) => !targetEligibility(t, use).eligible
+      )) {
+        const option = targetEligibility(target, use).settingsOption;
+        const supportsProxy = option === "mixed_proxy_enabled";
+        const b = el(
+          "button",
+          `${supportsProxy ? "\u041D\u0430\u0441\u0442\u0440\u043E\u0438\u0442\u044C \u043B\u043E\u043A\u0430\u043B\u044C\u043D\u044B\u0439 \u043F\u0440\u043E\u043A\u0441\u0438" : "\u041D\u0430\u0441\u0442\u0440\u043E\u0438\u0442\u044C \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u0435 \u043F\u0440\u0430\u0432\u0438\u043B\u0430"}: ${target.label}`
+        );
+        b.type = "button";
+        b.onclick = () => {
+          if (!navigateToRule(root, {
+            kind: "edit",
+            section: target.name,
+            option
+          }))
+            result.textContent = "\u041E\u0442\u043A\u0440\u043E\u0439\u0442\u0435 \u044D\u0442\u043E \u043F\u0440\u0430\u0432\u0438\u043B\u043E \u0438 \u043D\u0430\u0441\u0442\u0440\u043E\u0439\u0442\u0435 \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u0435 \u0438 \u043B\u043E\u043A\u0430\u043B\u044C\u043D\u044B\u0439 \u043F\u0440\u043E\u043A\u0441\u0438.";
+        };
+        settings.append(b);
+      }
+    }
   }
   async function refreshProfiles(read = request) {
     const current = ++profilesGeneration;
@@ -16048,6 +16545,10 @@ function renderAdvancedPanel(request = nextRequest, loadConnections, lazy = fals
           `${rec.domain} \xB7 \u043E\u0448\u0438\u0431\u043A\u0438 \u0442\u0435\u043A\u0443\u0449\u0435\u0433\u043E \u043C\u0430\u0440\u0448\u0440\u0443\u0442\u0430: ${rec.current_route_failures ?? "\u2014"}, \u0443\u0441\u043F\u0435\u0448\u043D\u044B\u0445 \u0447\u0435\u0440\u0435\u0437 \u0432\u044B\u0431\u0440\u0430\u043D\u043D\u043E\u0435 \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435: ${rec.proxy_successes ?? "\u2014"}`
         ),
         action("\u041F\u0440\u0438\u043D\u044F\u0442\u044C \u0440\u0435\u043A\u043E\u043C\u0435\u043D\u0434\u0430\u0446\u0438\u044E", async () => {
+          if (!rs.node.value || rs.node.selectedOptions[0]?.disabled) {
+            message.textContent = "\u0412\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u0434\u043E\u0441\u0442\u0443\u043F\u043D\u043E\u0435 \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435.";
+            return;
+          }
           await invoke("recommendation_accept", {
             id: rec.id,
             section: rs.node.value
@@ -16283,13 +16784,8 @@ function renderNextPanel(request = nextRequest, loadConnections, adapters = {}) 
     notice.textContent = "\u041E\u0442\u043A\u0440\u044B\u0432\u0430\u0435\u043C \u043D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438 \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u044F\u2026";
     try {
       if (adapters.openRules) await adapters.openRules();
-      else {
-        const tab = document.querySelector(
-          '.cbi-tabmenu [data-tab="section"] a, .cbi-tabmenu [data-tab="section"] button'
-        );
-        if (!tab) throw new Error("navigation_unavailable");
-        tab.click();
-      }
+      else if (!navigateToRule(root, { kind: "create", option: "subscription_url" }))
+        throw new Error("navigation_unavailable");
       notice.textContent = "";
     } catch {
       notice.textContent = "\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u043E\u0442\u043A\u0440\u044B\u0442\u044C \u043D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438. \u041E\u0442\u043A\u0440\u043E\u0439\u0442\u0435 \u0432\u043A\u043B\u0430\u0434\u043A\u0443 \xAB\u041F\u0440\u0430\u0432\u0438\u043B\u0430\xBB \u0432 LuCI.";
@@ -16297,7 +16793,7 @@ function renderNextPanel(request = nextRequest, loadConnections, adapters = {}) 
   });
   const setupHelp = el2(
     "p",
-    "\u041F\u0435\u0440\u0432\u043E\u0435 \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435 \u0434\u043E\u0431\u0430\u0432\u043B\u044F\u0435\u0442\u0441\u044F \u0432 \u043F\u0440\u0430\u0432\u0438\u043B\u0430\u0445 \u043C\u0430\u0440\u0448\u0440\u0443\u0442\u0438\u0437\u0430\u0446\u0438\u0438. \u0412\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u0441\u0435\u0440\u0432\u0435\u0440 \u0438 \u0441\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u0435 \u043D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438.",
+    "\u0414\u043E\u0431\u0430\u0432\u044C\u0442\u0435 \u0441\u0441\u044B\u043B\u043A\u0443 \u0438\u043B\u0438 \u043F\u043E\u0434\u043F\u0438\u0441\u043A\u0443, \u043F\u0440\u043E\u0432\u0435\u0440\u044C\u0442\u0435 \u0443\u0441\u043B\u043E\u0432\u0438\u044F \u043F\u0440\u0430\u0432\u0438\u043B\u0430, \u0441\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u0435 \u0438 \u043F\u0440\u0438\u043C\u0435\u043D\u0438\u0442\u0435 \u0438\u0437\u043C\u0435\u043D\u0435\u043D\u0438\u044F. \u0417\u0430\u0442\u0435\u043C \u0432\u0435\u0440\u043D\u0438\u0442\u0435\u0441\u044C \u043A \u0432\u044B\u0431\u043E\u0440\u0443 \u0443\u0437\u043B\u0430.",
     "fkp-next-help"
   );
   server.append(addConnection, setupHelp);
@@ -17438,6 +17934,7 @@ return baseclass.extend({
   applyUiStateToStore,
   bulkValidate,
   configureNamedSectionCreation,
+  configureRuleWorkflow,
   coreService,
   disposeWorkspaceTools,
   getClashUIUrl,
@@ -17446,10 +17943,12 @@ return baseclass.extend({
   getRuleActionLabel,
   injectGlobalStyles,
   mountForkopWorkspace,
+  navigateToRule,
   parseValueList,
   refreshRuntimeUiState,
   registerConfigurationReload,
   renderNextPanel,
+  renderQuickSite,
   renderRuleIdentity,
   renderRuleRoute,
   renderWorkspaceTools,

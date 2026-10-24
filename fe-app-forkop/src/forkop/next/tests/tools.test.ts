@@ -104,6 +104,8 @@ describe('device and profile controls', () => {
   it('applies the selected gaming store preset to the explicit device and route', async () => {
     const { root, writes } = fixture();
     await wait();
+    control<HTMLSelectElement>(root, 'Охват игрового пресета').value =
+      'selected';
     control<HTMLInputElement>(root, 'Игровое устройство').value =
       '192.168.1.30';
     control<HTMLSelectElement>(root, 'Игровой пресет').value = 'xbox';

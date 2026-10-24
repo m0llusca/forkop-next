@@ -1,3 +1,4 @@
+import { navigateToRule } from './workflows';
 import { nextRequest } from './api';
 import { validateDomain } from '../../validators/validateDomain';
 import { createTrafficMonitor, type OverviewTraffic } from './traffic';
@@ -182,13 +183,10 @@ export function renderNextPanel(
     notice.textContent = 'Открываем настройки подключения…';
     try {
       if (adapters.openRules) await adapters.openRules();
-      else {
-        const tab = document.querySelector<HTMLElement>(
-          '.cbi-tabmenu [data-tab="section"] a, .cbi-tabmenu [data-tab="section"] button',
-        );
-        if (!tab) throw new Error('navigation_unavailable');
-        tab.click();
-      }
+      else if (
+        !navigateToRule(root, { kind: 'create', option: 'subscription_url' })
+      )
+        throw new Error('navigation_unavailable');
       notice.textContent = '';
     } catch {
       notice.textContent =
@@ -197,7 +195,7 @@ export function renderNextPanel(
   });
   const setupHelp = el(
     'p',
-    'Первое подключение добавляется в правилах маршрутизации. Выберите сервер и сохраните настройки.',
+    'Добавьте ссылку или подписку, проверьте условия правила, сохраните и примените изменения. Затем вернитесь к выбору узла.',
     'fkp-next-help',
   );
   server.append(addConnection, setupHelp);
