@@ -186,6 +186,7 @@ function command_spec(command) {
         generate_reality_keypair: [ "server/service.uc", "generate-reality-keypair", 0 ],
         get_tls_certificate_sha256: [ "server/service.uc", "tls-certificate-sha256", 1 ],
         component_action: [ "components/action.uc", "component-action", 2 ],
+        component_preview: [ "components/impact.uc", "preview", 1 ],
         component_action_async: [ "components/updates.uc", "component-action-async", 2 ],
         component_action_status: [ "components/updates.uc", "component-action-status", 1 ],
         component_updates_if_due: [ "components/updates.uc", "component-updates-if-due", 0 ],

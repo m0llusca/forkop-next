@@ -324,3 +324,49 @@ Import results distinguish observed accepted/skipped counts from unknown duplica
 and unsupported breakdowns. `forkop source_evidence <section>` returns only source
 IDs, safe observed outcomes and the owning rule ID. It never returns source URLs.
 A successful source update is import evidence, not successful connectivity.
+
+## Diagnostic context and component impact (UX task 6)
+
+The route form supplies explicit protocol/port (default HTTPS/TCP/443) and
+`destination_ip` for a literal IP. An omitted device stays omitted. Its basis is
+the saved router UCI read by `route_explain`; neither the LuCI draft nor applied
+packet capture is certified. `indeterminate` remains unconfirmed and has no
+winning-rule action. Confirmed winners use the existing `navigateToRule` UCI ID.
+Network probes remain separate explicit actions with captured router/target/time.
+
+`forkop component_preview <JSON>` accepts only `{component,action}` for the
+existing component/action allowlist. It reads bounded local files and exact
+installed binary admission without fetching, probing, downloading or mutating.
+Success is `{success:true,data:{component,action,captured_at,current,target,
+requirements,restart_expected,recovery,connectivity_tested:false}}`.
+`current` has `{version,variant,source,runtime_source,admission,sha256,capabilities}`.
+Only `singbox.reality.verified_runtime` admission exposes SHA256 and the trusted
+`reality_hybrid` / `reality_record_fragment` booleans; matching version strings
+or variant/source markers alone leave admission unknown and capabilities null.
+Markers describe the selected channel/variant, not proven runtime capability.
+Other components preserve unknown identity rather than borrowing sing-box proof.
+`target` has `{variant,source,admission:"unverified",capabilities:null}`. Generic
+sing-box install retains its selected source; explicit variants identify their
+existing official/custom source. No artifact has yet been downloaded, so the
+preview cannot admit target capabilities. The UI separately labels any cached
+release version. The existing guarded installer remains authoritative.
+`requirements` is `{basis:"generated_config"|"unavailable",reality,record_fragment}`:
+nonnegative counts of generated outbounds, or null when the bounded local config
+is unavailable. Presence of an explicit record-fragment parameter includes zero.
+No endpoint, UUID, key, SNI, source URL, raw config or arbitrary manifest field is
+projected. These counts describe the generated file, not applied runtime traffic.
+`recovery:"sing_box_transaction"|"manual"` describes the existing failure path;
+it does not promise an independent backup or reconstruction of package state.
+Preview errors keep the UI install action disabled. Installation requires an
+explicit second action, then the existing job guards. Terminal results show the
+applied version, freshly read service state (or unknown), and a separate untested
+network result. All existing variants, custom channels and rollback checks remain.
+
+The symptom guide reuses bounded native DNS/service checks, configured route
+analysis, explicit HTTPS probe and `source_evidence` reads. Navigation/selection
+never runs checks. Each result names router/target/device/time and a next step;
+source history keeps last success after a later failed attempt. Missing evidence
+stays unconfirmed. The technical log action reuses the native masked/log viewer.
+Profile impact classifies changed parameter keys into rules/connections, devices,
+DNS and other counts; these are parameter counts, not device counts. It projects
+only changed keys and both reviewed digests, preserving the existing apply gate.
