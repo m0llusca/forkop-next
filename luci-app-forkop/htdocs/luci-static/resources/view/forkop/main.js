@@ -858,6 +858,13 @@ function getProxyUrlName(url) {
 
 // src/forkop/next/styles.ts
 var nextStyles = `
+.fkp-next-heading{display:flex;align-items:center;justify-content:flex-end;gap:16px;flex-wrap:wrap;margin-bottom:24px}.fkp-next-heading>div{flex:1;min-width:200px}.fkp-next-heading>div>p{color:var(--next-muted)}.fkp-next-heading label{display:flex;flex-direction:column;gap:6px;font-size:14px;color:var(--next-muted)}
+.fkp-next-overview .fkp-next-content{align-items:start;gap:32px}.fkp-next-overview .fkp-next-content>section{min-width:0}.fkp-next.fkp-next-overview h3{font-size:16px;line-height:1.4;color:var(--next-muted);margin:0 0 16px}.fkp-next-overview .fkp-next-service{font-size:22px;line-height:1.3;font-weight:650;margin:0 0 12px;letter-spacing:-.02em}.fkp-next-overview .fkp-next-connection{font-size:14px;line-height:1.6;margin-bottom:16px}.fkp-next-overview .fkp-next-selected-name{font-size:24px;line-height:1.35;font-weight:650;letter-spacing:-.025em;overflow-wrap:anywhere}.fkp-next-overview .fkp-next-probe{margin-top:16px}.fkp-next-probe label{display:flex;flex-direction:column;gap:8px;color:var(--next-muted);font-size:13px;font-weight:550;max-width:34ch}.fkp-next-probe input{margin:0}.fkp-next-probe .fkp-next-help{font-size:12px;line-height:1.6;margin:12px 0 0}.fkp-next .fkp-next-primary-action,.fkp-workspace .fkp-next .fkp-next-primary-action{background:var(--next-accent);border-color:var(--next-accent);color:var(--next-bg)}.fkp-next .fkp-next-primary-action:hover,.fkp-workspace .fkp-next .fkp-next-primary-action:hover{background:var(--next-accent);filter:brightness(.93)}
+.fkp-workspace [data-tab=next]>h3{display:none}
+.fkp-next-metrics{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:24px;margin:0 0 16px;padding:0;font-variant-numeric:tabular-nums}.fkp-next-metrics>div{min-width:0}.fkp-next-metrics dt{font-size:12px;line-height:1.5;font-weight:500;color:var(--next-muted);margin:0 0 8px}.fkp-next-metrics dd{font-size:18px;line-height:1.5;font-weight:600;color:var(--next-fg);margin:0;overflow-wrap:anywhere}.fkp-next-traffic .fkp-next-traffic-status{font-size:12px;margin:0}.fkp-next-overview .fkp-next-route+.fkp-next-route{margin-top:16px;padding-top:16px;border-top:1px solid var(--next-line)}.fkp-next-routes{margin-top:32px}.fkp-next-routes .fkp-next-route p:first-child{font-weight:550;margin-bottom:4px}.fkp-next-routes .fkp-next-help{font-size:12px}.fkp-next-routes>div{margin-bottom:12px}.fkp-next{scrollbar-color:var(--next-line) var(--next-bg)}.fkp-next a{text-underline-offset:3px}.fkp-next-overview .fkp-next-heading:has(>button:only-child){margin-top:-8px;margin-bottom:16px}
+.fkp-workspace .fkp_dashboard-page__outbound-grid__item .fkp_dashboard-page__outbound-grid__item__select{width:100%;margin:16px 0 0;min-height:42px;background:transparent;color:var(--next-accent);border:1px solid var(--next-line);font-size:13px;text-align:center}.fkp-workspace .fkp_dashboard-page__outbound-grid__item .fkp_dashboard-page__outbound-grid__item__select:disabled{color:var(--next-muted);opacity:1;cursor:default}.fkp-workspace .fkp_dashboard-page__outbound-grid__item .fkp_dashboard-page__outbound-grid__item__select:not(:disabled):hover{background:var(--fkp-hover);border-color:var(--next-accent)}.fkp-workspace .fkp_dashboard-page__widgets-section{margin-top:24px}
+@media(max-width:900px){.fkp-next-metrics{gap:16px;grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:720px){.fkp-next-heading{gap:8px;margin-bottom:24px}.fkp-next-heading>div{flex-basis:100%}.fkp-next-heading label{flex:1}.fkp-next-overview .fkp-next-content{gap:32px}.fkp-next-primary{padding-top:24px;border-top:1px solid var(--next-line)}.fkp-next-metrics{grid-template-columns:repeat(2,minmax(0,1fr));gap:24px 16px}.fkp-next-metrics dd{font-size:18px}.fkp-next-overview .fkp-next-selected-name{font-size:22px}.fkp-next-probe label{max-width:none}}
 .fkp-next-overview>.fkp-next-service{font-size:22px;font-weight:650;line-height:1.3;margin:24px 0 8px}.fkp-next-connection{font-variant-numeric:tabular-nums;overflow-wrap:anywhere}.fkp-next-traffic{margin-top:32px}.fkp-next details{min-width:0}.fkp-next summary{cursor:pointer;padding:14px 4px;min-height:48px;font-weight:600;overflow-wrap:anywhere}.fkp-next details>summary:hover{color:var(--next-accent)}.fkp-next-advanced{margin-top:32px;border-top:1px solid var(--next-line)}.fkp-next-advanced-content{padding-top:24px}.fkp-next-advanced-content>.fkp-next-content{display:block}.fkp-next-disclosure{border-top:1px solid var(--next-line);padding-bottom:8px}.fkp-next-disclosure>.fkp-next-panel{border:0;padding:8px 0 24px}.fkp-next-overview .fkp-next-advanced-content .fkp-next-tools{padding:16px 0}.fkp-next summary::marker{color:var(--next-muted)}
 .fkp-next{--next-bg:#f6f7f8;--next-fg:#17252d;--next-muted:#455863;--next-line:#ced7dc;--next-accent:#14635e;--next-field:#fff;color:var(--next-fg);background:var(--next-bg);padding:24px;border-radius:12px;font-family:inherit;line-height:1.5;accent-color:var(--next-accent);color-scheme:light}
 .fkp-next[data-theme=dark]{--next-bg:#16232b;--next-fg:#eef4f6;--next-muted:#b8c8d0;--next-line:#455963;--next-accent:#8bd6c8;--next-field:#21333e;color-scheme:dark}
@@ -867,7 +874,218 @@ var nextStyles = `
 .fkp-next-compatibility{grid-column:1/-1}.fkp-next-compatibility label{max-width:70ch}.fkp-next-tools{grid-column:1/-1;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:32px}.fkp-next-content{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:32px}.fkp-next-panel{min-width:0;border-top:1px solid var(--next-line);padding-top:24px}.fkp-next-panel>h3:not(:first-child){margin-top:28px}.fkp-next-panel label,.fkp-next header label{display:flex;flex-direction:column;gap:6px;margin:12px 0;color:var(--next-muted);font-size:14px;font-weight:550}.fkp-next input,.fkp-next select,.fkp-next textarea{border:1px solid var(--next-line);border-radius:6px;background:var(--next-field);color:var(--next-fg);min-height:42px;padding:9px 10px;width:100%;max-width:100%;font:inherit;caret-color:var(--next-accent)}
 .fkp-next button{border:1px solid var(--next-line);border-radius:6px;background:var(--next-field);color:var(--next-fg);min-height:42px;padding:8px 12px;font:inherit;font-weight:550;margin:4px 8px 4px 0;white-space:normal;text-align:left;cursor:pointer;transition:background-color .15s ease-out}.fkp-next button:hover{background:var(--next-line)}.fkp-next button:disabled{opacity:.55;cursor:default}.fkp-next :focus-visible{outline:2px solid var(--next-accent);outline-offset:3px}.fkp-next-summary{font-variant-numeric:tabular-nums}.fkp-next-summary>span{display:block;margin-bottom:6px}.fkp-next-summary:empty{display:none}.fkp-next-status{font-variant-numeric:tabular-nums;color:var(--next-accent);padding:12px 0;border-top:1px solid var(--next-line)}.fkp-next-notice:empty{display:none}.fkp-next-notice{font-weight:600}.fkp-next-result{white-space:pre-wrap;overflow-wrap:anywhere;max-height:320px;overflow:auto;font-size:14px;font-variant-numeric:tabular-nums;margin-top:12px}.fkp-next-row{padding:12px 0;border-bottom:1px solid var(--next-line);overflow-wrap:anywhere}.fkp-next-row>span{display:block}.fkp-next output{display:block;white-space:pre-wrap;overflow-wrap:anywhere;margin:8px 0}.fkp-next[data-mode=simple] pre.fkp-next-result{max-height:130px}.fkp-next [data-detail]{display:none}.fkp-next[data-mode=detailed] [data-detail]{display:block}
 @media(max-width:720px){.fkp-next-tools{grid-template-columns:minmax(0,1fr);gap:24px}.fkp-next{padding:16px;border-radius:8px}.fkp-next-content{grid-template-columns:minmax(0,1fr);gap:24px}.fkp-next header{gap:8px}.fkp-next header>div{flex-basis:100%}.fkp-next header label{flex:1;margin:0}.fkp-next h2{font-size:24px}.fkp-next button{max-width:100%}.fkp-next input,.fkp-next select,.fkp-next textarea{font-size:16px}}
+.fkp-workspace .fkp-next[data-area] > .fkp-next-status{width:100%;max-width:none}
+.fkp-workspace .fkp-next[data-area] > .fkp-next-content{width:100%;min-width:0}
+.fkp-workspace .fkp-next[data-area=devices] > .fkp-next-content,.fkp-workspace .fkp-next[data-area=diagnostics] > .fkp-next-content{grid-template-columns:minmax(0,1fr)}
+.fkp-workspace .fkp-next[data-area=devices] .fkp-next-tools{grid-template-columns:repeat(2,minmax(0,1fr))}
+.fkp-workspace .fkp-next[data-area=settings] > .fkp-next-content > .fkp-next-compatibility{grid-column:auto}
+.fkp-workspace .fkp-next[data-area=settings] .fkp-next-tools{grid-template-columns:minmax(0,1fr)}
+.fkp-workspace .fkp-next[data-area] > header:empty{display:none}
+@media (max-width:720px){.fkp-workspace .fkp-next[data-area] > .fkp-next-content,.fkp-workspace .fkp-next[data-area=devices] .fkp-next-tools{grid-template-columns:minmax(0,1fr)}}
 @media(prefers-reduced-motion:reduce){.fkp-next button{transition:none}}
+`;
+
+// src/forkop/workspace/styles.ts
+var workspaceStyles = `
+.fkp-workspace,.fkp-workspace-modal {
+  --next-bg:#f6f7f8;--next-fg:#17252d;--next-muted:#455863;--next-line:#ced7dc;--next-accent:#14635e;--next-field:#fff;
+  --fkp-hover:#e6eeed;--fkp-danger:#a02b32;--fkp-selected:#dceee9;
+  --text-color-high:var(--next-fg);--text-color-medium:var(--next-muted);--text-color-low:var(--next-muted);
+  --background-color-high:var(--next-field);--background-color-medium:var(--next-bg);--background-color-low:var(--next-line);
+  --border-color:var(--next-line);--border-color-high:var(--next-line);--border-color-low:var(--next-line);
+  --primary-color-high:var(--next-accent);--primary-color-medium:var(--next-accent);--primary-color-low:var(--next-muted);
+  --success-color-medium:var(--next-accent);--success-color-low:var(--next-accent);--error-color-medium:var(--fkp-danger);--warn-color-medium:#815210;
+  --link-color:var(--next-accent);--link-color-dark:var(--next-accent);
+  --at-bg:var(--next-bg);--at-panel:var(--next-bg);--at-text:var(--next-fg);--at-muted:var(--next-muted);--at-line:var(--next-line);--at-cyan:var(--next-accent);--at-good:var(--next-accent);
+  color:var(--next-fg);background:var(--next-bg);font-family:inherit;font-size:14px;line-height:1.5;
+  accent-color:var(--next-accent);color-scheme:light;scrollbar-color:var(--next-line) var(--next-bg);
+}
+.fkp-workspace[data-theme=dark],.fkp-workspace-modal[data-theme=dark] {
+  --next-bg:#16232b;--next-fg:#eef4f6;--next-muted:#b8c8d0;--next-line:#455963;--next-accent:#8bd6c8;--next-field:#21333e;
+  --fkp-hover:#29423f;--fkp-danger:#ffb4b8;--fkp-selected:#29473f;--warn-color-medium:#f2ca87;color-scheme:dark;
+}
+/* Native themes may load later and use important colors. The existing map ID
+   and marked modal contain these overrides; surrounding LuCI is untouched. */
+#cbi-forkop.fkp-workspace[data-theme],#modal_overlay .fkp-workspace-modal[data-theme],
+#cbi-forkop.fkp-workspace[data-theme] :is(.cbi-map,.cbi-section,fieldset),#modal_overlay .fkp-workspace-modal[data-theme] :is(.cbi-map,.cbi-section,fieldset) {background:var(--next-bg)!important;color:var(--next-fg)!important}
+#cbi-forkop.fkp-workspace[data-theme] :is(input:not([type=checkbox]):not([type=radio]):not([type=button]):not([type=submit]),select,textarea,.cbi-select,.cbi-dropdown),
+#modal_overlay .fkp-workspace-modal[data-theme] :is(input:not([type=checkbox]):not([type=radio]):not([type=button]):not([type=submit]),select,textarea,.cbi-select,.cbi-dropdown),
+#cbi-forkop.fkp-workspace[data-theme] :is(.cbi-button,.btn),#modal_overlay .fkp-workspace-modal[data-theme] :is(.cbi-button,.btn) {background:var(--next-field)!important;color:var(--next-fg)!important;border-color:var(--next-line)}
+#cbi-forkop.fkp-workspace[data-theme] :is(.cbi-button-positive,.cbi-button-apply,.cbi-button-save,.fkp-next-primary-action),#modal_overlay .fkp-workspace-modal[data-theme] :is(.cbi-button-positive,.cbi-button-apply,.cbi-button-save) {background:var(--next-accent)!important;color:var(--next-bg)!important}
+#cbi-forkop.fkp-workspace[data-theme] :is(.cbi-button-negative,.cbi-button-remove),#modal_overlay .fkp-workspace-modal[data-theme] :is(.cbi-button-negative,.cbi-button-remove) {color:var(--fkp-danger)!important}
+.fkp-workspace *,.fkp-workspace-modal * {box-sizing:border-box}
+.fkp-workspace ::selection,.fkp-workspace-modal ::selection {background:var(--next-accent);color:var(--next-bg)}
+.fkp-workspace {display:grid;grid-template-columns:184px minmax(0,1fr);padding:0!important;margin:24px 0;min-width:0;border:1px solid var(--next-line);border-radius:12px;overflow:clip}
+.fkp-workspace-sidebar {min-width:0;padding:24px 12px;align-self:start;position:sticky;top:16px}
+.fkp-workspace-brand {font-size:22px;line-height:1.25;letter-spacing:-.025em;font-weight:700;padding:0 12px;margin-bottom:32px}
+.fkp-workspace-primary {display:flex;flex-direction:column;gap:8px}
+.fkp-workspace-main {min-width:0;border-left:1px solid var(--next-line);padding:24px 32px 32px}
+.fkp-workspace-top {display:flex;align-items:flex-start;justify-content:space-between;gap:24px;padding-bottom:24px;border-bottom:1px solid var(--next-line);margin-bottom:24px}
+.fkp-workspace-status {display:flex;flex-direction:column;gap:4px;min-width:0}
+.fkp-workspace-service {font-weight:650;line-height:1.4}
+.fkp-workspace-connection {color:var(--next-muted);font-size:12px;max-width:75ch;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
+.fkp-workspace .fkp-workspace-theme {display:flex;align-items:center;gap:8px;flex-shrink:0;font-size:12px;color:var(--next-muted);margin:0}
+.fkp-workspace .fkp-workspace-theme select {width:auto;min-width:126px;font-size:13px}
+.fkp-workspace .fkp-workspace-title {font-size:28px;font-weight:650;line-height:1.2;letter-spacing:-.025em;margin:0 0 24px;color:var(--next-fg);text-wrap:balance}
+.fkp-workspace-secondary:has(.fkp-workspace-local:not([hidden])) {margin-bottom:24px}
+.fkp-workspace-local {display:flex;gap:8px;border-bottom:1px solid var(--next-line);padding-bottom:12px;overflow-x:auto;scrollbar-width:thin}
+.fkp-workspace .fkp-workspace-nav-button,.fkp-workspace .fkp-workspace-local-button {border:0;background:transparent;box-shadow:none;white-space:nowrap;cursor:pointer;font:inherit;font-weight:550;min-height:44px;padding:10px 12px;text-align:left;border-radius:6px;color:var(--next-muted);margin:0}
+.fkp-workspace .fkp-workspace-local-button {font-size:13px}
+.fkp-workspace .fkp-workspace-nav-button[aria-current=page],.fkp-workspace .fkp-workspace-local-button[aria-current=page] {background:var(--fkp-selected);color:var(--next-accent);font-weight:650}
+.fkp-workspace .fkp-workspace-nav-button[data-errors],.fkp-workspace .fkp-workspace-local-button[data-errors] {display:flex;align-items:center;gap:8px;color:var(--fkp-danger)}
+.fkp-workspace .fkp-workspace-nav-button[data-errors]::after,.fkp-workspace .fkp-workspace-local-button[data-errors]::after {content:attr(data-errors);display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;margin-left:auto;padding:0 4px;border:1px solid currentColor;border-radius:4px;font-size:12px;font-variant-numeric:tabular-nums;line-height:1}
+.fkp-workspace .fkp-workspace-native-tabs {display:none!important}
+.fkp-workspace-content {min-width:0}
+.fkp-workspace-content > h2,.fkp-workspace-content > .cbi-map-descr {display:none}
+.fkp-workspace .cbi-map-tabbed {background:transparent;border:0;padding:0;min-width:0}
+.fkp-workspace .cbi-map-tabbed > .cbi-section {padding:0;margin:0;background:transparent;border:0;box-shadow:none;min-width:0}
+.fkp-workspace .cbi-map-tabbed > .cbi-section[data-tab]:not([data-tab-active=true]),.fkp-workspace [hidden],.fkp-workspace-modal [hidden],.fkp-workspace .hidden,.fkp-workspace-modal .hidden {display:none!important}
+.fkp-workspace h3,.fkp-workspace-modal h3,.fkp-workspace-modal h4 {color:var(--next-fg);font-weight:650;font-size:19px;line-height:1.3;margin:32px 0 12px;letter-spacing:-.015em;text-wrap:balance}
+.fkp-workspace .cbi-section > h3:first-child {margin-top:0}
+.fkp-workspace p,.fkp-workspace-modal p {max-width:75ch;overflow-wrap:anywhere}
+.fkp-workspace .cbi-section-descr,.fkp-workspace .cbi-value-description,.fkp-workspace-modal .cbi-section-descr,.fkp-workspace-modal .cbi-value-description {color:var(--next-muted);font-size:13px;line-height:1.6;max-width:75ch;margin:8px 0 16px;overflow-wrap:anywhere}
+.fkp-workspace .cbi-value,.fkp-workspace-modal .cbi-value {display:flex;flex-wrap:nowrap;align-items:flex-start;gap:24px;padding:12px 0;margin:0;border-bottom:1px solid var(--next-line);background:transparent;min-width:0}
+.fkp-workspace .cbi-value:last-child,.fkp-workspace-modal .cbi-value:last-child {border-bottom:0}
+.fkp-workspace .cbi-value > label.cbi-value-title,.fkp-workspace-modal .cbi-value > label.cbi-value-title {flex:0 0 200px;float:none;width:auto;text-align:left;padding:10px 0 0;margin:0;color:var(--next-fg);font-size:14px;line-height:1.5;font-weight:550;overflow-wrap:anywhere}
+.fkp-workspace .cbi-value-field,.fkp-workspace-modal .cbi-value-field {flex:1;min-width:0;width:auto;margin:0;padding:0;color:var(--next-fg)}
+.fkp-workspace .cbi-value-field:only-child,.fkp-workspace-modal .cbi-value-field:only-child {margin-left:0}
+.fkp-workspace .cbi-value > .cbi-value-field > :is(input:not([type=checkbox]):not([type=radio]),select,textarea,.cbi-select,.cbi-dropdown,.cbi-dynlist,.control-group),
+.fkp-workspace-modal .cbi-value > .cbi-value-field > :is(input:not([type=checkbox]):not([type=radio]),select,textarea,.cbi-select,.cbi-dropdown,.cbi-dynlist,.control-group) {width:100%;max-width:42rem;min-width:0;height:auto}
+.fkp-workspace .cbi-value .cbi-value-description,.fkp-workspace-modal .cbi-value .cbi-value-description {margin:6px 0 0;line-height:1.5;white-space:normal;max-width:75ch}
+.fkp-workspace .cbi-value .cbi-dynlist > .add-item,.fkp-workspace-modal .cbi-value .cbi-dynlist > .add-item {display:flex;gap:4px;min-width:0}
+.fkp-workspace .cbi-value .cbi-dynlist > .add-item > :is(input,.cbi-dropdown),.fkp-workspace-modal .cbi-value .cbi-dynlist > .add-item > :is(input,.cbi-dropdown) {flex:1;min-width:0;width:100%}
+.fkp-workspace .cbi-value .cbi-dynlist > .add-item > button,.fkp-workspace-modal .cbi-value .cbi-dynlist > .add-item > button {flex:0 0 42px;min-width:42px}
+.fkp-workspace .cbi-value:has(.fkp-next),.fkp-workspace .cbi-value:has(.fkp_dashboard-page),.fkp-workspace .cbi-value:has(.fkp_monitoring-page),.fkp-workspace .cbi-value:has(.fkp_diagnostic-page),.fkp-workspace .cbi-value:has(.fkp_updates-page) {display:block;padding:0;border:0}
+.fkp-workspace input:not([type=checkbox]):not([type=radio]):not([type=button]):not([type=submit]),.fkp-workspace select,.fkp-workspace textarea,
+.fkp-workspace-modal input:not([type=checkbox]):not([type=radio]):not([type=button]):not([type=submit]),.fkp-workspace-modal select,.fkp-workspace-modal textarea {
+  min-height:42px;max-width:100%;border:1px solid var(--next-line);border-radius:6px;padding:9px 12px;background:var(--next-field);color:var(--next-fg);font:inherit;line-height:1.5;box-shadow:none;caret-color:var(--next-accent)
+}
+.fkp-workspace textarea,.fkp-workspace-modal textarea {min-height:112px;width:100%;resize:vertical;font-variant-numeric:tabular-nums}
+.fkp-workspace input::placeholder,.fkp-workspace textarea::placeholder,.fkp-workspace-modal input::placeholder,.fkp-workspace-modal textarea::placeholder {color:var(--next-muted);opacity:1}
+.fkp-workspace input[type=checkbox],.fkp-workspace input[type=radio],.fkp-workspace-modal input[type=checkbox],.fkp-workspace-modal input[type=radio] {width:20px;height:20px;min-height:20px;margin:11px 8px 11px 0;vertical-align:middle;accent-color:var(--next-accent)}
+.fkp-workspace .cbi-checkbox,.fkp-workspace-modal .cbi-checkbox {min-height:42px;display:inline-flex;align-items:center}
+.fkp-workspace button,.fkp-workspace .cbi-button,.fkp-workspace input[type=button],.fkp-workspace input[type=submit],
+.fkp-workspace-modal button,.fkp-workspace-modal .cbi-button,.fkp-workspace-modal input[type=button],.fkp-workspace-modal input[type=submit] {
+  min-height:42px;height:auto;max-width:100%;border:1px solid var(--next-line);border-radius:6px;padding:9px 14px;background:var(--next-field);color:var(--next-fg);font:inherit;font-weight:550;line-height:1.5;text-shadow:none;box-shadow:none;cursor:pointer;transition:background-color 140ms ease-out
+}
+.fkp-workspace button:hover:not(:disabled),.fkp-workspace .cbi-button:hover:not(:disabled),.fkp-workspace-modal button:hover:not(:disabled),.fkp-workspace-modal .cbi-button:hover:not(:disabled) {background:var(--fkp-hover);color:var(--next-accent)}
+.fkp-workspace .cbi-button-positive,.fkp-workspace .cbi-button-apply,.fkp-workspace .cbi-button-save,.fkp-workspace-modal .cbi-button-positive,.fkp-workspace-modal .cbi-button-apply,.fkp-workspace-modal .cbi-button-save {background:var(--next-accent);border-color:var(--next-accent);color:var(--next-bg)}
+.fkp-workspace .cbi-button-negative,.fkp-workspace .cbi-button-remove,.fkp-workspace-modal .cbi-button-negative,.fkp-workspace-modal .cbi-button-remove {color:var(--fkp-danger)}
+.fkp-workspace :disabled,.fkp-workspace-modal :disabled {opacity:.55;cursor:not-allowed}
+.fkp-workspace [aria-busy=true],.fkp-workspace-modal [aria-busy=true] {cursor:progress}
+.fkp-workspace [aria-invalid=true],.fkp-workspace .cbi-input-invalid,.fkp-workspace-modal [aria-invalid=true],.fkp-workspace-modal .cbi-input-invalid {border-color:var(--fkp-danger)!important;outline-color:var(--fkp-danger)}
+.fkp-workspace :is(button,input,select,textarea,a,summary,[tabindex]):focus-visible,.fkp-workspace-modal :is(button,input,select,textarea,a,summary,[tabindex]):focus-visible {outline:2px solid var(--next-accent);outline-offset:3px}
+.fkp-workspace a,.fkp-workspace-modal a {color:var(--next-accent);text-underline-offset:3px}
+.fkp-workspace .cbi-dynlist,.fkp-workspace-modal .cbi-dynlist {max-width:100%}
+.fkp-workspace .cbi-dynlist > .item,.fkp-workspace-modal .cbi-dynlist > .item {padding:8px 12px;min-height:42px;border-color:var(--next-line);background:var(--next-field);color:var(--next-fg);border-radius:6px;overflow-wrap:anywhere}
+.fkp-workspace .cbi-dropdown,.fkp-workspace-modal .cbi-dropdown {min-height:42px;max-width:100%;border:1px solid var(--next-line);border-radius:6px;background:var(--next-field);color:var(--next-fg);padding:8px 12px}
+.fkp-workspace .cbi-dropdown ul,.fkp-workspace-modal .cbi-dropdown ul {background:var(--next-field);color:var(--next-fg);border-color:var(--next-line)}
+.fkp-workspace .cbi-dropdown li,.fkp-workspace-modal .cbi-dropdown li {min-height:36px;padding:6px 8px;overflow-wrap:anywhere}
+.fkp-workspace .table,.fkp-workspace table,.fkp-workspace-modal .table,.fkp-workspace-modal table {width:100%;max-width:100%;border:0;border-collapse:collapse;color:var(--next-fg);background:transparent;font-variant-numeric:tabular-nums;font-size:13px;margin:16px 0 24px}
+.fkp-workspace :is(th,td,.th,.td),.fkp-workspace-modal :is(th,td,.th,.td) {background:transparent;color:var(--next-fg);border:0;border-bottom:1px solid var(--next-line);padding:12px 10px;text-align:left;vertical-align:middle;overflow-wrap:anywhere;line-height:1.5}
+.fkp-workspace :is(th,.th),.fkp-workspace-modal :is(th,.th) {font-weight:650;color:var(--next-muted);font-size:12px}
+.fkp-workspace :is(tr,.tr):hover > :is(td,.td),.fkp-workspace-modal :is(tr,.tr):hover > :is(td,.td) {background:var(--fkp-hover)}
+.fkp-workspace .cbi-section-table-row,.fkp-workspace .cbi-section-table-row:nth-child(2n),.fkp-workspace-modal .cbi-section-table-row {background:transparent}
+.fkp-workspace .cbi-section-actions > div,.fkp-workspace-modal .cbi-section-actions > div {display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:8px}
+.fkp-workspace .cbi-section-actions,.fkp-workspace-modal .cbi-section-actions {min-width:104px}
+.fkp-workspace :is(#cbi-forkop-section,#cbi-forkop-server) .td.cbi-section-actions {width:240px!important;min-width:240px!important;white-space:normal}
+.fkp-workspace .td.cbi-section-actions > div:not(.cbi-dropdown) {display:flex;justify-content:flex-end;align-items:center;flex-wrap:wrap;gap:8px}
+.fkp-workspace .td.cbi-section-actions > div:not(.cbi-dropdown) > :is(button,.cbi-button) {flex:0 0 auto;width:auto;margin:0!important}
+.fkp-workspace .cbi-section-create,.fkp-workspace .cbi-page-actions,.fkp-workspace-modal .button-row {display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-top:24px;padding-top:16px}
+.fkp-workspace pre,.fkp-workspace code,.fkp-workspace-modal pre,.fkp-workspace-modal code {background:var(--next-field);color:var(--next-fg);font-size:13px;line-height:1.6;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.fkp-workspace pre,.fkp-workspace-modal pre {max-width:100%;overflow:auto;border-radius:6px;padding:16px;border:1px solid var(--next-line)}
+.fkp-workspace .alert-message,.fkp-workspace-modal .alert-message {background:var(--next-field);color:var(--next-fg);border:1px solid var(--next-line);border-radius:6px;padding:16px;margin:16px 0}
+.fkp-workspace .alert-message.error,.fkp-workspace-modal .alert-message.error {color:var(--fkp-danger);border-color:var(--fkp-danger)}
+.fkp-workspace .fkp-next {--next-bg:inherit;--next-fg:inherit;--next-muted:inherit;--next-line:inherit;--next-accent:inherit;--next-field:inherit;padding:0;border-radius:0;background:transparent;color:inherit;line-height:1.5;color-scheme:inherit}
+.fkp-workspace .fkp-next > header {position:static;float:none;inset:auto;display:flex;width:auto;height:auto;min-height:0;max-width:none;padding:0;margin:0 0 24px;border:0;box-shadow:none;background:transparent;color:var(--next-fg);z-index:auto;transform:none}
+.fkp-workspace .fkp-next > header h2 {color:var(--next-fg);font-size:24px;line-height:1.25;margin:0 0 8px}
+.fkp-workspace .fkp-next > header p {color:var(--next-muted);margin:0}
+.fkp-workspace .fkp-next-panel {background:transparent;border-radius:0;box-shadow:none}
+.fkp-workspace .fkp_dashboard-page {--dashboard-grid-columns:2;--dashboard-grid-min-width:0}
+.fkp-workspace .fkp_dashboard-page__widgets-section {gap:16px;margin:0 0 32px}
+.fkp-workspace .fkp_dashboard-page__widgets-section__item {border:0;border-top:1px solid var(--next-line);border-radius:0;padding:16px 0;min-width:0}
+.fkp-workspace .fkp_dashboard-page__widgets-section__item__title {font-size:15px;font-weight:650;margin-bottom:12px}
+.fkp-workspace .fkp_dashboard-page__widgets-section__item__row {display:flex;justify-content:space-between;gap:16px;margin:8px 0;font-variant-numeric:tabular-nums}
+.fkp-workspace .fkp_dashboard-page__widgets-section__item__row__key {color:var(--next-muted)}
+.fkp-workspace .fkp_dashboard-page__outbound-section {border:0;border-top:1px solid var(--next-line);border-radius:0;padding:24px 0;margin-top:8px}
+.fkp-workspace .fkp_dashboard-page__outbound-section__title-section {gap:16px;flex-wrap:wrap}
+.fkp-workspace .fkp_dashboard-page__outbound-section__title-section__title {font-size:18px;font-weight:650}
+.fkp-workspace .fkp_dashboard-page__outbound-section__title-section__actions {gap:8px;flex-wrap:wrap}
+.fkp-workspace .fkp_dashboard-page__outbound-grid {gap:12px;margin-top:16px}
+.fkp-workspace .fkp_dashboard-page__outbound-grid__item {border-width:1px;border-color:var(--next-line);border-radius:8px;padding:16px;background:var(--next-field)}
+.fkp-workspace .fkp_dashboard-page__outbound-grid__item--active {border-color:var(--next-accent);background:var(--fkp-selected)}
+.fkp-workspace .fkp_dashboard-page__outbound-grid__item--selectable:hover {border-color:var(--next-accent)}
+.fkp-workspace .fkp_dashboard-page__subscription-meta {--subscription-meta-action-size:42px;--subscription-meta-action-gap:8px;border:0;border-bottom:1px solid var(--next-line);border-radius:0;padding:16px 0;background:transparent}
+.fkp-workspace .fkp_dashboard-page__subscription-meta__announce {border:0;border-radius:0;padding:12px 0;background:transparent;font-style:normal;line-height:1.5}
+.fkp-workspace .fkp_dashboard-page button.btn,.fkp-workspace .fkp_monitoring-page button.btn,.fkp-workspace-modal button.fkp_dashboard-page__urltest-details__copy-button {min-width:42px;min-height:42px;height:auto;border-radius:6px}
+.fkp-workspace .fkp_dashboard-page__outbound-grid__item__copy-button {padding:8px}
+.fkp-workspace .fkp_diagnostic-page {grid-template-columns:minmax(0,2fr) minmax(220px,1fr);gap:32px}
+.fkp-workspace .fkp_diagnostic-page__right-bar {gap:24px}
+.fkp-workspace .fkp_diagnostic-page__checks,.fkp-workspace .fkp_diagnostic-page__right-bar__wiki,.fkp-workspace .fkp_diagnostic-page__right-bar__actions,.fkp-workspace .fkp_diagnostic-page__right-bar__system-info {border:0;border-top:1px solid var(--next-line);border-radius:0;padding:16px 0;background:transparent;gap:12px}
+.fkp-workspace .fkp_diagnostic-page__right-bar__wiki--warning {border-color:var(--warn-color-medium)}
+.fkp-workspace .fkp_diagnostic-page__right-bar__wiki--error {border-color:var(--fkp-danger)}
+.fkp-workspace .fkp_diagnostic-page__left-bar {gap:24px}
+.fkp-workspace .fkp_diagnostic_alert {border-width:1px;border-radius:8px;padding:16px;gap:12px;background:var(--next-field)}
+.fkp-workspace .fkp_diagnostic_alert__title {font-size:15px;font-weight:650;margin-bottom:8px}
+.fkp-workspace .fkp_diagnostic_alert__description {line-height:1.6;overflow-wrap:anywhere}
+.fkp-workspace .fkp_monitoring-page {--fkp-monitoring-control-height:44px;--fkp-monitoring-row-action-size:42px;--fkp-monitoring-divider-color:var(--next-line);--fkp-monitoring-soft-bg:var(--next-field);--fkp-monitoring-soft-bg-hover:var(--fkp-hover)}
+.fkp-workspace .fkp_monitoring-page__controls {gap:16px;margin-bottom:24px}
+.fkp-workspace .fkp_monitoring-page .btn.fkp_monitoring-page__tab--active {background:var(--fkp-selected)!important;color:var(--next-accent)!important}
+.fkp-workspace .fkp_monitoring-page__table th {font-size:12px;text-transform:none}
+.fkp-workspace .fkp_updates-page__components {gap:32px}
+.fkp-workspace .fkp_updates-page__components-column {flex:1 1 280px;min-width:0;gap:24px}
+.fkp-workspace .fkp_updates-page__component {border:0;border-top:1px solid var(--next-line);border-radius:0;min-width:0;padding:16px 0;gap:16px}
+.fkp-workspace .fkp_updates-page__component__title {font-size:18px;font-weight:650}
+.fkp-workspace .fkp_updates-page__component__info-row {white-space:normal;flex-wrap:wrap;gap:8px 16px}
+.fkp-workspace .fkp_updates-page__component__actions-main,.fkp-workspace .fkp_updates-page__component__variants-buttons {flex-wrap:wrap;gap:8px}
+.fkp-workspace .fkp_updates-page__component__variants-title {font-size:13px;font-weight:550}
+.fkp-workspace-modal {padding:24px!important;border:0;border-radius:12px;box-shadow:0 16px 48px rgba(0,0,0,.22);max-width:min(960px,calc(100vw - 32px));max-height:calc(100dvh - 32px);overflow:auto}
+.fkp-workspace-modal > h4:first-child {font-size:24px;margin:0 0 24px}
+.fkp-workspace-modal .cbi-map {padding:0;margin:0;border:0;background:transparent;color:inherit;box-shadow:none}
+.fkp-workspace-modal .cbi-tabmenu {display:flex;gap:8px;overflow-x:auto;border:0;border-bottom:1px solid var(--next-line);padding:0 0 12px;margin:0 0 24px;list-style:none}
+.fkp-workspace-modal .cbi-tabmenu li {margin:0;border:0;background:transparent;padding:0;white-space:nowrap}
+.fkp-workspace-modal .cbi-tabmenu a {display:block;padding:10px 12px;min-height:42px;border-radius:6px;text-decoration:none;color:var(--next-muted)}
+.fkp-workspace-modal .cbi-tabmenu .cbi-tab:not(.cbi-tab-disabled) a {background:var(--fkp-selected);color:var(--next-accent);font-weight:650}
+.fkp-workspace-modal .fkp_dashboard-page__urltest-details__row {grid-template-columns:minmax(0,1fr) minmax(54px,max-content) 42px;padding:12px 0;border-radius:0}
+@media (max-width:1050px) {
+  .fkp-workspace {grid-template-columns:160px minmax(0,1fr)}
+  .fkp-workspace-main {padding:24px}
+  .fkp-workspace-top {gap:16px;flex-wrap:wrap}
+}
+@media (max-width:720px) {
+  .fkp-workspace {display:block;border-radius:8px;margin:16px 0}
+  .fkp-workspace-sidebar {position:static;padding:16px 16px 12px;border-bottom:1px solid var(--next-line)}
+  .fkp-workspace-brand {font-size:20px;padding:0;margin-bottom:12px}
+  .fkp-workspace-primary {flex-direction:row;overflow-x:auto;gap:4px;padding:4px;scrollbar-width:thin}
+  .fkp-workspace .fkp-workspace-nav-button {flex-shrink:0;min-height:44px}
+  .fkp-workspace-main {padding:24px 16px;border:0}
+  .fkp-workspace-top {margin-bottom:24px;padding-bottom:16px}
+  .fkp-workspace .fkp-workspace-title {font-size:26px}
+  .fkp-workspace .cbi-value,.fkp-workspace-modal .cbi-value {display:block;padding:12px 0}
+  .fkp-workspace .cbi-value > label.cbi-value-title,.fkp-workspace-modal .cbi-value > label.cbi-value-title {display:block;width:100%;text-align:left;padding:0;margin:0 0 8px}
+  .fkp-workspace input,.fkp-workspace select,.fkp-workspace textarea,.fkp-workspace-modal input,.fkp-workspace-modal select,.fkp-workspace-modal textarea {font-size:16px!important}
+  .fkp-workspace .fkp-workspace-theme select {font-size:16px}
+  .fkp-workspace .cbi-map-tabbed > .cbi-section {overflow-x:auto}
+  .fkp-workspace .table,.fkp-workspace table {min-width:520px}
+  .fkp-workspace :is(#cbi-forkop-section,#cbi-forkop-server) .table.cbi-section-table {display:block;width:100%;min-width:0;table-layout:auto}
+  .fkp-workspace :is(#cbi-forkop-section,#cbi-forkop-server) .cbi-section-table > thead {display:none}
+  .fkp-workspace :is(#cbi-forkop-section,#cbi-forkop-server) .cbi-section-table > :is(tbody,tfoot) {display:block;width:100%}
+  .fkp-workspace :is(#cbi-forkop-section,#cbi-forkop-server) .cbi-section-table-row {display:block;width:100%;padding:16px 0;margin:0;border-bottom:1px solid var(--next-line)}
+  .fkp-workspace :is(#cbi-forkop-section,#cbi-forkop-server) .cbi-section-table-row::before {display:none;content:none}
+  .fkp-workspace :is(#cbi-forkop-section,#cbi-forkop-server) .cbi-section-table-row > .td {display:grid;grid-template-columns:minmax(88px,32%) minmax(0,1fr);align-items:center;gap:12px;width:100%;min-width:0;margin:0;padding:8px 0;border:0;text-align:left;white-space:normal}
+  .fkp-workspace :is(#cbi-forkop-section,#cbi-forkop-server) .cbi-section-table-row > .td[data-title]::before {content:attr(data-title);color:var(--next-muted);font-weight:550;white-space:normal;overflow-wrap:anywhere}
+  .fkp-workspace :is(#cbi-forkop-section,#cbi-forkop-server) .cbi-section-table-row > .cbi-section-table-titles {display:block;font-size:15px;color:var(--next-fg);font-weight:650;padding:0 0 12px}
+  .fkp-workspace :is(#cbi-forkop-section,#cbi-forkop-server) .cbi-section-table-row > .cbi-section-actions {display:block;width:100%!important;min-width:0!important;padding-top:12px}
+  .fkp-workspace .td.cbi-section-actions > div:not(.cbi-dropdown) {justify-content:flex-start}
+  .fkp-workspace :is(#cbi-forkop-section,#cbi-forkop-server) .placeholder > .td {display:block;padding:16px 0}
+  .fkp-workspace .fkp-next-content {grid-template-columns:minmax(0,1fr)}
+  .fkp-workspace .fkp_dashboard-page {--dashboard-grid-columns:1}
+  .fkp-workspace .fkp_diagnostic-page {grid-template-columns:minmax(0,1fr)}
+  .fkp-workspace .fkp_monitoring-page__table {min-width:0}
+  .fkp-workspace .fkp_updates-page__components-column {flex-basis:auto}
+  .fkp-workspace-modal {padding:20px 16px!important;max-width:calc(100vw - 16px);max-height:calc(100dvh - 16px);border-radius:8px}
+}
+@media (prefers-reduced-motion:reduce) {.fkp-workspace *,.fkp-workspace-modal * {transition:none!important;animation:none!important}}
 `;
 
 // src/forkop/tabs/dashboard/partials/renderFlagEmojis.ts
@@ -1112,12 +1330,12 @@ function preserveScrollForPage(renderFn) {
 // src/helpers/svgEl.ts
 function svgEl(tag, attrs = {}, children = []) {
   const NS = "http://www.w3.org/2000/svg";
-  const el3 = document.createElementNS(NS, tag);
+  const el4 = document.createElementNS(NS, tag);
   for (const [k, v] of Object.entries(attrs)) {
-    if (v != null) el3.setAttribute(k, String(v));
+    if (v != null) el4.setAttribute(k, String(v));
   }
-  (Array.isArray(children) ? children : [children]).filter(Boolean).forEach((ch) => el3.appendChild(ch));
-  return el3;
+  (Array.isArray(children) ? children : [children]).filter(Boolean).forEach((ch) => el4.appendChild(ch));
+  return el4;
 }
 
 // src/helpers/insertIf.ts
@@ -1987,6 +2205,25 @@ function renderDefaultState({
     const selectorSwitching = Boolean(selectorSwitchingTag);
     const outboundSwitching = selectorSwitchingTag === outbound.code;
     const canChooseOutbound = section.withTagSelect && outbound.runtimeAvailable !== false && !selectorSwitching && !outbound.selected;
+    const selectionButton = E(
+      "button",
+      {
+        type: "button",
+        class: "btn fkp_dashboard-page__outbound-grid__item__select",
+        "aria-label": `${_("\u0412\u044B\u0431\u0440\u0430\u0442\u044C \u0441\u0435\u0440\u0432\u0435\u0440")}: ${outbound.displayName}`,
+        "aria-busy": String(outboundSwitching),
+        disabled: !canChooseOutbound ? true : void 0,
+        click: (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          if (canChooseOutbound)
+            onChooseOutbound(section.sectionName, section.code, outbound.code);
+        }
+      },
+      outboundSwitching ? _("\u041F\u0435\u0440\u0435\u043A\u043B\u044E\u0447\u0430\u0435\u043C\u2026") : outbound.selected ? _("\u0412\u044B\u0431\u0440\u0430\u043D") : outbound.runtimeAvailable === false ? _("\u041D\u0435\u0434\u043E\u0441\u0442\u0443\u043F\u0435\u043D") : _("\u0412\u044B\u0431\u0440\u0430\u0442\u044C")
+    );
+    selectionButton.setAttribute("data-outbound-select", outbound.code);
+    selectionButton.setAttribute("aria-pressed", String(outbound.selected));
     const className = [
       "fkp_dashboard-page__outbound-grid__item",
       outbound.selected ? "fkp_dashboard-page__outbound-grid__item--active" : "",
@@ -1999,7 +2236,6 @@ function renderDefaultState({
       {
         class: className,
         "aria-busy": outboundSwitching ? "true" : void 0,
-        "aria-disabled": section.withTagSelect && !canChooseOutbound ? "true" : void 0,
         click: () => canChooseOutbound && onChooseOutbound(section.sectionName, section.code, outbound.code)
       },
       [
@@ -2096,7 +2332,8 @@ function renderDefaultState({
               ] : []
             ]
           )
-        ])
+        ]),
+        ...section.withTagSelect ? [selectionButton] : []
       ]
     );
   }
@@ -2257,6 +2494,38 @@ function render() {
         )
       ),
       E("div", { class: "fkp_dashboard-page__content" }, [
+        // All outbounds
+        E(
+          "div",
+          { id: "dashboard-sections-grid" },
+          renderSections({
+            loading: true,
+            failed: false,
+            section: {
+              code: "",
+              sectionName: "",
+              displayName: "",
+              outbounds: [],
+              withTagSelect: false
+            },
+            onTestLatency: () => {
+            },
+            onChooseOutbound: () => {
+            },
+            onCopyOutbound: () => {
+            },
+            onShowUrlTestInfo: () => {
+            },
+            onShowPriorityInfo: () => {
+            },
+            onUpdateSubscription: () => {
+            },
+            latencyFetching: false,
+            latencyProgress: void 0,
+            subscriptionUpdating: false,
+            selectorSwitchingTag: void 0
+          })
+        ),
         // Widgets section
         E("div", { class: "fkp_dashboard-page__widgets-section" }, [
           E(
@@ -2299,39 +2568,7 @@ function render() {
               items: []
             })
           )
-        ]),
-        // All outbounds
-        E(
-          "div",
-          { id: "dashboard-sections-grid" },
-          renderSections({
-            loading: true,
-            failed: false,
-            section: {
-              code: "",
-              sectionName: "",
-              displayName: "",
-              outbounds: [],
-              withTagSelect: false
-            },
-            onTestLatency: () => {
-            },
-            onChooseOutbound: () => {
-            },
-            onCopyOutbound: () => {
-            },
-            onShowUrlTestInfo: () => {
-            },
-            onShowPriorityInfo: () => {
-            },
-            onUpdateSubscription: () => {
-            },
-            latencyFetching: false,
-            latencyProgress: void 0,
-            subscriptionUpdating: false,
-            selectorSwitchingTag: void 0
-          })
-        )
+        ])
       ])
     ]
   );
@@ -3594,18 +3831,18 @@ async function readDashboardSectionCache(sectionName) {
   }
 }
 function getUrlTestGroups(dashboardCache) {
-  const groups = dashboardCache?.urltestGroups;
-  if (!groups || typeof groups !== "object" || Array.isArray(groups)) {
+  const groups2 = dashboardCache?.urltestGroups;
+  if (!groups2 || typeof groups2 !== "object" || Array.isArray(groups2)) {
     return {};
   }
-  return groups;
+  return groups2;
 }
 function getPriorityGroups(dashboardCache) {
-  const groups = dashboardCache?.priorityGroups;
-  if (!groups || typeof groups !== "object" || Array.isArray(groups)) {
+  const groups2 = dashboardCache?.priorityGroups;
+  if (!groups2 || typeof groups2 !== "object" || Array.isArray(groups2)) {
     return {};
   }
-  return groups;
+  return groups2;
 }
 function getOutboundDisplayName(code, entry, link, outboundMetadata, preferMetadata = false) {
   const metadataName = outboundMetadata?.names?.[code];
@@ -4176,10 +4413,10 @@ var TabService = class _TabService {
     const tabs = Array.from(
       document.querySelectorAll(".cbi-tab, .cbi-tab-disabled")
     );
-    return tabs.map((el3) => ({
-      el: el3,
-      id: el3.dataset.tab || "",
-      active: el3.classList.contains("cbi-tab") && !el3.classList.contains("cbi-tab-disabled")
+    return tabs.map((el4) => ({
+      el: el4,
+      id: el4.dataset.tab || "",
+      active: el4.classList.contains("cbi-tab") && !el4.classList.contains("cbi-tab-disabled")
     }));
   }
   getActiveTabId() {
@@ -12973,9 +13210,9 @@ function shouldApplyCompletedComponentActionResult(result, notify) {
 // src/forkop/tabs/updates/checkResultLifecycle.ts
 function shouldPreserveCompletedCheckResultOnNextMount({
   action,
-  mounted
+  mounted: mounted2
 }) {
-  return action === "check_update" && !mounted;
+  return action === "check_update" && !mounted2;
 }
 function shouldResetCheckResultsOnMount({
   anyActionLoading,
@@ -12990,10 +13227,10 @@ function shouldRefreshComponentStateBeforeRender(uiState) {
   );
 }
 function shouldExposeCheckResults({
-  mounted,
+  mounted: mounted2,
   cacheResolved
 }) {
-  return mounted && cacheResolved;
+  return mounted2 && cacheResolved;
 }
 
 // src/forkop/tabs/updates/initController.ts
@@ -14292,6 +14529,7 @@ ${PartialStyles}
     opacity: 1;
     transform: translateY(0);
 }
+${workspaceStyles}
 `;
 
 // src/helpers/injectGlobalStyles.ts
@@ -14342,22 +14580,63 @@ async function nextRequest(action, payload = {}) {
 }
 
 // src/forkop/next/traffic.ts
+var quantity = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 });
+function bytes(value) {
+  const units = ["\u0411", "\u041A\u0438\u0411", "\u041C\u0438\u0411", "\u0413\u0438\u0411", "\u0422\u0438\u0411"];
+  const index = value > 0 ? Math.max(0, Math.min(4, Math.floor(Math.log2(value) / 10))) : 0;
+  return `${quantity.format(value / 1024 ** index)} ${units[index]}`;
+}
 function createTrafficMonitor(output, read, visible) {
   let timer;
   let pending = false;
   let epoch = 0;
   let previous;
+  const list = document.createElement("dl");
+  list.className = "fkp-next-metrics";
+  const fields = /* @__PURE__ */ new Map();
+  for (const [key, label] of [
+    ["download-rate", "\u041F\u0440\u0438\u0451\u043C"],
+    ["upload-rate", "\u041E\u0442\u043F\u0440\u0430\u0432\u043A\u0430"],
+    ["download-total", "\u041F\u043E\u043B\u0443\u0447\u0435\u043D\u043E"],
+    ["upload-total", "\u041E\u0442\u043F\u0440\u0430\u0432\u043B\u0435\u043D\u043E"],
+    ["connections", "\u0421\u043E\u0435\u0434\u0438\u043D\u0435\u043D\u0438\u0439"]
+  ]) {
+    const group = document.createElement("div");
+    const term = document.createElement("dt");
+    term.textContent = label;
+    const value = document.createElement("dd");
+    value.dataset.metric = key;
+    value.textContent = "\u2014";
+    group.append(term, value);
+    list.append(group);
+    fields.set(key, value);
+  }
+  const status = document.createElement("p");
+  status.className = "fkp-next-help fkp-next-traffic-status";
+  status.setAttribute("role", "status");
+  status.textContent = "\u0422\u0440\u0430\u0444\u0438\u043A \u043F\u043E\u043A\u0430 \u043D\u0435\u0434\u043E\u0441\u0442\u0443\u043F\u0435\u043D.";
+  output.replaceChildren(list, status);
+  function readings(sample, download, upload) {
+    fields.get("download-total").textContent = sample ? bytes(sample.downloadTotal) : "\u2014";
+    fields.get("upload-total").textContent = sample ? bytes(sample.uploadTotal) : "\u2014";
+    fields.get("connections").textContent = sample ? quantity.format(sample.connections) : "\u2014";
+    fields.get("download-rate").textContent = download === void 0 ? "\u2014" : `${bytes(download)}/\u0441`;
+    fields.get("upload-rate").textContent = upload === void 0 ? "\u2014" : `${bytes(upload)}/\u0441`;
+  }
   function stop() {
     epoch++;
     clearTimeout(timer);
     timer = void 0;
     previous = void 0;
+    readings();
+    status.textContent = "\u0422\u0440\u0430\u0444\u0438\u043A \u043E\u0436\u0438\u0434\u0430\u0435\u0442 \u043E\u0431\u043D\u043E\u0432\u043B\u0435\u043D\u0438\u044F.";
   }
   async function refresh() {
     if (!read || !visible() || pending) return;
     clearTimeout(timer);
     timer = void 0;
     pending = true;
+    if (!previous) status.textContent = "\u041E\u0431\u043D\u043E\u0432\u043B\u044F\u0435\u043C \u0442\u0440\u0430\u0444\u0438\u043A\u2026";
     const current = epoch;
     try {
       const sample = await read();
@@ -14369,13 +14648,18 @@ function createTrafficMonitor(output, read, visible) {
       const time = performance.now();
       const elapsed = previous ? (time - previous.time) / 1e3 : 0;
       const valid = previous && Number.isFinite(elapsed) && elapsed > 0 && sample.downloadTotal >= previous.downloadTotal && sample.uploadTotal >= previous.uploadTotal;
-      const speed = valid ? `\u0421\u043A\u043E\u0440\u043E\u0441\u0442\u044C: \u043F\u0440\u0438\u0451\u043C ${Math.round((sample.downloadTotal - previous.downloadTotal) / elapsed)} \u0411/\u0441 \xB7 \u043E\u0442\u043F\u0440\u0430\u0432\u043A\u0430 ${Math.round((sample.uploadTotal - previous.uploadTotal) / elapsed)} \u0411/\u0441` : "\u0421\u043A\u043E\u0440\u043E\u0441\u0442\u044C \u0435\u0449\u0451 \u043D\u0435 \u0438\u0437\u043C\u0435\u0440\u0435\u043D\u0430";
-      output.textContent = `\u041F\u043E\u043B\u0443\u0447\u0435\u043D\u043E: ${sample.downloadTotal} \u0411 \xB7 \u041E\u0442\u043F\u0440\u0430\u0432\u043B\u0435\u043D\u043E: ${sample.uploadTotal} \u0411 \xB7 \u0421\u043E\u0435\u0434\u0438\u043D\u0435\u043D\u0438\u0439: ${sample.connections}. ${speed}. \u0421\u0447\u0451\u0442\u0447\u0438\u043A\u0438 \u043A\u043E\u043D\u0442\u0440\u043E\u043B\u043B\u0435\u0440\u0430 \u0441 \u043C\u043E\u043C\u0435\u043D\u0442\u0430 \u0435\u0433\u043E \u0437\u0430\u043F\u0443\u0441\u043A\u0430.`;
+      readings(
+        sample,
+        valid ? (sample.downloadTotal - previous.downloadTotal) / elapsed : void 0,
+        valid ? (sample.uploadTotal - previous.uploadTotal) / elapsed : void 0
+      );
+      status.textContent = `${valid ? "" : "\u0421\u043A\u043E\u0440\u043E\u0441\u0442\u044C \u0435\u0449\u0451 \u043D\u0435 \u0438\u0437\u043C\u0435\u0440\u0435\u043D\u0430. "}\u0421\u0447\u0451\u0442\u0447\u0438\u043A\u0438 \u043A\u043E\u043D\u0442\u0440\u043E\u043B\u043B\u0435\u0440\u0430 \u0441 \u043C\u043E\u043C\u0435\u043D\u0442\u0430 \u0435\u0433\u043E \u0437\u0430\u043F\u0443\u0441\u043A\u0430.`;
       previous = { ...sample, time };
     } catch {
       if (current === epoch && visible()) {
         previous = void 0;
-        output.textContent = "\u0422\u0440\u0430\u0444\u0438\u043A \u043F\u043E\u043A\u0430 \u043D\u0435\u0434\u043E\u0441\u0442\u0443\u043F\u0435\u043D. \u041E\u0431\u043D\u043E\u0432\u0438\u0442\u0435 \u0434\u0430\u043D\u043D\u044B\u0435 \u0438\u043B\u0438 \u043F\u0440\u043E\u0432\u0435\u0440\u044C\u0442\u0435 \u0441\u0435\u0440\u0432\u0438\u0441.";
+        readings();
+        status.textContent = "\u0422\u0440\u0430\u0444\u0438\u043A \u043F\u043E\u043A\u0430 \u043D\u0435\u0434\u043E\u0441\u0442\u0443\u043F\u0435\u043D. \u041E\u0431\u043D\u043E\u0432\u0438\u0442\u0435 \u0434\u0430\u043D\u043D\u044B\u0435 \u0438\u043B\u0438 \u043F\u0440\u043E\u0432\u0435\u0440\u044C\u0442\u0435 \u0441\u0435\u0440\u0432\u0438\u0441.";
       }
     } finally {
       pending = false;
@@ -14389,18 +14673,23 @@ function createTrafficMonitor(output, read, visible) {
 }
 
 // src/forkop/next/tools.ts
-function renderDeviceProfileTools(request, initialRequest = request) {
+function renderDeviceProfileTools(request, initialRequest = request, area = "all") {
   const root = document.createElement("section");
   root.className = "fkp-next-panel";
+  let group = root;
   const heading = (text) => {
+    group = document.createElement("section");
+    group.className = "fkp-next-panel";
+    const wanted = text === "\u0418\u043C\u043F\u043E\u0440\u0442 \u0438 \u044D\u043A\u0441\u043F\u043E\u0440\u0442 \u043F\u0440\u043E\u0444\u0438\u043B\u0435\u0439" ? "profiles" : "devices";
+    if (area === "all" || area === wanted) root.append(group);
     const h = document.createElement("h3");
     h.textContent = text;
-    root.append(h);
+    group.append(h);
   };
   const note = (text) => {
     const p = document.createElement("p");
     p.textContent = text;
-    root.append(p);
+    group.append(p);
   };
   const field = (tag, name2) => {
     const label = document.createElement("label");
@@ -14408,14 +14697,14 @@ function renderDeviceProfileTools(request, initialRequest = request) {
     const input2 = document.createElement(tag);
     input2.setAttribute("aria-label", name2);
     label.append(input2);
-    root.append(label);
+    group.append(label);
     return input2;
   };
   const result = (name2) => {
     const output = document.createElement("output");
     output.setAttribute("aria-label", name2);
     output.setAttribute("aria-live", "polite");
-    root.append(output);
+    group.append(output);
     return output;
   };
   const options = (select2, items2) => {
@@ -14451,26 +14740,40 @@ function renderDeviceProfileTools(request, initialRequest = request) {
         output.setAttribute("aria-busy", "false");
       }
     });
-    root.append(b);
+    group.append(b);
     return b;
   };
   heading("\u0423\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430");
+  note(
+    "\u0417\u0434\u0435\u0441\u044C \u043F\u043E\u043A\u0430\u0437\u0430\u043D\u044B \u0441\u043E\u0445\u0440\u0430\u043D\u0451\u043D\u043D\u044B\u0435 \u043D\u0430\u0437\u043D\u0430\u0447\u0435\u043D\u0438\u044F \u043C\u0430\u0440\u0448\u0440\u0443\u0442\u043E\u0432. \u041E\u0441\u0442\u0430\u043B\u044C\u043D\u044B\u0435 \u0443\u0441\u043B\u043E\u0432\u0438\u044F \u0432\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u044F \u0438 \u0438\u0441\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u044F \u0437\u0430\u0434\u0430\u044E\u0442\u0441\u044F \u0432 \u043F\u0440\u0430\u0432\u0438\u043B\u0430\u0445."
+  );
+  const rules = document.createElement("button");
+  rules.type = "button";
+  rules.textContent = "\u041E\u0442\u043A\u0440\u044B\u0442\u044C \u0443\u0441\u043B\u043E\u0432\u0438\u044F \u0432 \u043F\u0440\u0430\u0432\u0438\u043B\u0430\u0445";
+  rules.onclick = () => root.closest(".cbi-map")?.querySelector('.cbi-tabmenu [data-tab="section"] a')?.click();
+  group.append(rules);
   const devices = document.createElement("ul");
-  root.append(devices);
+  group.append(devices);
   const device = field("input", "\u0410\u0434\u0440\u0435\u0441 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430");
   const route = field("select", "\u041C\u0430\u0440\u0448\u0440\u0443\u0442 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430");
   options(route, []);
   const deviceResult = result("\u0420\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430");
-  const loadDevices = async () => {
-    const data = await call("devices", {});
+  let assignments = [];
+  const routeLabels = /* @__PURE__ */ new Map([["direct", "\u041D\u0430\u043F\u0440\u044F\u043C\u0443\u044E"]]);
+  const showDevices = () => {
     devices.replaceChildren();
-    for (const item of data.items) {
+    for (const item of assignments) {
       const li = document.createElement("li");
-      li.textContent = `${item.address} \u2192 ${item.section}`;
+      li.textContent = `${item.address} \u2192 ${routeLabels.get(item.section) || item.section}`;
       devices.append(li);
     }
-    if (!data.items.length)
+    if (!assignments.length)
       devices.textContent = "\u041C\u0430\u0440\u0448\u0440\u0443\u0442\u044B \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432 \u043F\u043E\u043A\u0430 \u043D\u0435 \u0437\u0430\u0434\u0430\u043D\u044B.";
+  };
+  const loadDevices = async () => {
+    const data = await call("devices", {});
+    assignments = data.items;
+    showDevices();
   };
   button("\u0421\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u044C \u043C\u0430\u0440\u0448\u0440\u0443\u0442 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430", deviceResult, async () => {
     if (!device.value.trim() || !route.value)
@@ -14596,31 +14899,64 @@ function renderDeviceProfileTools(request, initialRequest = request) {
     await loadProfiles();
     profileResult.textContent = "\u0421\u043F\u0438\u0441\u043E\u043A \u043F\u0440\u043E\u0444\u0438\u043B\u0435\u0439 \u043E\u0431\u043D\u043E\u0432\u043B\u0451\u043D.";
   });
-  deviceResult.textContent = "\u0417\u0430\u0433\u0440\u0443\u0437\u043A\u0430 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u2026";
-  void loadDevices().then(() => {
-    deviceResult.textContent = "";
-  }).catch((error) => {
-    deviceResult.textContent = error instanceof Error ? error.message : "device_read_failed";
-  });
-  profileResult.textContent = "\u0417\u0430\u0433\u0440\u0443\u0437\u043A\u0430 \u043F\u0440\u043E\u0444\u0438\u043B\u0435\u0439\u2026";
-  void loadProfiles(initialRequest).then(() => {
-    profileResult.textContent = "";
-  }).catch((error) => {
-    profileResult.textContent = error instanceof Error ? error.message : "profile_read_failed";
-  });
-  void call("status", {}, initialRequest).then((raw) => {
-    const data = raw;
-    const items2 = data.sections.map((section) => ({
-      value: section.name,
-      label: section.label || section.name
-    }));
-    options(route, [
-      { value: "direct", label: "\u041D\u0430\u043F\u0440\u044F\u043C\u0443\u044E" },
-      ...items2.filter((item) => item.value !== "direct")
-    ]);
-    options(gamingRoute, items2);
-  }).catch(() => {
-    gamingResult.textContent = "\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0437\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044C \u043C\u0430\u0440\u0448\u0440\u0443\u0442\u044B. \u041E\u0431\u043D\u043E\u0432\u0438\u0442\u0435 \u043F\u0430\u043D\u0435\u043B\u044C \u0434\u043B\u044F \u043F\u043E\u0432\u0442\u043E\u0440\u043D\u043E\u0439 \u043F\u043E\u043F\u044B\u0442\u043A\u0438.";
+  if (area !== "profiles") {
+    deviceResult.textContent = "\u0417\u0430\u0433\u0440\u0443\u0437\u043A\u0430 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u2026";
+    void loadDevices().then(() => {
+      deviceResult.textContent = "";
+    }).catch((error) => {
+      deviceResult.textContent = error instanceof Error ? error.message : "device_read_failed";
+    });
+  }
+  if (area !== "devices") {
+    profileResult.textContent = "\u0417\u0430\u0433\u0440\u0443\u0437\u043A\u0430 \u043F\u0440\u043E\u0444\u0438\u043B\u0435\u0439\u2026";
+    void loadProfiles(initialRequest).then(() => {
+      profileResult.textContent = "";
+    }).catch((error) => {
+      profileResult.textContent = error instanceof Error ? error.message : "profile_read_failed";
+    });
+  }
+  let routesGeneration = 0;
+  const loadRoutes = (read = request, announce = false) => {
+    const generation = ++routesGeneration;
+    return call("status", {}, read).then((raw) => {
+      if (generation !== routesGeneration) return;
+      const data = raw;
+      const items2 = data.sections.map((section) => ({
+        value: section.name,
+        label: section.label || section.name
+      }));
+      for (const item of items2) routeLabels.set(item.value, item.label);
+      showDevices();
+      options(route, [
+        { value: "direct", label: "\u041D\u0430\u043F\u0440\u044F\u043C\u0443\u044E" },
+        ...items2.filter((item) => item.value !== "direct")
+      ]);
+      options(gamingRoute, items2);
+      if (announce) gamingResult.textContent = "\u041C\u0430\u0440\u0448\u0440\u0443\u0442\u044B \u043E\u0431\u043D\u043E\u0432\u043B\u0435\u043D\u044B.";
+    }).catch(() => {
+      if (generation === routesGeneration) routeError();
+    });
+  };
+  const routeError = () => gamingResult.textContent = "\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0437\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044C \u043C\u0430\u0440\u0448\u0440\u0443\u0442\u044B. \u041D\u0430\u0436\u043C\u0438\u0442\u0435 \xAB\u041E\u0431\u043D\u043E\u0432\u0438\u0442\u044C \u043C\u0430\u0440\u0448\u0440\u0443\u0442\u044B\xBB.";
+  if (area !== "profiles") {
+    void loadRoutes(initialRequest);
+    group = route.closest("section");
+    button("\u041E\u0431\u043D\u043E\u0432\u0438\u0442\u044C \u043C\u0430\u0440\u0448\u0440\u0443\u0442\u044B", gamingResult, async () => {
+      await loadRoutes(request, true);
+    });
+  }
+  root.addEventListener("forkop:refresh-tools", (event) => {
+    const read = event.detail?.read || request;
+    if (area !== "profiles") {
+      void loadDevices().catch(
+        () => deviceResult.textContent = "\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0437\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044C \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430. \u041D\u0430\u0436\u043C\u0438\u0442\u0435 \xAB\u041E\u0431\u043D\u043E\u0432\u0438\u0442\u044C \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430\xBB."
+      );
+      void loadRoutes(read, true);
+    }
+    if (area !== "devices")
+      void loadProfiles(read).catch(
+        () => profileResult.textContent = "\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0437\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044C \u043F\u0440\u043E\u0444\u0438\u043B\u0438. \u041D\u0430\u0436\u043C\u0438\u0442\u0435 \xAB\u041E\u0431\u043D\u043E\u0432\u0438\u0442\u044C \u043F\u0440\u043E\u0444\u0438\u043B\u0438\xBB."
+      );
   });
   return root;
 }
@@ -14854,22 +15190,45 @@ function renderCompatibilityPanel(request, initialRequest = request) {
     );
   });
   root.append(updates);
-  void initialRequest("status", {}).then((response) => {
-    if (!response.success) {
-      result.textContent = "\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0437\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044C \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u044F. \u041E\u0431\u043D\u043E\u0432\u0438\u0442\u0435 \u0441\u0442\u0440\u0430\u043D\u0438\u0446\u0443.";
-      return;
-    }
-    const sections = object(response.data).sections;
-    for (const raw of Array.isArray(sections) ? sections : []) {
-      const s = object(raw);
-      const option = text("option", String(s.label || s.name));
-      option.value = String(s.name);
-      section.append(option);
-    }
-    section.value = section.options[0]?.value || "";
-  }).catch(
-    () => result.textContent = "\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0437\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044C \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u044F. \u041E\u0431\u043D\u043E\u0432\u0438\u0442\u0435 \u0441\u0442\u0440\u0430\u043D\u0438\u0446\u0443."
+  let routesGeneration = 0;
+  function refreshRoutes(read = request) {
+    const generation = ++routesGeneration;
+    return read("status", {}).then((response) => {
+      if (generation !== routesGeneration) return;
+      if (!response.success) {
+        result.textContent = "\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0437\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044C \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u044F. \u041D\u0430\u0436\u043C\u0438\u0442\u0435 \xAB\u041E\u0431\u043D\u043E\u0432\u0438\u0442\u044C \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u044F\xBB.";
+        return;
+      }
+      const previous = section.value;
+      section.replaceChildren();
+      const sections = object(response.data).sections;
+      for (const raw of Array.isArray(sections) ? sections : []) {
+        const s = object(raw);
+        const option = text("option", String(s.label || s.name));
+        option.value = String(s.name);
+        section.append(option);
+      }
+      section.value = [...section.options].some(
+        (option) => option.value === previous
+      ) ? previous : section.options[0]?.value || "";
+      if (section.value !== previous)
+        section.dispatchEvent(new Event("change"));
+      result.textContent = "\u041F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u044F \u0437\u0430\u0433\u0440\u0443\u0436\u0435\u043D\u044B. \u041F\u0440\u043E\u0432\u0435\u0440\u043A\u0430 \u043D\u0435 \u0432\u044B\u043F\u043E\u043B\u043D\u044F\u043B\u0430\u0441\u044C.";
+    }).catch(() => {
+      if (generation === routesGeneration)
+        result.textContent = "\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0437\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044C \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u044F. \u041D\u0430\u0436\u043C\u0438\u0442\u0435 \xAB\u041E\u0431\u043D\u043E\u0432\u0438\u0442\u044C \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u044F\xBB.";
+    });
+  }
+  button("\u041E\u0431\u043D\u043E\u0432\u0438\u0442\u044C \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u044F", async () => {
+    await refreshRoutes();
+  });
+  root.addEventListener(
+    "forkop:refresh-tools",
+    (event) => void refreshRoutes(
+      event.detail?.read || request
+    )
   );
+  void refreshRoutes(initialRequest);
   return root;
 }
 
@@ -14901,24 +15260,29 @@ function select(label, choices) {
   wrap.append(node);
   return { wrap, node };
 }
-function renderAdvancedPanel(request = nextRequest, loadConnections, lazy = false) {
-  const initialReads = /* @__PURE__ */ new Map();
-  const initialRequest = (action2, payload = {}) => {
-    if (action2 !== "status" && action2 !== "profile_list")
-      return request(action2, payload);
-    let pending = initialReads.get(action2);
-    if (!pending) {
-      pending = request(action2, payload);
-      initialReads.set(action2, pending);
-    }
-    return pending;
-  };
+function renderAdvancedPanel(request = nextRequest, loadConnections, lazy = false, area = "all") {
+  const includes = (part) => area === "all" || area === part;
+  function sharedReads() {
+    const reads = /* @__PURE__ */ new Map();
+    return (action2, payload = {}) => {
+      if (action2 !== "status" && action2 !== "profile_list")
+        return request(action2, payload);
+      let pending = reads.get(action2);
+      if (!pending) {
+        pending = request(action2, payload);
+        reads.set(action2, pending);
+      }
+      return pending;
+    };
+  }
+  const initialRequest = sharedReads();
   const root = el(
     "section",
     "",
     lazy ? "fkp-next-advanced-content" : "fkp-next"
   );
-  root.dataset.mode = lazy ? "detailed" : "simple";
+  root.dataset.mode = lazy || area !== "all" ? "detailed" : "simple";
+  if (area !== "all") root.dataset.area = area;
   const header = el("header");
   const title = el("div");
   title.append(
@@ -14940,7 +15304,7 @@ function renderAdvancedPanel(request = nextRequest, loadConnections, lazy = fals
   ]);
   theme.node.onchange = () => root.dataset.theme = theme.node.value;
   header.append(title, mode, theme.wrap);
-  if (lazy) header.replaceChildren();
+  if (lazy || area !== "all") header.replaceChildren();
   root.append(header);
   const message = el("p", "", "fkp-next-notice");
   message.setAttribute("role", "status");
@@ -14993,16 +15357,17 @@ function renderAdvancedPanel(request = nextRequest, loadConnections, lazy = fals
     sectionSelects.push(s.node);
     return s;
   }
-  function panel(title2, help) {
+  function panel(title2, help, part) {
     const p = el("section", "", "fkp-next-panel");
     p.append(el("h3", title2), el("p", help, "fkp-next-help"));
+    if (!includes(part)) return p;
     if (lazy) {
       const details = el("details", "", "fkp-next-disclosure");
       details.append(el("summary", title2));
-      let mounted = false;
+      let mounted2 = false;
       details.addEventListener("toggle", () => {
-        if (!details.open || mounted) return;
-        mounted = true;
+        if (!details.open || mounted2) return;
+        mounted2 = true;
         details.append(p);
         void (title2 === "\u041F\u0440\u043E\u0444\u0438\u043B\u0438 \u0438 \u0432\u043E\u0441\u0441\u0442\u0430\u043D\u043E\u0432\u043B\u0435\u043D\u0438\u0435" ? refreshProfiles(request) : title2 === "\u0412\u0440\u0435\u043C\u0435\u043D\u043D\u044B\u0435 \u043F\u0440\u0430\u0432\u0438\u043B\u0430" ? refreshTemporary() : title2 === "Smart Detect" ? refreshRecommendations() : Promise.resolve()).catch(() => {
           message.textContent = "\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0437\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044C \u0434\u0430\u043D\u043D\u044B\u0435. \u041D\u0430\u0436\u043C\u0438\u0442\u0435 \xAB\u041E\u0431\u043D\u043E\u0432\u0438\u0442\u044C \u0434\u0430\u043D\u043D\u044B\u0435\xBB.";
@@ -15047,7 +15412,8 @@ function renderAdvancedPanel(request = nextRequest, loadConnections, lazy = fals
   }
   const route = panel(
     "\u041F\u043E\u0447\u0435\u043C\u0443 \u0441\u0430\u0439\u0442 \u0438\u0434\u0451\u0442 \u0442\u0430\u043A?",
-    "\u041F\u0440\u043E\u0432\u0435\u0440\u043A\u0430 \u043F\u0440\u0430\u0432\u0438\u043B \u043E\u0431\u044A\u044F\u0441\u043D\u044F\u0435\u0442 \u043C\u0430\u0440\u0448\u0440\u0443\u0442. \u0414\u043E\u0441\u0442\u0443\u043F\u043D\u043E\u0441\u0442\u044C \u043F\u0440\u043E\u0432\u0435\u0440\u044F\u0435\u0442\u0441\u044F \u043E\u0442\u0434\u0435\u043B\u044C\u043D\u044B\u043C \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u0435\u043C."
+    "\u041F\u0440\u043E\u0432\u0435\u0440\u043A\u0430 \u043F\u0440\u0430\u0432\u0438\u043B \u043E\u0431\u044A\u044F\u0441\u043D\u044F\u0435\u0442 \u043C\u0430\u0440\u0448\u0440\u0443\u0442. \u0414\u043E\u0441\u0442\u0443\u043F\u043D\u043E\u0441\u0442\u044C \u043F\u0440\u043E\u0432\u0435\u0440\u044F\u0435\u0442\u0441\u044F \u043E\u0442\u0434\u0435\u043B\u044C\u043D\u044B\u043C \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u0435\u043C.",
+    "diagnostics"
   );
   const domain = input("domain", "\u0414\u043E\u043C\u0435\u043D");
   domain.node.placeholder = "example.org";
@@ -15117,7 +15483,8 @@ function renderAdvancedPanel(request = nextRequest, loadConnections, lazy = fals
   );
   const profiles = panel(
     "\u041F\u0440\u043E\u0444\u0438\u043B\u0438 \u0438 \u0432\u043E\u0441\u0441\u0442\u0430\u043D\u043E\u0432\u043B\u0435\u043D\u0438\u0435",
-    "\u0421\u043D\u0430\u0447\u0430\u043B\u0430 \u0441\u0440\u0430\u0432\u043D\u0438\u0442\u0435 \u043F\u0440\u043E\u0444\u0438\u043B\u044C. \u041F\u0440\u0438 \u043F\u0440\u0438\u043C\u0435\u043D\u0435\u043D\u0438\u0438 \u0441\u043E\u0445\u0440\u0430\u043D\u044F\u0435\u0442\u0441\u044F \u043F\u0440\u0435\u0434\u044B\u0434\u0443\u0449\u0430\u044F \u0440\u0430\u0431\u043E\u0447\u0430\u044F \u043A\u043E\u043D\u0444\u0438\u0433\u0443\u0440\u0430\u0446\u0438\u044F."
+    "\u0421\u043D\u0430\u0447\u0430\u043B\u0430 \u0441\u0440\u0430\u0432\u043D\u0438\u0442\u0435 \u043F\u0440\u043E\u0444\u0438\u043B\u044C. \u041F\u0440\u0438 \u043F\u0440\u0438\u043C\u0435\u043D\u0435\u043D\u0438\u0438 \u0441\u043E\u0445\u0440\u0430\u043D\u044F\u0435\u0442\u0441\u044F \u043F\u0440\u0435\u0434\u044B\u0434\u0443\u0449\u0430\u044F \u0440\u0430\u0431\u043E\u0447\u0430\u044F \u043A\u043E\u043D\u0444\u0438\u0433\u0443\u0440\u0430\u0446\u0438\u044F.",
+    "settings"
   );
   const profile = select("\u0421\u043E\u0445\u0440\u0430\u043D\u0451\u043D\u043D\u044B\u0439 \u043F\u0440\u043E\u0444\u0438\u043B\u044C", []);
   const profileName = input("profile_name", "\u041D\u0430\u0437\u0432\u0430\u043D\u0438\u0435 \u043D\u043E\u0432\u043E\u0433\u043E \u043F\u0440\u043E\u0444\u0438\u043B\u044F");
@@ -15182,7 +15549,8 @@ function renderAdvancedPanel(request = nextRequest, loadConnections, lazy = fals
   profiles.append(rollback);
   const temporary = panel(
     "\u0412\u0440\u0435\u043C\u0435\u043D\u043D\u044B\u0435 \u043F\u0440\u0430\u0432\u0438\u043B\u0430",
-    "\u041F\u0440\u0430\u0432\u0438\u043B\u043E \u0430\u0432\u0442\u043E\u043C\u0430\u0442\u0438\u0447\u0435\u0441\u043A\u0438 \u043F\u0435\u0440\u0435\u0441\u0442\u0430\u043D\u0435\u0442 \u0434\u0435\u0439\u0441\u0442\u0432\u043E\u0432\u0430\u0442\u044C \u043F\u043E \u0438\u0441\u0442\u0435\u0447\u0435\u043D\u0438\u0438 \u0432\u044B\u0431\u0440\u0430\u043D\u043D\u043E\u0433\u043E \u0441\u0440\u043E\u043A\u0430."
+    "\u041F\u0440\u0430\u0432\u0438\u043B\u043E \u0430\u0432\u0442\u043E\u043C\u0430\u0442\u0438\u0447\u0435\u0441\u043A\u0438 \u043F\u0435\u0440\u0435\u0441\u0442\u0430\u043D\u0435\u0442 \u0434\u0435\u0439\u0441\u0442\u0432\u043E\u0432\u0430\u0442\u044C \u043F\u043E \u0438\u0441\u0442\u0435\u0447\u0435\u043D\u0438\u0438 \u0432\u044B\u0431\u0440\u0430\u043D\u043D\u043E\u0433\u043E \u0441\u0440\u043E\u043A\u0430.",
+    "rules"
   );
   const td = input("temporary_domain", "\u0414\u043E\u043C\u0435\u043D");
   const ts = connection();
@@ -15208,7 +15576,8 @@ function renderAdvancedPanel(request = nextRequest, loadConnections, lazy = fals
   );
   const recommendations = panel(
     "Smart Detect",
-    "\u0422\u043E\u043B\u044C\u043A\u043E \u0440\u0435\u043A\u043E\u043C\u0435\u043D\u0434\u0430\u0446\u0438\u0438 \u043D\u0430 \u043E\u0441\u043D\u043E\u0432\u0435 \u043D\u0430\u0431\u043B\u044E\u0434\u0435\u043D\u0438\u0439. \u041F\u0440\u0438\u043C\u0435\u043D\u0435\u043D\u0438\u0435 \u2014 \u043F\u043E \u0432\u0430\u0448\u0435\u043C\u0443 \u0440\u0435\u0448\u0435\u043D\u0438\u044E."
+    "\u0422\u043E\u043B\u044C\u043A\u043E \u0440\u0435\u043A\u043E\u043C\u0435\u043D\u0434\u0430\u0446\u0438\u0438 \u043D\u0430 \u043E\u0441\u043D\u043E\u0432\u0435 \u043D\u0430\u0431\u043B\u044E\u0434\u0435\u043D\u0438\u0439. \u041F\u0440\u0438\u043C\u0435\u043D\u0435\u043D\u0438\u0435 \u2014 \u043F\u043E \u0432\u0430\u0448\u0435\u043C\u0443 \u0440\u0435\u0448\u0435\u043D\u0438\u044E.",
+    "rules"
   );
   const rs = connection();
   const recList = el("div");
@@ -15381,17 +15750,10 @@ function renderAdvancedPanel(request = nextRequest, loadConnections, lazy = fals
   function mountTools() {
     const tools = renderDeviceProfileTools(
       request,
-      lazy ? request : initialRequest
+      lazy ? request : initialRequest,
+      area === "devices" ? "devices" : area === "settings" ? "profiles" : "all"
     );
     tools.className = "fkp-next-tools";
-    let group;
-    for (const child of [...tools.children]) {
-      if (child.tagName === "H3") {
-        group = el("section", "", "fkp-next-panel");
-        tools.append(group);
-      }
-      group?.append(child);
-    }
     return tools;
   }
   function mountCompatibility() {
@@ -15407,27 +15769,40 @@ function renderAdvancedPanel(request = nextRequest, loadConnections, lazy = fals
       ["\u0421\u043E\u0432\u043C\u0435\u0441\u0442\u0438\u043C\u043E\u0441\u0442\u044C \u0441 3x-ui \u0438 Xray", mountCompatibility],
       ["\u0423\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430, \u0438\u0433\u0440\u043E\u0432\u044B\u0435 \u043F\u0440\u0435\u0441\u0435\u0442\u044B \u0438 \u043E\u0431\u043C\u0435\u043D \u043F\u0440\u043E\u0444\u0438\u043B\u044F\u043C\u0438", mountTools]
     ]) {
+      if (mount === mountCompatibility && !includes("settings")) continue;
+      if (mount === mountTools && !includes("devices") && !includes("settings"))
+        continue;
       const details = el("details", "", "fkp-next-disclosure");
       details.append(el("summary", title2));
-      let mounted = false;
+      let mounted2 = false;
       details.addEventListener("toggle", () => {
-        if (details.open && !mounted) {
-          mounted = true;
+        if (details.open && !mounted2) {
+          mounted2 = true;
           details.append(mount());
         }
       });
       content.append(details);
     }
-  } else content.append(mountCompatibility(), mountTools());
+  } else {
+    if (includes("settings")) content.append(mountCompatibility());
+    if (includes("devices") || includes("settings"))
+      content.append(mountTools());
+  }
   const refreshVisible = async () => {
     message.textContent = "";
+    const read = sharedReads();
+    root.querySelectorAll(".fkp-next-tools,.fkp-next-compatibility").forEach(
+      (child) => child.dispatchEvent(
+        new CustomEvent("forkop:refresh-tools", { detail: { read } })
+      )
+    );
     try {
       await Promise.all([
-        refreshStatus(),
-        ...!lazy || profiles.isConnected ? [refreshProfiles()] : [],
-        ...!lazy || temporary.isConnected ? [refreshTemporary()] : [],
-        ...!lazy || recommendations.isConnected ? [refreshRecommendations()] : [],
-        refreshConnections()
+        refreshStatus(read),
+        ...includes("settings") && (!lazy || profiles.isConnected) ? [refreshProfiles(read)] : [],
+        ...includes("rules") && (!lazy || temporary.isConnected) ? [refreshTemporary()] : [],
+        ...includes("rules") && (!lazy || recommendations.isConnected) ? [refreshRecommendations()] : [],
+        ...area === "all" ? [refreshConnections()] : []
       ]);
     } catch {
       message.textContent = "\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0437\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044C \u0434\u0430\u043D\u043D\u044B\u0435. \u041D\u0430\u0436\u043C\u0438\u0442\u0435 \xAB\u041E\u0431\u043D\u043E\u0432\u0438\u0442\u044C \u0434\u0430\u043D\u043D\u044B\u0435\xBB.";
@@ -15437,18 +15812,16 @@ function renderAdvancedPanel(request = nextRequest, loadConnections, lazy = fals
   root.addEventListener("forkop:refresh", () => {
     void refreshVisible();
   });
-  root.addEventListener(
-    "forkop:profiles-changed",
-    () => void refreshProfiles()
-  );
+  root.addEventListener("forkop:profiles-changed", () => {
+    if (includes("settings")) void refreshProfiles();
+  });
   void Promise.all([
     refreshStatus(initialRequest),
     ...!lazy ? [
-      refreshProfiles(initialRequest),
-      refreshTemporary(),
-      refreshRecommendations()
+      ...includes("settings") ? [refreshProfiles(initialRequest)] : [],
+      ...includes("rules") ? [refreshTemporary(), refreshRecommendations()] : []
     ] : [],
-    refreshConnections()
+    ...area === "all" ? [refreshConnections()] : []
   ]).catch(() => {
     message.textContent = "\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0437\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044C \u0434\u0430\u043D\u043D\u044B\u0435. \u041D\u0430\u0436\u043C\u0438\u0442\u0435 \xAB\u041E\u0431\u043D\u043E\u0432\u0438\u0442\u044C \u0434\u0430\u043D\u043D\u044B\u0435\xBB.";
   });
@@ -15465,7 +15838,7 @@ function el2(tag, text = "", className = "") {
 function renderNextPanel(request = nextRequest, loadConnections, adapters = {}) {
   const root = el2("section", "", "fkp-next fkp-next-overview");
   root.dataset.mode = "simple";
-  const header = el2("header");
+  const header = el2("div", "", "fkp-next-heading");
   const title = el2("div");
   title.append(
     el2("h2", "\u041F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435"),
@@ -15486,7 +15859,8 @@ function renderNextPanel(request = nextRequest, loadConnections, adapters = {}) 
     root.dataset.theme = themes.value;
   };
   theme.append(themes);
-  header.append(title, theme);
+  if (!adapters.workspace) header.append(title, theme);
+  else root.dataset.workspace = "true";
   root.append(header);
   const service = el2("p", "\u0421\u043E\u0441\u0442\u043E\u044F\u043D\u0438\u0435 \u0441\u0435\u0440\u0432\u0438\u0441\u0430 \u043D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043D\u043E", "fkp-next-service");
   service.setAttribute("role", "status");
@@ -15496,15 +15870,25 @@ function renderNextPanel(request = nextRequest, loadConnections, adapters = {}) 
     "fkp-next-connection"
   );
   connection.setAttribute("role", "status");
+  connection.dataset.state = "unknown";
   const notice = el2("p", "", "fkp-next-notice");
   notice.setAttribute("role", "status");
-  root.append(service, connection, notice);
+  const status = el2("section", "", "fkp-next-status-block");
+  status.append(el2("h3", "\u0414\u043E\u0441\u0442\u0443\u043F \u0432 \u0441\u0435\u0442\u044C"), service, connection, notice);
+  let probeRevision = 0;
+  let hasProbe = false;
+  function invalidateProbe() {
+    probeRevision++;
+    if (!hasProbe) return;
+    connection.dataset.state = "unknown";
+    connection.textContent = "\u041C\u0430\u0440\u0448\u0440\u0443\u0442 \u0438\u043B\u0438 \u0441\u043E\u0441\u0442\u043E\u044F\u043D\u0438\u0435 \u0441\u0435\u0440\u0432\u0438\u0441\u0430 \u0438\u0437\u043C\u0435\u043D\u0438\u043B\u0438\u0441\u044C. \u041F\u043E\u0432\u0442\u043E\u0440\u0438\u0442\u0435 \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0443 \u0441\u043E\u0435\u0434\u0438\u043D\u0435\u043D\u0438\u044F.";
+  }
   let runtime;
   let servicePending = false;
   const serviceControl = el2("button", "\u0412\u043A\u043B\u044E\u0447\u0438\u0442\u044C \u0441\u0435\u0440\u0432\u0438\u0441");
   serviceControl.type = "button";
   serviceControl.disabled = true;
-  if (adapters.changeService) root.insertBefore(serviceControl, connection);
+  if (adapters.changeService) status.append(serviceControl);
   function updateServiceControl() {
     serviceControl.textContent = runtime?.running === true ? "\u041E\u0442\u043A\u043B\u044E\u0447\u0438\u0442\u044C \u0441\u0435\u0440\u0432\u0438\u0441" : "\u0412\u043A\u043B\u044E\u0447\u0438\u0442\u044C \u0441\u0435\u0440\u0432\u0438\u0441";
     serviceControl.disabled = servicePending || runtime?.pending === true || typeof runtime?.running !== "boolean" || Boolean(runtime?.error);
@@ -15516,6 +15900,7 @@ function renderNextPanel(request = nextRequest, loadConnections, adapters = {}) 
   serviceControl.onclick = async () => {
     if (serviceControl.disabled || !adapters.changeService) return;
     servicePending = true;
+    invalidateProbe();
     updateServiceControl();
     service.textContent = "\u0412\u044B\u043F\u043E\u043B\u043D\u044F\u0435\u0442\u0441\u044F \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u0435 \u0441\u0435\u0440\u0432\u0438\u0441\u0430\u2026";
     notice.textContent = "";
@@ -15553,14 +15938,14 @@ function renderNextPanel(request = nextRequest, loadConnections, adapters = {}) 
     };
     return b;
   }
-  const server = el2("section", "", "fkp-next-panel");
+  const server = el2("section", "", "fkp-next-primary");
   const selected = el2(
     "div",
     loadConnections ? "\u0417\u0430\u0433\u0440\u0443\u0436\u0430\u0435\u043C \u0432\u044B\u0431\u0440\u0430\u043D\u043D\u044B\u0439 \u0441\u0435\u0440\u0432\u0435\u0440\u2026" : "\u0412\u044B\u0431\u0440\u0430\u043D\u043D\u044B\u0439 \u0441\u0435\u0440\u0432\u0435\u0440 \u043D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u0435\u043D",
     "fkp-next-summary"
   );
   server.append(
-    el2("h3", "\u0412\u044B\u0431\u0440\u0430\u043D\u043D\u044B\u0439 \u0441\u0435\u0440\u0432\u0435\u0440"),
+    el2("h3", "\u041E\u0441\u043D\u043E\u0432\u043D\u043E\u0435 \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435"),
     selected,
     action("\u0418\u0437\u043C\u0435\u043D\u0438\u0442\u044C \u0441\u0435\u0440\u0432\u0435\u0440", async () => {
       notice.textContent = "\u041E\u0442\u043A\u0440\u044B\u0432\u0430\u0435\u043C \u0432\u044B\u0431\u043E\u0440 \u0441\u0435\u0440\u0432\u0435\u0440\u0430\u2026";
@@ -15595,83 +15980,116 @@ function renderNextPanel(request = nextRequest, loadConnections, adapters = {}) 
       notice.textContent = "\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u043E\u0442\u043A\u0440\u044B\u0442\u044C \u043D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438. \u041E\u0442\u043A\u0440\u043E\u0439\u0442\u0435 \u0432\u043A\u043B\u0430\u0434\u043A\u0443 \xAB\u041F\u0440\u0430\u0432\u0438\u043B\u0430\xBB \u0432 LuCI.";
     }
   });
-  server.append(
-    addConnection,
-    el2(
-      "p",
-      "\u041F\u0435\u0440\u0432\u043E\u0435 \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435 \u0434\u043E\u0431\u0430\u0432\u043B\u044F\u0435\u0442\u0441\u044F \u0432 \u043F\u0440\u0430\u0432\u0438\u043B\u0430\u0445 \u043C\u0430\u0440\u0448\u0440\u0443\u0442\u0438\u0437\u0430\u0446\u0438\u0438. \u0412\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u0441\u0435\u0440\u0432\u0435\u0440 \u0438 \u0441\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u0435 \u043D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438.",
-      "fkp-next-help"
-    )
+  const setupHelp = el2(
+    "p",
+    "\u041F\u0435\u0440\u0432\u043E\u0435 \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435 \u0434\u043E\u0431\u0430\u0432\u043B\u044F\u0435\u0442\u0441\u044F \u0432 \u043F\u0440\u0430\u0432\u0438\u043B\u0430\u0445 \u043C\u0430\u0440\u0448\u0440\u0443\u0442\u0438\u0437\u0430\u0446\u0438\u0438. \u0412\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u0441\u0435\u0440\u0432\u0435\u0440 \u0438 \u0441\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u0435 \u043D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438.",
+    "fkp-next-help"
   );
-  const check = el2("section", "", "fkp-next-panel");
-  check.append(el2("h3", "\u041F\u0440\u043E\u0432\u0435\u0440\u043A\u0430 \u0441\u043E\u0435\u0434\u0438\u043D\u0435\u043D\u0438\u044F"));
+  server.append(addConnection, setupHelp);
+  const check = el2("div", "", "fkp-next-probe");
   const domainLabel = el2("label", "\u0421\u0430\u0439\u0442 \u0434\u043B\u044F \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0438");
   const domain = el2("input");
   domain.name = "connection_domain";
   domain.placeholder = "example.org";
   domain.autocomplete = "off";
+  domain.setAttribute("aria-label", "\u0421\u0430\u0439\u0442 \u0434\u043B\u044F \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0438");
   domainLabel.append(domain);
   check.append(domainLabel);
-  check.append(
-    action("\u041F\u0440\u043E\u0432\u0435\u0440\u0438\u0442\u044C \u0441\u043E\u0435\u0434\u0438\u043D\u0435\u043D\u0438\u0435", async () => {
-      const target = domain.value.trim();
-      if (!target || /[/:]/.test(target) || !validateDomain(target).valid) {
-        domain.setAttribute("aria-invalid", "true");
-        connection.textContent = "\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u0434\u043E\u043C\u0435\u043D \u0441\u0430\u0439\u0442\u0430, \u043D\u0430\u043F\u0440\u0438\u043C\u0435\u0440 example.org, \u0431\u0435\u0437 https:// \u0438 \u043F\u0443\u0442\u0438.";
-        domain.focus();
+  const probeButton = action("\u041F\u0440\u043E\u0432\u0435\u0440\u0438\u0442\u044C \u0441\u043E\u0435\u0434\u0438\u043D\u0435\u043D\u0438\u0435", async () => {
+    if (!visible()) return;
+    const target = domain.value.trim();
+    if (!target || /[/:]/.test(target) || !validateDomain(target).valid) {
+      domain.setAttribute("aria-invalid", "true");
+      connection.dataset.state = "error";
+      connection.textContent = "\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u0434\u043E\u043C\u0435\u043D \u0441\u0430\u0439\u0442\u0430, \u043D\u0430\u043F\u0440\u0438\u043C\u0435\u0440 example.org, \u0431\u0435\u0437 https:// \u0438 \u043F\u0443\u0442\u0438.";
+      domain.focus();
+      return;
+    }
+    domain.removeAttribute("aria-invalid");
+    hasProbe = true;
+    const revision = ++probeRevision;
+    const current = () => revision === probeRevision && visible();
+    connection.dataset.state = "pending";
+    connection.textContent = `\u041F\u0440\u043E\u0432\u0435\u0440\u044F\u0435\u043C ${target} \u0441 \u0440\u043E\u0443\u0442\u0435\u0440\u0430\u2026`;
+    try {
+      const response = await request("probe", {
+        domain: target
+      });
+      if (!current()) return;
+      if (!response.success) {
+        connection.dataset.state = "error";
+        connection.textContent = `${target}: \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0430 \u043D\u0435 \u0432\u044B\u043F\u043E\u043B\u043D\u0435\u043D\u0430: ${response.error || "\u043D\u0435\u0442 \u0441\u0432\u044F\u0437\u0438 \u0441 \u0440\u043E\u0443\u0442\u0435\u0440\u043E\u043C"}. \u041F\u043E\u0432\u0442\u043E\u0440\u0438\u0442\u0435 \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0443.`;
         return;
       }
-      domain.removeAttribute("aria-invalid");
-      connection.textContent = "\u041F\u0440\u043E\u0432\u0435\u0440\u044F\u0435\u043C \u0441\u0435\u0442\u0435\u0432\u043E\u0439 \u0434\u043E\u0441\u0442\u0443\u043F \u0441 \u0440\u043E\u0443\u0442\u0435\u0440\u0430\u2026";
-      try {
-        const response = await request("probe", {
-          domain: target
-        });
-        if (!response.success) {
-          connection.textContent = `\u041F\u0440\u043E\u0432\u0435\u0440\u043A\u0430 \u043D\u0435 \u0432\u044B\u043F\u043E\u043B\u043D\u0435\u043D\u0430: ${response.error || "\u043D\u0435\u0442 \u0441\u0432\u044F\u0437\u0438 \u0441 \u0440\u043E\u0443\u0442\u0435\u0440\u043E\u043C"}. \u041F\u043E\u0432\u0442\u043E\u0440\u0438\u0442\u0435 \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0443.`;
-          return;
-        }
-        const data = response.data && typeof response.data === "object" ? response.data : {};
-        const result = data.reachable === true ? "\u0415\u0441\u0442\u044C \u0441\u0435\u0442\u0435\u0432\u043E\u0439 \u043E\u0442\u0432\u0435\u0442" : data.reachable === false ? "\u041D\u0435\u0442 \u0441\u0435\u0442\u0435\u0432\u043E\u0433\u043E \u043E\u0442\u0432\u0435\u0442\u0430" : "\u0420\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442 \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0438 \u043D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u0435\u043D";
-        const checked = typeof data.checked_at === "number" ? new Date(data.checked_at * 1e3).toLocaleString() : "\u0432\u0440\u0435\u043C\u044F \u043D\u0435 \u0441\u043E\u043E\u0431\u0449\u0435\u043D\u043E";
-        connection.textContent = `${result} \xB7 HTTP ${data.http_status || "\u2014"} \xB7 ${typeof data.duration_ms === "number" ? `${data.duration_ms} \u043C\u0441` : "\u0434\u043B\u0438\u0442\u0435\u043B\u044C\u043D\u043E\u0441\u0442\u044C \u043D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043D\u0430"} \xB7 ${checked}. \u041F\u0440\u043E\u0432\u0435\u0440\u0435\u043D \u0434\u043E\u0441\u0442\u0443\u043F \u0441 \u0440\u043E\u0443\u0442\u0435\u0440\u0430; \u0432\u0445\u043E\u0434 \u0432 \u0441\u0435\u0440\u0432\u0438\u0441 \u043D\u0435 \u043F\u0440\u043E\u0432\u0435\u0440\u044F\u0435\u0442\u0441\u044F.`;
-      } catch {
-        connection.textContent = "\u041F\u0440\u043E\u0432\u0435\u0440\u043A\u0430 \u043D\u0435 \u0432\u044B\u043F\u043E\u043B\u043D\u0435\u043D\u0430: \u043D\u0435\u0442 \u0441\u0432\u044F\u0437\u0438 \u0441 \u0440\u043E\u0443\u0442\u0435\u0440\u043E\u043C. \u041F\u043E\u0432\u0442\u043E\u0440\u0438\u0442\u0435 \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0443.";
-      }
-    }),
+      const data = response.data && typeof response.data === "object" ? response.data : {};
+      const result = data.reachable === true ? "\u0415\u0441\u0442\u044C \u0441\u0435\u0442\u0435\u0432\u043E\u0439 \u043E\u0442\u0432\u0435\u0442" : data.reachable === false ? "\u041D\u0435\u0442 \u0441\u0435\u0442\u0435\u0432\u043E\u0433\u043E \u043E\u0442\u0432\u0435\u0442\u0430" : "\u0420\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442 \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0438 \u043D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u0435\u043D";
+      connection.dataset.state = data.reachable === true ? "reachable" : data.reachable === false ? "unreachable" : "unknown";
+      const checked = typeof data.checked_at === "number" ? new Date(data.checked_at * 1e3).toLocaleString() : "\u0432\u0440\u0435\u043C\u044F \u043D\u0435 \u0441\u043E\u043E\u0431\u0449\u0435\u043D\u043E";
+      connection.textContent = `${target}: ${result} \xB7 HTTP ${data.http_status || "\u2014"} \xB7 ${typeof data.duration_ms === "number" ? `${data.duration_ms} \u043C\u0441` : "\u0434\u043B\u0438\u0442\u0435\u043B\u044C\u043D\u043E\u0441\u0442\u044C \u043D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043D\u0430"} \xB7 ${checked}. \u041F\u0440\u043E\u0432\u0435\u0440\u0435\u043D \u0434\u043E\u0441\u0442\u0443\u043F \u0441 \u0440\u043E\u0443\u0442\u0435\u0440\u0430; \u0432\u0445\u043E\u0434 \u0432 \u0441\u0435\u0440\u0432\u0438\u0441 \u043D\u0435 \u043F\u0440\u043E\u0432\u0435\u0440\u044F\u0435\u0442\u0441\u044F.`;
+    } catch {
+      if (!current()) return;
+      connection.dataset.state = "error";
+      connection.textContent = `${target}: \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0430 \u043D\u0435 \u0432\u044B\u043F\u043E\u043B\u043D\u0435\u043D\u0430: \u043D\u0435\u0442 \u0441\u0432\u044F\u0437\u0438 \u0441 \u0440\u043E\u0443\u0442\u0435\u0440\u043E\u043C. \u041F\u043E\u0432\u0442\u043E\u0440\u0438\u0442\u0435 \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0443.`;
+    }
+  });
+  probeButton.className = "fkp-next-primary-action";
+  check.append(
+    probeButton,
     el2(
       "p",
       "\u041F\u0440\u043E\u0432\u0435\u0440\u043A\u0430 \u0438\u0441\u043F\u043E\u043B\u044C\u0437\u0443\u0435\u0442 \u0442\u0435\u043A\u0443\u0449\u0438\u0439 \u043C\u0430\u0440\u0448\u0440\u0443\u0442 \u0440\u043E\u0443\u0442\u0435\u0440\u0430. \u0421\u043E\u0441\u0442\u043E\u044F\u043D\u0438\u0435 \u043F\u0440\u043E\u0446\u0435\u0441\u0441\u0430 \u0438 \u043F\u0440\u0435\u0436\u043D\u044F\u044F \u0437\u0430\u0434\u0435\u0440\u0436\u043A\u0430 \u043D\u0435 \u043F\u043E\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0430\u044E\u0442 \u0434\u043E\u0441\u0442\u0443\u043F\u043D\u043E\u0441\u0442\u044C \u0441\u0430\u0439\u0442\u0430.",
       "fkp-next-help"
     )
   );
+  status.append(check);
   const everyday = el2("div", "", "fkp-next-content");
-  everyday.append(server, check);
+  everyday.append(status, server);
   root.append(everyday);
   const traffic = el2("section", "", "fkp-next-panel fkp-next-traffic");
-  const trafficOutput = el2("p", "\u0422\u0440\u0430\u0444\u0438\u043A \u043F\u043E\u043A\u0430 \u043D\u0435\u0434\u043E\u0441\u0442\u0443\u043F\u0435\u043D.");
-  trafficOutput.setAttribute("role", "status");
+  const trafficOutput = el2("div");
   traffic.append(el2("h3", "\u0422\u0440\u0430\u0444\u0438\u043A"), trafficOutput);
   root.append(traffic);
+  const routes = el2("section", "", "fkp-next-panel fkp-next-routes");
+  routes.append(el2("h3", "\u0414\u043E\u043F\u043E\u043B\u043D\u0438\u0442\u0435\u043B\u044C\u043D\u044B\u0435 \u043C\u0430\u0440\u0448\u0440\u0443\u0442\u044B"));
+  const routesOutput = el2("div", "\u0414\u0430\u043D\u043D\u044B\u0435 \u043C\u0430\u0440\u0448\u0440\u0443\u0442\u043E\u0432 \u043F\u043E\u043A\u0430 \u043D\u0435\u0434\u043E\u0441\u0442\u0443\u043F\u043D\u044B.");
+  routes.append(
+    routesOutput,
+    action("\u041E\u0442\u043A\u0440\u044B\u0442\u044C \u043F\u0440\u0430\u0432\u0438\u043B\u0430", async () => {
+      try {
+        if (adapters.openRules) await adapters.openRules();
+        else {
+          const tab = document.querySelector(
+            '.cbi-tabmenu [data-tab="section"] a, .cbi-tabmenu [data-tab="section"] button'
+          );
+          if (!tab) throw Error("navigation_unavailable");
+          tab.click();
+        }
+      } catch {
+        notice.textContent = "\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u043E\u0442\u043A\u0440\u044B\u0442\u044C \u043F\u0440\u0430\u0432\u0438\u043B\u0430. \u041E\u0442\u043A\u0440\u043E\u0439\u0442\u0435 \u0432\u043A\u043B\u0430\u0434\u043A\u0443 \xAB\u041F\u0440\u0430\u0432\u0438\u043B\u0430\xBB \u0432 LuCI.";
+      }
+    })
+  );
+  root.append(routes);
   const advanced = el2("details", "", "fkp-next-advanced");
   advanced.append(el2("summary", "\u0420\u0430\u0441\u0448\u0438\u0440\u0435\u043D\u043D\u044B\u0435 \u043D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438 \u0438 \u0434\u0438\u0430\u0433\u043D\u043E\u0441\u0442\u0438\u043A\u0430"));
-  let mounted = false;
+  let mounted2 = false;
   let advancedPanel;
   advanced.addEventListener("toggle", () => {
     root.dataset.mode = advanced.open ? "detailed" : "simple";
-    if (advanced.open && !mounted) {
-      mounted = true;
+    if (advanced.open && !mounted2) {
+      mounted2 = true;
       advancedPanel = renderAdvancedPanel(request, void 0, true);
       advanced.append(advancedPanel);
     }
   });
-  root.append(advanced);
+  if (!adapters.workspace) root.append(advanced);
   let generation = 0;
   let runtimeRevision = 0;
   let hasFreshRuntime = false;
   let subscribed = false;
   let resumeRefresh = false;
   let unsubscribe;
+  let selectedSignature;
   const visible = () => root.isConnected && document.visibilityState !== "hidden" && !root.closest(
     '[hidden], [data-tab-active="false"], [style*="display: none"], [style*="display:none"]'
   );
@@ -15683,6 +16101,8 @@ function renderNextPanel(request = nextRequest, loadConnections, adapters = {}) 
   function applyRuntime(state, evidence) {
     if (evidence?.cached && hasFreshRuntime) return;
     if (!evidence?.cached) hasFreshRuntime = true;
+    if (state?.running !== runtime?.running || Boolean(state?.pending) !== Boolean(runtime?.pending) || state?.error !== runtime?.error)
+      invalidateProbe();
     runtime = state;
     updateServiceControl();
     service.textContent = state?.pending || servicePending ? "\u0412\u044B\u043F\u043E\u043B\u043D\u044F\u0435\u0442\u0441\u044F \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u0435 \u0441\u0435\u0440\u0432\u0438\u0441\u0430\u2026" : state?.error ? "\u0421\u043E\u0441\u0442\u043E\u044F\u043D\u0438\u0435 \u0441\u0435\u0440\u0432\u0438\u0441\u0430 \u043D\u0435\u0434\u043E\u0441\u0442\u0443\u043F\u043D\u043E. \u041E\u0431\u043D\u043E\u0432\u0438\u0442\u0435 \u0434\u0430\u043D\u043D\u044B\u0435." : state?.running === true ? "\u0421\u0435\u0440\u0432\u0438\u0441 \u0437\u0430\u043F\u0443\u0449\u0435\u043D" : state?.running === false ? "\u0421\u0435\u0440\u0432\u0438\u0441 \u043E\u0441\u0442\u0430\u043D\u043E\u0432\u043B\u0435\u043D" : "\u0421\u043E\u0441\u0442\u043E\u044F\u043D\u0438\u0435 \u0441\u0435\u0440\u0432\u0438\u0441\u0430 \u043D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043D\u043E";
@@ -15714,31 +16134,71 @@ function renderNextPanel(request = nextRequest, loadConnections, adapters = {}) 
             const response = await loadConnections();
             if (!alive()) return;
             if (!response.success) {
+              invalidateProbe();
               selected.textContent = "\u0412\u044B\u0431\u0440\u0430\u043D\u043D\u044B\u0439 \u0441\u0435\u0440\u0432\u0435\u0440 \u043D\u0435\u0434\u043E\u0441\u0442\u0443\u043F\u0435\u043D. \u041E\u0431\u043D\u043E\u0432\u0438\u0442\u0435 \u0434\u0430\u043D\u043D\u044B\u0435.";
+              routesOutput.textContent = "\u041C\u0430\u0440\u0448\u0440\u0443\u0442\u044B \u043D\u0435\u0434\u043E\u0441\u0442\u0443\u043F\u043D\u044B. \u041E\u0431\u043D\u043E\u0432\u0438\u0442\u0435 \u0434\u0430\u043D\u043D\u044B\u0435.";
               return;
             }
+            const groups2 = response.data || [];
+            const signature = JSON.stringify(
+              groups2.map((group) => [
+                group.sectionName || group.code || group.displayName,
+                group.outbounds.filter((o) => o.selected).map((o) => o.code || o.displayName)
+              ]).sort((a, b) => String(a[0]).localeCompare(String(b[0])))
+            );
+            if (signature !== selectedSignature) invalidateProbe();
+            selectedSignature = signature;
+            const primary = groups2.find((g) => g.sectionName === "main") || groups2.find((g) => !g.sectionName);
             selected.replaceChildren();
-            for (const group of response.data || []) {
+            routesOutput.replaceChildren();
+            for (const group of groups2) {
               const outbound = group.outbounds.find((o) => o.selected);
+              const host = group === primary ? selected : routesOutput;
+              const row = el2("div", "", "fkp-next-route");
+              row.append(
+                el2(
+                  "p",
+                  `${group.displayName}: ${outbound?.displayName || "\u0441\u0435\u0440\u0432\u0435\u0440 \u043D\u0435 \u0432\u044B\u0431\u0440\u0430\u043D"}`,
+                  group === primary ? "fkp-next-selected-name" : ""
+                )
+              );
               if (outbound)
-                selected.append(
+                row.append(
                   el2(
                     "p",
-                    `${group.displayName}: ${outbound.displayName}${outbound.latency > 0 ? ` \xB7 \u043F\u0440\u0435\u0436\u043D\u044F\u044F \u0437\u0430\u0434\u0435\u0440\u0436\u043A\u0430 ${outbound.latency} \u043C\u0441` : " \xB7 \u0437\u0430\u0434\u0435\u0440\u0436\u043A\u0430 \u043D\u0435 \u0438\u0437\u043C\u0435\u0440\u0435\u043D\u0430"}${outbound.latencyTestedAt ? ` \xB7 ${new Date(outbound.latencyTestedAt).toLocaleString()}` : ""}`
+                    `${outbound.latency > 0 ? `\u041F\u0440\u0435\u0436\u043D\u044F\u044F \u0437\u0430\u0434\u0435\u0440\u0436\u043A\u0430 ${outbound.latency} \u043C\u0441` : "\u0417\u0430\u0434\u0435\u0440\u0436\u043A\u0430 \u043D\u0435 \u0438\u0437\u043C\u0435\u0440\u0435\u043D\u0430"}${outbound.latencyTestedAt ? ` \xB7 ${new Date(outbound.latencyTestedAt).toLocaleString()}` : ""}`,
+                    "fkp-next-help"
                   )
                 );
+              host.append(row);
             }
+            const primarySelected = primary?.outbounds.some((o) => o.selected);
+            addConnection.hidden = Boolean(primarySelected);
+            setupHelp.hidden = Boolean(primarySelected);
+            if (!routesOutput.childNodes.length)
+              routesOutput.textContent = "\u0414\u043E\u043F\u043E\u043B\u043D\u0438\u0442\u0435\u043B\u044C\u043D\u044B\u0445 \u043C\u0430\u0440\u0448\u0440\u0443\u0442\u043E\u0432 \u043D\u0435\u0442. \u041E\u043D\u0438 \u043F\u043E\u044F\u0432\u044F\u0442\u0441\u044F \u043F\u043E\u0441\u043B\u0435 \u043D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438 \u043F\u0440\u0430\u0432\u0438\u043B.";
             if (!selected.childNodes.length)
               selected.textContent = "\u0412\u044B\u0431\u0440\u0430\u043D\u043D\u043E\u0433\u043E \u0441\u0435\u0440\u0432\u0435\u0440\u0430 \u043D\u0435\u0442. \u041D\u0430\u0441\u0442\u0440\u043E\u0439\u0442\u0435 \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435 \u043D\u0430 \u0432\u043A\u043B\u0430\u0434\u043A\u0435 Dashboard.";
           } catch {
-            if (alive())
+            if (alive()) {
+              invalidateProbe();
               selected.textContent = "\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0437\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044C \u0432\u044B\u0431\u0440\u0430\u043D\u043D\u044B\u0439 \u0441\u0435\u0440\u0432\u0435\u0440. \u041E\u0431\u043D\u043E\u0432\u0438\u0442\u0435 \u0434\u0430\u043D\u043D\u044B\u0435.";
+              routesOutput.textContent = "\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0437\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044C \u043C\u0430\u0440\u0448\u0440\u0443\u0442\u044B. \u041E\u0431\u043D\u043E\u0432\u0438\u0442\u0435 \u0434\u0430\u043D\u043D\u044B\u0435.";
+            }
           }
         })()
       );
     await Promise.all(tasks);
   }
   header.append(action("\u041E\u0431\u043D\u043E\u0432\u0438\u0442\u044C \u0434\u0430\u043D\u043D\u044B\u0435", refresh));
+  function configurationChanged() {
+    invalidateProbe();
+    generation++;
+    selectedSignature = void 0;
+    telemetry.stop();
+    if (visible()) void refresh();
+    else resumeRefresh = true;
+  }
   function updateVisibility() {
     if (visible() && !subscribed) {
       subscribed = true;
@@ -15753,6 +16213,7 @@ function renderNextPanel(request = nextRequest, loadConnections, adapters = {}) 
         void refresh();
       } else void telemetry.refresh();
     } else if (!visible() && subscribed) {
+      invalidateProbe();
       subscribed = false;
       unsubscribe?.();
       unsubscribe = void 0;
@@ -15764,10 +16225,15 @@ function renderNextPanel(request = nextRequest, loadConnections, adapters = {}) 
       telemetry.stop();
       observer.disconnect();
       document.removeEventListener("visibilitychange", updateVisibility);
+      window.removeEventListener(
+        "forkop:configuration-changed",
+        configurationChanged
+      );
     }
   }
   const observer = new MutationObserver(updateVisibility);
   document.addEventListener("visibilitychange", updateVisibility);
+  window.addEventListener("forkop:configuration-changed", configurationChanged);
   observer.observe(document.body, {
     subtree: true,
     childList: true,
@@ -15779,6 +16245,460 @@ function renderNextPanel(request = nextRequest, loadConnections, adapters = {}) 
     else resumeRefresh = true;
   });
   return root;
+}
+
+// src/forkop/workspace/render.ts
+var groups = [
+  { id: "home", label: "\u0413\u043B\u0430\u0432\u043D\u0430\u044F", pages: [["next", "\u041F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435"]] },
+  {
+    id: "servers",
+    label: "\u0421\u0435\u0440\u0432\u0435\u0440\u044B",
+    pages: [
+      ["dashboard", "\u0418\u0441\u0445\u043E\u0434\u044F\u0449\u0438\u0435 \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u044F"],
+      ["server", "\u0412\u0445\u043E\u0434\u044F\u0449\u0438\u0435 \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u044F"]
+    ]
+  },
+  {
+    id: "rules",
+    label: "\u041F\u0440\u0430\u0432\u0438\u043B\u0430",
+    pages: [
+      ["section", "\u041F\u0440\u0430\u0432\u0438\u043B\u0430 \u043C\u0430\u0440\u0448\u0440\u0443\u0442\u0438\u0437\u0430\u0446\u0438\u0438"],
+      ["rule_tools", "\u0412\u0440\u0435\u043C\u0435\u043D\u043D\u044B\u0435 \u043F\u0440\u0430\u0432\u0438\u043B\u0430 \u0438 \u0440\u0435\u043A\u043E\u043C\u0435\u043D\u0434\u0430\u0446\u0438\u0438"]
+    ]
+  },
+  {
+    id: "devices",
+    label: "\u0423\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430",
+    pages: [["devices", "\u041C\u0430\u0440\u0448\u0440\u0443\u0442\u044B \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432"]]
+  },
+  {
+    id: "diagnostics",
+    label: "\u0414\u0438\u0430\u0433\u043D\u043E\u0441\u0442\u0438\u043A\u0430",
+    pages: [
+      ["diagnostic", "\u041F\u0440\u043E\u0432\u0435\u0440\u043A\u0438"],
+      ["route_tools", "\u041F\u0440\u043E\u0432\u0435\u0440\u043A\u0430 \u043C\u0430\u0440\u0448\u0440\u0443\u0442\u0430"],
+      ["monitoring", "\u041C\u043E\u043D\u0438\u0442\u043E\u0440\u0438\u043D\u0433"]
+    ]
+  },
+  {
+    id: "settings",
+    label: "\u041D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438",
+    pages: [
+      ["settings", "\u041E\u0441\u043D\u043E\u0432\u043D\u044B\u0435"],
+      ["updates", "\u041A\u043E\u043C\u043F\u043E\u043D\u0435\u043D\u0442\u044B"],
+      ["advanced", "\u0420\u0430\u0441\u0448\u0438\u0440\u0435\u043D\u043D\u044B\u0435 \u043D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438"]
+    ]
+  }
+];
+var mounted = /* @__PURE__ */ new WeakMap();
+function el3(tag, className, text = "") {
+  const node = document.createElement(tag);
+  node.className = className;
+  node.textContent = text;
+  return node;
+}
+function setText(node, text) {
+  if (node.textContent !== text) node.textContent = text;
+}
+function mountForkopWorkspace(root) {
+  const previous = mounted.get(root);
+  const intact = previous && root.contains(previous.menu) && root.contains(previous.panes) && root.contains(previous.main);
+  if (intact && !previous.disposed()) return;
+  const previousTheme = previous?.theme();
+  previous?.dispose();
+  if (intact) root.replaceChildren(...previous.content.childNodes);
+  const menu = root.querySelector(".cbi-tabmenu");
+  const panes = root.querySelector(".cbi-map-tabbed");
+  if (!menu || !panes) return;
+  root.classList.add("fkp-workspace");
+  menu.classList.add("fkp-workspace-native-tabs");
+  const originalContent = [...root.childNodes];
+  const sidebar = el3("aside", "fkp-workspace-sidebar");
+  const brand = el3("div", "fkp-workspace-brand", "Forkop");
+  const primary = el3("nav", "fkp-workspace-primary");
+  primary.setAttribute("aria-label", "\u0420\u0430\u0437\u0434\u0435\u043B\u044B Forkop");
+  sidebar.append(brand, primary);
+  const main = el3("div", "fkp-workspace-main");
+  const top = el3("div", "fkp-workspace-top");
+  const status = el3("div", "fkp-workspace-status");
+  status.setAttribute("role", "status");
+  status.setAttribute("aria-live", "polite");
+  const service = el3(
+    "span",
+    "fkp-workspace-service",
+    "\u0421\u043E\u0441\u0442\u043E\u044F\u043D\u0438\u0435 \u0441\u0435\u0440\u0432\u0438\u0441\u0430 \u043D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043D\u043E"
+  );
+  const connection = el3(
+    "span",
+    "fkp-workspace-connection",
+    "\u0421\u043E\u0435\u0434\u0438\u043D\u0435\u043D\u0438\u0435 \u0435\u0449\u0451 \u043D\u0435 \u043F\u0440\u043E\u0432\u0435\u0440\u0435\u043D\u043E"
+  );
+  status.append(service, connection);
+  const themeLabel = el3("label", "fkp-workspace-theme", "\u0422\u0435\u043C\u0430");
+  const theme = el3("select", "");
+  theme.setAttribute("aria-label", "\u0422\u0435\u043C\u0430 Forkop");
+  for (const [value, label] of [
+    ["auto", "\u041A\u0430\u043A \u0432 LuCI"],
+    ["light", "\u0421\u0432\u0435\u0442\u043B\u0430\u044F"],
+    ["dark", "\u0422\u0451\u043C\u043D\u0430\u044F"]
+  ]) {
+    const option = el3("option", "", label);
+    option.value = value;
+    theme.append(option);
+  }
+  theme.value = previousTheme || "auto";
+  themeLabel.append(theme);
+  top.append(status, themeLabel);
+  const heading = el3("h2", "fkp-workspace-title");
+  const secondary = el3("div", "fkp-workspace-secondary");
+  const content = el3("div", "fkp-workspace-content");
+  content.append(...originalContent);
+  main.append(top, heading, secondary, content);
+  root.append(sidebar, main);
+  let disposed = false;
+  let wasConnected = root.isConnected;
+  let navigationSignature = "";
+  const markedModals = /* @__PURE__ */ new Set();
+  function surroundingTheme() {
+    for (let parent = root.parentElement || document.body; parent; parent = parent.parentElement) {
+      const choice = parent.dataset.theme || parent.getAttribute("data-darkmode");
+      if (choice === "light" || choice === "dark") return choice;
+      if (choice === "true") return "dark";
+      if (choice === "false") return "light";
+      if (parent.classList.contains("dark") || parent.classList.contains("dark-mode"))
+        return "dark";
+      if (parent.classList.contains("light") || parent.classList.contains("light-mode"))
+        return "light";
+    }
+    const scheme = getComputedStyle(document.documentElement).colorScheme;
+    if (scheme === "dark" || scheme === "light") return scheme;
+    return window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  }
+  function applyTheme() {
+    root.dataset.theme = theme.value === "auto" ? surroundingTheme() : theme.value;
+    for (const modal of markedModals) modal.dataset.theme = root.dataset.theme;
+  }
+  function markModals() {
+    for (const modal of document.querySelectorAll(".modal")) {
+      if (!modal.querySelector(
+        '[id^="cbi-forkop"], [id^="cbid.forkop."], [class^="fkp_"], [class*=" fkp_"], [class^="fkp-"], [class*=" fkp-"]'
+      ))
+        continue;
+      if (!modal.classList.contains("fkp-workspace-modal")) {
+        modal.classList.add("fkp-workspace-modal");
+        markedModals.add(modal);
+      }
+      if (modal.dataset.theme !== root.dataset.theme)
+        modal.dataset.theme = root.dataset.theme;
+    }
+    for (const modal of markedModals)
+      if (!modal.isConnected) markedModals.delete(modal);
+  }
+  function availableTabs() {
+    const tabs = /* @__PURE__ */ new Map();
+    for (const item of menu.querySelectorAll("[data-tab]")) {
+      const link = item.querySelector(
+        "a, button"
+      );
+      const id = item.dataset.tab;
+      if (!link || item.hidden || link.hidden || item.classList.contains("hidden") || item.getAttribute("aria-hidden") === "true" || item.style.display === "none" || link.style.display === "none" || getComputedStyle(item).display === "none")
+        continue;
+      if (panes.querySelector(`[data-tab="${id}"]`)) tabs.set(id, link);
+    }
+    return tabs;
+  }
+  function sync() {
+    if (disposed) return;
+    const tabs = availableTabs();
+    const errors = (id) => {
+      const native = tabs.get(id)?.closest("[data-tab]");
+      const count = Number(native?.dataset.errors || 0);
+      return {
+        count: Number.isFinite(count) && count > 0 ? Math.trunc(count) : 0,
+        tooltip: native?.dataset.tooltip || ""
+      };
+    };
+    const markErrors = (control, count, description, label) => {
+      if (!control) return;
+      if (count) {
+        control.setAttribute("data-errors", String(count));
+        control.setAttribute("data-tooltip", description);
+        control.setAttribute("data-tooltip-style", "error");
+        control.setAttribute("aria-label", `${label}: ${description}`);
+      } else {
+        for (const attr of [
+          "data-errors",
+          "data-tooltip",
+          "data-tooltip-style",
+          "aria-label"
+        ])
+          control.removeAttribute(attr);
+      }
+    };
+    const active = panes.querySelector(':scope > [data-tab-active="true"]')?.dataset.tab || menu.querySelector(".cbi-tab:not(.cbi-tab-disabled)")?.dataset.tab || "";
+    const signature = [...tabs.keys()].join(",");
+    if (signature !== navigationSignature) {
+      navigationSignature = signature;
+      primary.replaceChildren();
+      secondary.replaceChildren();
+      for (const group of groups) {
+        const pages = group.pages.filter(([id]) => tabs.has(id));
+        if (!pages.length) continue;
+        const button = el3("button", "fkp-workspace-nav-button", group.label);
+        button.type = "button";
+        button.dataset.workspaceSection = group.id;
+        primary.append(button);
+        const local = el3("nav", "fkp-workspace-local");
+        local.setAttribute("aria-label", `${group.label}: \u0441\u0442\u0440\u0430\u043D\u0438\u0446\u044B`);
+        local.dataset.workspaceGroup = group.id;
+        for (const [id, label] of pages) {
+          const tab = el3("button", "fkp-workspace-local-button", label);
+          tab.type = "button";
+          tab.dataset.workspaceTab = id;
+          local.append(tab);
+        }
+        secondary.append(local);
+      }
+    }
+    for (const group of groups) {
+      const current = group.pages.some(([id]) => id === active);
+      const button = primary.querySelector(
+        `[data-workspace-section="${group.id}"]`
+      );
+      if (current) button?.setAttribute("aria-current", "page");
+      else button?.removeAttribute("aria-current");
+      const invalidPages = group.pages.map(([id, label]) => ({ ...errors(id), label })).filter((page) => page.count);
+      markErrors(
+        button,
+        invalidPages.reduce((total, page) => total + page.count, 0),
+        invalidPages.map(
+          (page) => `${page.label}: ${page.tooltip || `${page.count} \u2014 \u043E\u0448\u0438\u0431\u043A\u0438 \u0432 \u043F\u043E\u043B\u044F\u0445`}`
+        ).join("; "),
+        group.label
+      );
+      const local = secondary.querySelector(
+        `[data-workspace-group="${group.id}"]`
+      );
+      if (local) {
+        const hidden = !current || local.childElementCount < 2;
+        if (local.hidden !== hidden) local.hidden = hidden;
+      }
+      if (current) setText(heading, group.label);
+    }
+    for (const tab of secondary.querySelectorAll(
+      "[data-workspace-tab]"
+    )) {
+      if (tab.dataset.workspaceTab === active)
+        tab.setAttribute("aria-current", "page");
+      else tab.removeAttribute("aria-current");
+      const error = errors(tab.dataset.workspaceTab);
+      markErrors(
+        tab,
+        error.count,
+        error.tooltip || `${error.count} \u2014 \u043E\u0448\u0438\u0431\u043A\u0438 \u0432 \u043F\u043E\u043B\u044F\u0445`,
+        tab.textContent || ""
+      );
+    }
+    const overview = root.querySelector(".fkp-next-overview");
+    const sharedService = store.get().servicesInfoWidget;
+    const sharedText = sharedService.failed ? "\u0421\u043E\u0441\u0442\u043E\u044F\u043D\u0438\u0435 \u0441\u0435\u0440\u0432\u0438\u0441\u0430 \u043D\u0435\u0434\u043E\u0441\u0442\u0443\u043F\u043D\u043E. \u041E\u0431\u043D\u043E\u0432\u0438\u0442\u0435 \u0434\u0430\u043D\u043D\u044B\u0435." : isServiceTransitionStatus(sharedService.data.forkopStatus) ? "\u0412\u044B\u043F\u043E\u043B\u043D\u044F\u0435\u0442\u0441\u044F \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u0435 \u0441\u0435\u0440\u0432\u0438\u0441\u0430\u2026" : !sharedService.loading && sharedService.data.forkopRunning === 1 ? "\u0421\u0435\u0440\u0432\u0438\u0441 \u0437\u0430\u043F\u0443\u0449\u0435\u043D" : !sharedService.loading && sharedService.data.forkopRunning === 0 ? "\u0421\u0435\u0440\u0432\u0438\u0441 \u043E\u0441\u0442\u0430\u043D\u043E\u0432\u043B\u0435\u043D" : void 0;
+    const overviewText = overview?.querySelector(".fkp-next-service")?.textContent;
+    setText(
+      service,
+      (active === "next" ? overviewText || sharedText : sharedText || (overviewText ? `\u041F\u043E\u0441\u043B\u0435\u0434\u043D\u0435\u0435 \u0441\u043E\u0441\u0442\u043E\u044F\u043D\u0438\u0435: ${overviewText}` : void 0)) || "\u0421\u043E\u0441\u0442\u043E\u044F\u043D\u0438\u0435 \u0441\u0435\u0440\u0432\u0438\u0441\u0430 \u043D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043D\u043E"
+    );
+    setText(
+      connection,
+      overview?.querySelector(".fkp-next-connection")?.textContent || "\u0421\u043E\u0435\u0434\u0438\u043D\u0435\u043D\u0438\u0435 \u0435\u0449\u0451 \u043D\u0435 \u043F\u0440\u043E\u0432\u0435\u0440\u0435\u043D\u043E"
+    );
+  }
+  function navigate(event) {
+    if (disposed || !(event.target instanceof Element)) return;
+    const control = event.target.closest(
+      "[data-workspace-section], [data-workspace-tab]"
+    );
+    if (!control) return;
+    const tabs = availableTabs();
+    const group = groups.find((g) => g.id === control.dataset.workspaceSection);
+    const id = control.dataset.workspaceTab || group?.pages.find(([page]) => tabs.has(page))?.[0];
+    if (id) tabs.get(id)?.click();
+    sync();
+  }
+  primary.addEventListener("click", navigate);
+  secondary.addEventListener("click", navigate);
+  theme.addEventListener("change", applyTheme);
+  const unsubscribeService = store.subscribe((_next, _previous, diff) => {
+    if (diff.servicesInfoWidget) sync();
+  });
+  const observer = new MutationObserver((records) => {
+    if (records.some((record) => {
+      const target = record.target instanceof Element ? record.target : record.target.parentElement;
+      return target && (menu.contains(target) || target === panes || target.parentElement === panes || target.closest(".fkp-next-overview"));
+    }))
+      sync();
+  });
+  observer.observe(root, {
+    subtree: true,
+    childList: true,
+    characterData: true,
+    attributes: true,
+    attributeFilter: [
+      "data-tab-active",
+      "hidden",
+      "style",
+      "class",
+      "aria-hidden",
+      "data-errors",
+      "data-tooltip",
+      "data-tooltip-style"
+    ]
+  });
+  const media = window.matchMedia?.("(prefers-color-scheme: dark)");
+  media?.addEventListener("change", applyTheme);
+  const themeObserver = new MutationObserver(applyTheme);
+  for (const surface of [document.documentElement, document.body])
+    themeObserver.observe(surface, {
+      attributes: true,
+      attributeFilter: ["data-theme", "data-darkmode", "class", "style"]
+    });
+  const lifecycle = new MutationObserver((records) => {
+    if (root.isConnected) wasConnected = true;
+    if (wasConnected && !root.isConnected) {
+      dispose();
+      return;
+    }
+    if (records.some((record) => {
+      const target = record.target instanceof Element ? record.target : record.target.parentElement;
+      return target?.closest(".modal") || [...record.addedNodes].some(
+        (node) => node instanceof Element && (node.matches(".modal") || node.querySelector(".modal"))
+      );
+    }))
+      markModals();
+  });
+  function dispose() {
+    if (disposed) return;
+    disposed = true;
+    observer.disconnect();
+    lifecycle.disconnect();
+    themeObserver.disconnect();
+    unsubscribeService();
+    primary.removeEventListener("click", navigate);
+    secondary.removeEventListener("click", navigate);
+    theme.removeEventListener("change", applyTheme);
+    media?.removeEventListener("change", applyTheme);
+    for (const modal of markedModals) {
+      modal.classList.remove("fkp-workspace-modal");
+      delete modal.dataset.theme;
+    }
+    markedModals.clear();
+  }
+  mounted.set(root, {
+    menu,
+    panes,
+    main,
+    content,
+    disposed: () => disposed,
+    theme: () => theme.value,
+    dispose
+  });
+  lifecycle.observe(document.body, { childList: true, subtree: true });
+  applyTheme();
+  markModals();
+  sync();
+}
+
+// src/forkop/workspace/tools.ts
+function renderWorkspaceTools(area, request = nextRequest) {
+  const root = document.createElement("section");
+  root.className = "fkp-workspace-tools";
+  root.dataset.toolsArea = area;
+  const placeholder = document.createElement("p");
+  placeholder.textContent = "\u0418\u043D\u0441\u0442\u0440\u0443\u043C\u0435\u043D\u0442\u044B \u0437\u0430\u0433\u0440\u0443\u0437\u044F\u0442\u0441\u044F \u043F\u0440\u0438 \u043E\u0442\u043A\u0440\u044B\u0442\u0438\u0438 \u0440\u0430\u0437\u0434\u0435\u043B\u0430.";
+  root.append(placeholder);
+  let mounted2 = false;
+  let disposed = false;
+  let wasConnected = root.isConnected;
+  function dispose() {
+    disposed = true;
+    observer.disconnect();
+    root.removeEventListener("forkop:dispose-tools", dispose);
+  }
+  function check() {
+    if (disposed) return;
+    if (wasConnected && !root.isConnected) return dispose();
+    wasConnected || (wasConnected = root.isConnected);
+    if (mounted2 || !root.isConnected || root.closest("[data-tab]")?.getAttribute("data-tab-active") !== "true")
+      return;
+    mounted2 = true;
+    root.replaceChildren(renderAdvancedPanel(request, void 0, false, area));
+    observer.disconnect();
+  }
+  const observer = new MutationObserver(check);
+  observer.observe(document, {
+    childList: true,
+    subtree: true,
+    attributes: true,
+    attributeFilter: ["data-tab-active"]
+  });
+  root.addEventListener("forkop:dispose-tools", dispose);
+  queueMicrotask(check);
+  return root;
+}
+function disposeWorkspaceTools(root) {
+  root.querySelectorAll(".fkp-workspace-tools").forEach((host) => host.dispatchEvent(new Event("forkop:dispose-tools")));
+}
+
+// src/forkop/workspace/namedCreation.ts
+function configureNamedSectionCreation(section, label, buttonLabel) {
+  const pending = /* @__PURE__ */ new Set();
+  const originalModal = section.renderMoreOptionsModal;
+  section.renderMoreOptionsModal = function(name, event) {
+    if (pending.delete(name))
+      this.map.data.set(
+        this.uciconfig ?? this.map.config,
+        name,
+        "label",
+        label
+      );
+    return originalModal.call(this, name, event);
+  };
+  section.renderSectionAdd = function(extra) {
+    const root = document.createElement("div");
+    root.className = `cbi-section-create ${extra || ""}`.trim();
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "cbi-button cbi-button-add";
+    button.textContent = buttonLabel;
+    button.disabled = this.map.readonly === true;
+    const result = document.createElement("p");
+    result.setAttribute("role", "status");
+    result.hidden = true;
+    button.onclick = async (event) => {
+      if (this.map.readonly || button.disabled) return;
+      const config = this.uciconfig ?? this.map.config;
+      let index = 1;
+      while (this.map.data.get(config, `${this.sectiontype}_${index}`)) index++;
+      const name = `${this.sectiontype}_${index}`;
+      pending.add(name);
+      button.disabled = true;
+      result.hidden = true;
+      try {
+        await this.handleAdd(event, name);
+      } catch {
+        if (this.map.addedSection === name) {
+          this.map.data.remove(config, name);
+          delete this.map.addedSection;
+        }
+        result.textContent = "\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u043E\u0442\u043A\u0440\u044B\u0442\u044C \u0440\u0435\u0434\u0430\u043A\u0442\u043E\u0440. \u041F\u043E\u0432\u0442\u043E\u0440\u0438\u0442\u0435 \u0434\u043E\u0431\u0430\u0432\u043B\u0435\u043D\u0438\u0435.";
+        result.hidden = false;
+      } finally {
+        pending.delete(name);
+        button.disabled = Boolean(this.map.readonly);
+      }
+    };
+    root.append(button, result);
+    return root;
+  };
 }
 
 // src/forkop/next/configReload.ts
@@ -15813,15 +16733,19 @@ return baseclass.extend({
   UpdatesTab,
   applyUiStateToStore,
   bulkValidate,
+  configureNamedSectionCreation,
   coreService,
+  disposeWorkspaceTools,
   getClashUIUrl,
   getDashboardSections,
   getProxyUrlName,
   injectGlobalStyles,
+  mountForkopWorkspace,
   parseValueList,
   refreshRuntimeUiState,
   registerConfigurationReload,
   renderNextPanel,
+  renderWorkspaceTools,
   showToast,
   store,
   subscribeRuntimeUiState,
