@@ -142,3 +142,32 @@ labels, native Priority order drift and incorrect exclude-only explanation.
   mode. Added ordered overlap/fallback parity against actual saved generation,
   and preservation of ordinary subscription names alongside plain password tags.
 - Final fix Linux GREEN remains pending root's immutable CI observation.
+
+## Review fix round 2 — canonical manual-link credentials
+
+Review demonstrated a double-encoded Trojan credential missed by the label
+context. Tests-only `f711a4fdfed0e7797beef9925785b35c19f39c11` adds an actual
+ucode generator assertion of the password before preview projection, covers
+both double and triple encoding, and preserves an ordinary manual-node label.
+
+First Linux attempt `40141422437`, job `121013788100` (remote `c42ef037`)
+failed all 16 methods at compilation: the round-1 source guard incorrectly used
+JavaScript-style `throw 'source_changed'`, unsupported by ucode. This is an
+introduced syntax defect, not behavioral RED for the encoded case, and no
+fix-round backend GREEN is claimed for that run. Separate correction
+`a95351838903b0f93d7b4110ca73b77217dced42` uses `die('source_changed')`, matching
+existing `singbox/compatibility.uc` and `singbox/reality.uc` exception handling.
+The corrected tests baseline must run before canonical decoding implementation.
+
+Corrected-baseline Linux RED observed by root: `a953518` exact tree
+`8f61e1de`, remote `a271dfbe`; Backend CI `40141538838`, job `121014131842`:
+16 tests in 12.143s, exactly two encoded-case assertion failures. The actual
+generated passwords `plainCredential731` and `%70lainCredential731` appeared
+in the response; other 14 tests passed, without syntax/setup errors.
+
+Only after that behavioral RED, manual-source context gained precisely the
+single whole-link `url.decode` then `url.strip_fragment` step used by
+`manual_link_outbound`, before shared URL userinfo/query helpers. Subscription
+URL interpretation is unchanged; no recursive decoding, resolver, generation,
+Priority-order or frontend changes. `git diff --check` passed. Final focused
+Linux GREEN awaits root's publication of this immutable fix.

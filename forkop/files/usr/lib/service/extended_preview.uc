@@ -34,9 +34,13 @@ function label_context(saved,state) {
         // including unknown protocol options and nested headers, are private context.
         for(let key,item in value)if(index(['tag','remark'],key)<0)strings(item);
     }
-    function source_url(value) {
+    function source_url(value,manual) {
         value=common.as_string(value);
         if(value=='')return;
+        // Match manual_link_outbound's single preprocessing step before the
+        // shared URL component helpers decode userinfo/query. Do not recurse or
+        // apply this manual-link interpretation to subscription request URLs.
+        if(manual&&url.scheme(value)!='vmess')value=url.strip_fragment(url.decode(value));
         let scheme=url.scheme(value);
         if(index(['http','https','vless','trojan','hysteria2','hy2','socks','socks4','socks5'],scheme)<0) {
             context.certain=false;return;
@@ -59,7 +63,7 @@ function label_context(saved,state) {
         for(let raw in connections.outbound_jsons(section)) {
             try {outbound(json(raw));}catch(e){context.certain=false;}
         }
-        for(let link in connections.connection_urls(section))source_url(link);
+        for(let link in connections.connection_urls(section))source_url(link,true);
         let sources=section.subscription_urls;
         for(let source in type(sources)=='array'?sources:[sources])if(source!=null)source_url(source);
     }
