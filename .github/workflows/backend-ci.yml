@@ -66,6 +66,9 @@ jobs:
           command -v ucode
           ucode -e 'print("ucode ready\n")'
 
+      - name: Extended preview and source evidence behavioral contract
+        run: python3 -m unittest discover -s tests/backend -p test_extended_preview.py -v
+
       - name: Check ucode syntax
         shell: bash
         run: |
