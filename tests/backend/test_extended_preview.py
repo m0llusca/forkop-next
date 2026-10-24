@@ -303,6 +303,26 @@ class ExtendedPreview(unittest.TestCase):
         self.assertEqual(decisions['node_0']['reasons'],['exclude_miss'])
         self.assertEqual(decisions['node_1']['reasons'],['exclude_match'])
 
+    def test_manual_link_label_uses_actual_generator_credential_decoding(self):
+        for encoded,fragment,credential in [
+                ('%2570lainCredential731','plainCredential731','plainCredential731'),
+                ('%252570lainCredential731','%2570lainCredential731','%70lainCredential731')]:
+            with self.subTest(encoded=encoded):
+                self.data['section'][0]['selector_proxy_links']=[
+                    f'trojan://{encoded}@127.0.0.1:443#{fragment}',
+                    'trojan://anotherCredential@127.0.0.1:443#Ordinary manual node']
+                self.data['urltest'][0]['name']='URLTest '+credential
+                self.data['priority_group'][0]['name']=credential
+                self.data['priority_level'][0]['name']='Level '+credential
+                self.generate()
+                generated=json.loads(self.output.read_text())['outbounds']
+                trojans=[row for row in generated if row['type']=='trojan']
+                self.assertEqual(trojans[0]['password'],credential,
+                                 'Use the real generated credential, not an independent URL model')
+                result=self.preview();self.assertTrue(result['success'],result)
+                self.assertNotIn(credential,json.dumps(result))
+                self.assertIn('Ordinary manual node',[row['name'] for row in result['data']['candidates']])
+
     def test_native_list_order_controls_overlap_and_matches_saved_generation(self):
         self.generate()
         request=self.request()
