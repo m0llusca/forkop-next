@@ -196,6 +196,20 @@ Generic check/install remains on the selected custom source. Explicit official/s
 
 ## Direct native workflows (UX task 3)
 
+UX task 4 retains the navigation and workflow-context contracts below. The
+workspace adds a synchronized narrow-screen `Раздел Forkop` select using the
+same native tab activation authority as desktop navigation. Local theme
+preferences are hosted outside `.cbi-section[data-tab]`; changing them never
+marks native UCI drafts dirty.
+
+`configureRuleOrder(root, move)` decorates native rule rows in place with named
+enable controls and above/below buttons. The native adapter supplies
+`map.data.move(config, sid, referenceSid, after)` and must return its boolean
+result. Successful moves preserve mounted fields, move the existing row, emit
+a bubbling native `change` event, and announce the draft position and required
+Save/Apply. Failed moves retain DOM order. This stages native UCI priority;
+it does not apply routes. Native drag/drop remains available.
+
 These frontend helpers do not add a write API or change UCI identity/lifecycle.
 `device_set {address, section:""}` removes that exact IPv4 from all explicit
 `fully_routed_ips` assignments and restores ordinary rules. It is distinct from

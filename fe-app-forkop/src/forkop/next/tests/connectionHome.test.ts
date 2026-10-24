@@ -224,8 +224,10 @@ it('keeps an unselected first connection truthful instead of promoting a selecte
 it('omits duplicate workspace theme and advanced controls but retains standalone disclosure', () => {
   const workspace = renderNextPanel(undefined, undefined, { workspace: true });
   expect(workspace.querySelector('select')).toBeNull();
-  expect(workspace.querySelector('details')).toBeNull();
-  expect(renderNextPanel().querySelector('details>summary')).not.toBeNull();
+  expect(workspace.querySelector('.fkp-next-advanced')).toBeNull();
+  expect(
+    renderNextPanel().querySelector('.fkp-next-advanced>summary'),
+  ).not.toBeNull();
 });
 
 it('names the captured probe target while pending and after the field changes', async () => {

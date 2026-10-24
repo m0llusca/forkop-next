@@ -50,6 +50,7 @@ export {
   getRuleActionLabel,
   renderRuleIdentity,
   renderRuleRoute,
+  configureRuleOrder,
 } from './forkop/workspace/rules';
 export {
   refreshRuntimeUiState,

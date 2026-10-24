@@ -21,9 +21,34 @@ type Option = {
 
 afterEach(() => document.body.replaceChildren());
 
-function fixture(rule: Rule) {
+function fixture(rule: Rule, neighbours = false) {
   const entries: Record<string, Rule> = {
-    example: { '.name': 'example', ...rule },
+    ...(neighbours
+      ? { first: { '.name': 'first', '.index': 0, label: 'Первое' } }
+      : {}),
+    example: { '.name': 'example', '.index': neighbours ? 1 : 0, ...rule },
+    ...(neighbours
+      ? { last: { '.name': 'last', '.index': 2, label: 'Последнее' } }
+      : {}),
+  };
+  const reorder: Record<string, boolean> = {};
+  // Execute the captured native UCI move body against real ordered records.
+  const uciSource = readFileSync(
+    'src/forkop/workspace/tests/fixtures/nativeUciMove.js',
+    'utf8',
+  );
+  const move = new Function(
+    `const native = ${uciSource}; return native.move;`,
+  )();
+  const data = {
+    state: { reorder },
+    sections: () =>
+      Object.values(entries).sort(
+        (a, b) => Number(a['.index']) - Number(b['.index']),
+      ),
+    get: (_config: string, id: string) => entries[id],
+    resolveSID: (_config: string, id: string) => id,
+    move,
   };
   const original = JSON.stringify(entries);
   Object.defineProperty(String.prototype, 'format', {
@@ -124,7 +149,7 @@ function fixture(rule: Rule) {
     ...native,
     anonymous: false,
     sectiontype: 'section',
-    map: { config: 'forkop' },
+    map: { config: 'forkop', data },
     children: [] as Option[],
     sectiontitle: (id: string): unknown => entries[id].label || id,
     tab() {},
@@ -142,7 +167,8 @@ function fixture(rule: Rule) {
     renderHeaderRows: () => document.createDocumentFragment(),
     renderFooterRows: () => document.createDocumentFragment(),
     renderSectionAdd: () => document.createDocumentFragment(),
-    renderRowActions: () => nativeActions,
+    renderRowActions: (id: string) =>
+      id === 'example' ? nativeActions : nativeActions.cloneNode(true),
     stabilizeActionColumnWidth() {},
   };
   const source = readFileSync(
@@ -188,13 +214,116 @@ function fixture(rule: Rule) {
   const action = section.children.find((o) => o.option === 'action')!;
   const route = section.children.find((o) => o.option === '_action_display')!;
   const render = () => {
-    const rowFields = document.createElement('div');
-    rowFields.append(document.createElement('td'));
-    rowFields.append(section.renderTextValue('example', route));
-    return section.renderContents(['example'], [rowFields]);
+    const ids = data.sections().map((row) => String(row['.name']));
+    return section.renderContents(
+      ids,
+      ids.map((id) => {
+        const rowFields = document.createElement('div');
+        const enabled = document.createElement('td');
+        enabled.innerHTML = '<input type="checkbox">';
+        rowFields.append(enabled, section.renderTextValue(id, route));
+        return rowFields;
+      }),
+    );
   };
-  return { section, action, route, render, entries, original, nativeActions };
+  return {
+    section,
+    action,
+    route,
+    render,
+    entries,
+    original,
+    nativeActions,
+    reorder,
+    data,
+  };
 }
+
+it('names rule toggles and persists above/below moves with the native UCI priority order while retaining drafts', () => {
+  const state = fixture({ label: 'Работа' }, true);
+  const table = state.render();
+  document.body.append(table);
+  const row = table.querySelector<HTMLElement>('[data-sid=example]')!;
+  const body = row.parentElement!;
+  const insertBefore = body.insertBefore.bind(body);
+  // Real browsers lose descendant focus when insertBefore reinserts its row.
+  // Preserve real DOM movement and simulate only that missing happy-dom effect.
+  body.insertBefore = function <T extends Node>(
+    moved: T,
+    reference: Node | null,
+  ): T {
+    const focused = document.activeElement;
+    const result = insertBefore(moved, reference);
+    if (focused instanceof HTMLElement && moved.contains(focused))
+      focused.blur();
+    return result;
+  };
+  expect(row.querySelector('input')?.getAttribute('aria-label')).toBe(
+    'Включить правило Работа',
+  );
+  const draft = document.createElement('input');
+  draft.value = 'unsaved rule';
+  row.append(draft);
+  const up = row.querySelector<HTMLButtonElement>(
+    '[aria-label="Выше: Работа"]',
+  );
+  const down = row.querySelector<HTMLButtonElement>(
+    '[aria-label="Ниже: Работа"]',
+  );
+  expect(up).not.toBeNull();
+  up!.focus();
+  up!.click();
+  expect(state.data.sections().map((s) => s['.name'])).toEqual([
+    'example',
+    'first',
+    'last',
+  ]);
+  expect(
+    [...table.querySelectorAll('tr[data-sid]')].map((r) =>
+      r.getAttribute('data-sid'),
+    ),
+  ).toEqual(['example', 'first', 'last']);
+  expect(state.reorder.forkop).toBe(true);
+  expect(up!.disabled).toBe(true);
+  expect(table.querySelector('[role=status]')?.textContent).toContain(
+    'Работа: позиция 1 из 3',
+  );
+  expect(document.activeElement).toBe(down);
+  down!.click();
+  expect(state.data.sections().map((s) => s['.name'])).toEqual([
+    'first',
+    'example',
+    'last',
+  ]);
+  expect(down!.disabled).toBe(false);
+  expect(
+    document.activeElement === down,
+    'middle move restores its enabled button focus',
+  ).toBe(true);
+  expect(draft.value).toBe('unsaved rule');
+  expect(row.contains(draft)).toBe(true);
+});
+
+it('announces a rejected native reorder without changing DOM order or draft state', () => {
+  const state = fixture({ label: 'Работа' }, true);
+  state.data.move = () => false;
+  const table = state.render();
+  document.body.append(table);
+  const up = table.querySelector<HTMLButtonElement>(
+    '[aria-label="Выше: Работа"]',
+  );
+  expect(up).not.toBeNull();
+  up!.click();
+  expect(
+    [...table.querySelectorAll('tr[data-sid]')].map((r) =>
+      r.getAttribute('data-sid'),
+    ),
+  ).toEqual(['first', 'example', 'last']);
+  expect(table.querySelector('[role=status]')?.textContent).toContain(
+    'Не удалось',
+  );
+  expect(state.reorder.forkop).toBeUndefined();
+});
 
 it('renders the rule name and scope through native table rendering without corrupting its textual title or row actions', () => {
   const { section, render, nativeActions } = fixture({

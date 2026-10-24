@@ -79,7 +79,7 @@ export function renderNextPanel(
   const notice = el('p', '', 'fkp-next-notice');
   notice.setAttribute('role', 'status');
   const status = el('section', '', 'fkp-next-status-block');
-  status.append(el('h3', 'Доступ в сеть'), service, connection, notice);
+  status.append(service, connection, notice);
   let probeRevision = 0;
   let hasProbe = false;
   function invalidateProbe() {
@@ -94,7 +94,6 @@ export function renderNextPanel(
   const serviceControl = el('button', 'Включить сервис');
   serviceControl.type = 'button';
   serviceControl.disabled = true;
-  if (adapters.changeService) status.append(serviceControl);
   function updateServiceControl() {
     serviceControl.textContent =
       runtime?.running === true ? 'Отключить сервис' : 'Включить сервис';
@@ -199,7 +198,8 @@ export function renderNextPanel(
     'fkp-next-help',
   );
   server.append(addConnection, setupHelp);
-  const check = el('div', '', 'fkp-next-probe');
+  const check = el('details', '', 'fkp-next-probe');
+  check.append(el('summary', 'Проверить соединение'));
   const domainLabel = el('label', 'Сайт для проверки');
   const domain = el('input');
   domain.name = 'connection_domain';
@@ -216,6 +216,7 @@ export function renderNextPanel(
       connection.dataset.state = 'error';
       connection.textContent =
         'Введите домен сайта, например example.org, без https:// и пути.';
+      check.open = true;
       domain.focus();
       return;
     }
@@ -271,10 +272,10 @@ export function renderNextPanel(
       'fkp-next-help',
     ),
   );
-  status.append(check);
   const everyday = el('div', '', 'fkp-next-content');
   everyday.append(status, server);
-  root.append(everyday);
+  root.append(everyday, check);
+  if (adapters.changeService) root.append(serviceControl);
   const traffic = el('section', '', 'fkp-next-panel fkp-next-traffic');
   const trafficOutput = el('div');
   traffic.append(el('h3', 'Трафик'), trafficOutput);
@@ -455,7 +456,9 @@ export function renderNextPanel(
       );
     await Promise.all(tasks);
   }
-  header.append(action('Обновить данные', refresh));
+  const refreshControl = action('Обновить данные', refresh);
+  if (adapters.workspace) root.append(refreshControl);
+  else header.append(refreshControl);
   function configurationChanged() {
     invalidateProbe();
     generation++;

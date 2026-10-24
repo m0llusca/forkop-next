@@ -33,6 +33,14 @@ export const workspaceStyles = `
 .fkp-workspace-sidebar {min-width:0;padding:24px 12px;align-self:start;position:sticky;top:16px}
 .fkp-workspace-brand {font-size:22px;line-height:1.25;letter-spacing:-.025em;font-weight:700;padding:0 12px;margin-bottom:32px}
 .fkp-workspace-primary {display:flex;flex-direction:column;gap:8px}
+.fkp-workspace .fkp-workspace-mobile-menu {display:none}
+.fkp-workspace .fkp-workspace-preferences {margin-bottom:24px;padding:16px 0;border-bottom:1px solid var(--next-line)}
+.fkp-workspace .fkp-workspace-preferences h3 {font-size:16px;margin:0 0 12px}
+.fkp-workspace .fkp-workspace-preferences[hidden] {display:none}
+.fkp-workspace .fkp-rule-order {display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.fkp-workspace .fkp-rule-order button {min-height:44px;min-width:44px;white-space:normal;overflow-wrap:anywhere}
+.fkp-workspace .fkp-rule-order-status {font-size:13px;overflow-wrap:anywhere;margin:12px 0 0}
+.fkp-workspace .fkp-rule-order-status:empty {margin:0}
 .fkp-workspace-main {min-width:0;border-left:1px solid var(--next-line);padding:24px 32px 32px}
 .fkp-workspace-top {display:flex;align-items:flex-start;justify-content:space-between;gap:24px;padding-bottom:24px;border-bottom:1px solid var(--next-line);margin-bottom:24px}
 .fkp-workspace-status {display:flex;flex-direction:column;gap:4px;min-width:0}
@@ -93,6 +101,7 @@ export const workspaceStyles = `
 .fkp-workspace textarea,.fkp-workspace-modal textarea {min-height:112px;width:100%;resize:vertical;font-variant-numeric:tabular-nums}
 .fkp-workspace input::placeholder,.fkp-workspace textarea::placeholder,.fkp-workspace-modal input::placeholder,.fkp-workspace-modal textarea::placeholder {color:var(--next-muted);opacity:1}
 .fkp-workspace input[type=checkbox],.fkp-workspace input[type=radio],.fkp-workspace-modal input[type=checkbox],.fkp-workspace-modal input[type=radio] {width:20px;height:20px;min-height:20px;margin:11px 8px 11px 0;vertical-align:middle;accent-color:var(--next-accent)}
+.fkp-workspace #cbi-forkop-section tr[data-sid] input[type=checkbox] {width:24px;height:24px;min-height:24px}
 .fkp-workspace .cbi-checkbox,.fkp-workspace-modal .cbi-checkbox {min-height:42px;display:inline-flex;align-items:center}
 .fkp-workspace button,.fkp-workspace .cbi-button,.fkp-workspace input[type=button],.fkp-workspace input[type=submit],
 .fkp-workspace-modal button,.fkp-workspace-modal .cbi-button,.fkp-workspace-modal input[type=button],.fkp-workspace-modal input[type=submit] {
@@ -189,10 +198,14 @@ export const workspaceStyles = `
   .fkp-workspace {display:block;border-radius:8px;margin:16px 0}
   .fkp-workspace-sidebar {position:static;padding:16px 16px 12px;border-bottom:1px solid var(--next-line)}
   .fkp-workspace-brand {font-size:20px;padding:0;margin-bottom:12px}
-  .fkp-workspace-primary {flex-direction:row;overflow-x:auto;gap:4px;padding:4px;scrollbar-width:thin}
+  .fkp-workspace-primary {display:none}
+  .fkp-workspace .fkp-workspace-mobile-menu {display:flex;align-items:center;gap:12px;margin:0;min-width:0}
+  .fkp-workspace .fkp-workspace-mobile-menu select {flex:1;min-width:0;width:100%;max-width:100%;min-height:44px}
+  .fkp-workspace-local {flex-wrap:wrap;overflow:visible}
+  .fkp-workspace .fkp-workspace-local-button {white-space:normal;overflow-wrap:anywhere;max-width:100%}
   .fkp-workspace .fkp-workspace-nav-button {flex-shrink:0;min-height:44px}
-  .fkp-workspace-main {padding:24px 16px;border:0}
-  .fkp-workspace-top {margin-bottom:24px;padding-bottom:16px}
+  .fkp-workspace-main {padding:16px;border:0}
+  .fkp-workspace-top {margin-bottom:16px;padding-bottom:12px}
   .fkp-workspace .fkp-workspace-title {font-size:26px}
   .fkp-workspace .cbi-value,.fkp-workspace-modal .cbi-value {display:block;padding:12px 0}
   .fkp-workspace .cbi-value > label.cbi-value-title,.fkp-workspace-modal .cbi-value > label.cbi-value-title {display:block;width:100%;text-align:left;padding:0;margin:0 0 8px}

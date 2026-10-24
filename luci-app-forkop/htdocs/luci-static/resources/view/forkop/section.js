@@ -7894,6 +7894,14 @@ function configureSectionSection(sectionRef, options = {}) {
           );
         }
       });
+    main.configureRuleOrder(node, (sid, referenceSid, after) =>
+      this.map.data.move(
+        this.uciconfig ?? this.map.config,
+        sid,
+        referenceSid,
+        after,
+      ),
+    );
     node.addEventListener("forkop:workflow-context", (event) => {
       event.stopPropagation();
       event.detail.provide({

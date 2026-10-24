@@ -118,7 +118,11 @@ export function mountForkopWorkspace(root: HTMLElement): void {
   const brand = el('div', 'fkp-workspace-brand', 'Forkop');
   const primary = el('nav', 'fkp-workspace-primary');
   primary.setAttribute('aria-label', 'Разделы Forkop');
-  sidebar.append(brand, primary);
+  const mobileLabel = el('label', 'fkp-workspace-mobile-menu', 'Раздел');
+  const mobileMenu = el('select', '');
+  mobileMenu.setAttribute('aria-label', 'Раздел Forkop');
+  mobileLabel.append(mobileMenu);
+  sidebar.append(brand, mobileLabel, primary);
   const main = el('div', 'fkp-workspace-main');
   const top = el('div', 'fkp-workspace-top');
   const status = el('div', 'fkp-workspace-status');
@@ -149,13 +153,18 @@ export function mountForkopWorkspace(root: HTMLElement): void {
   }
   theme.value = previousTheme || 'auto';
   themeLabel.append(theme);
-  top.append(status, themeLabel);
+  top.append(status);
+  // Local preferences live outside native editable panes, so their input/change
+  // events cannot mark a UCI draft or block immediate route actions.
+  const preferences = el('section', 'fkp-workspace-preferences');
+  preferences.dataset.workspacePreferences = '';
+  preferences.append(el('h3', '', 'Предпочтения'), themeLabel);
   const heading = el('h2', 'fkp-workspace-title');
   const description = el('p', 'fkp-workspace-description');
   const secondary = el('div', 'fkp-workspace-secondary');
   const content = el('div', 'fkp-workspace-content');
   content.append(...originalContent);
-  main.append(top, heading, description, secondary, content);
+  main.append(top, heading, description, secondary, preferences, content);
   root.append(sidebar, main);
 
   let disposed = false;
@@ -286,10 +295,12 @@ export function mountForkopWorkspace(root: HTMLElement): void {
       '';
     setText(description, pageHelp[active] || '');
     description.hidden = !description.textContent;
+    preferences.hidden = active !== 'settings';
     const signature = [...tabs.keys()].join(',');
     if (signature !== navigationSignature) {
       navigationSignature = signature;
       primary.replaceChildren();
+      mobileMenu.replaceChildren();
       secondary.replaceChildren();
       for (const group of groups) {
         const pages = group.pages.filter(([id]) => tabs.has(id));
@@ -298,6 +309,9 @@ export function mountForkopWorkspace(root: HTMLElement): void {
         button.type = 'button';
         button.dataset.workspaceSection = group.id;
         primary.append(button);
+        const option = el('option', '', group.label);
+        option.value = group.id;
+        mobileMenu.append(option);
         const local = el('nav', 'fkp-workspace-local');
         local.setAttribute('aria-label', `${group.label}: страницы`);
         local.dataset.workspaceGroup = group.id;
@@ -331,6 +345,20 @@ export function mountForkopWorkspace(root: HTMLElement): void {
           .join('; '),
         group.label,
       );
+      const mobileOption = [...mobileMenu.options].find(
+        (option) => option.value === group.id,
+      );
+      if (mobileOption) {
+        const count = invalidPages.reduce(
+          (total, page) => total + page.count,
+          0,
+        );
+        setText(
+          mobileOption,
+          count ? `${group.label} — ошибки: ${count}` : group.label,
+        );
+      }
+      if (current) mobileMenu.value = group.id;
       const local = secondary.querySelector<HTMLElement>(
         `[data-workspace-group="${group.id}"]`,
       );
@@ -398,6 +426,14 @@ export function mountForkopWorkspace(root: HTMLElement): void {
   }
   primary.addEventListener('click', navigate);
   secondary.addEventListener('click', navigate);
+  function navigateMobile() {
+    const group = groups.find((item) => item.id === mobileMenu.value);
+    const tabs = availableTabs();
+    const id = group?.pages.find(([page]) => tabs.has(page))?.[0];
+    if (id) tabs.get(id)?.click();
+    sync();
+  }
+  mobileMenu.addEventListener('change', navigateMobile);
   theme.addEventListener('change', applyTheme);
   const unsubscribeService = store.subscribe((_next, _previous, diff) => {
     if (diff.servicesInfoWidget) sync();
@@ -499,6 +535,7 @@ export function mountForkopWorkspace(root: HTMLElement): void {
     unsubscribeService();
     primary.removeEventListener('click', navigate);
     secondary.removeEventListener('click', navigate);
+    mobileMenu.removeEventListener('change', navigateMobile);
     theme.removeEventListener('change', applyTheme);
     media?.removeEventListener('change', applyTheme);
     for (const modal of markedModals) {

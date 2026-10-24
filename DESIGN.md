@@ -128,9 +128,9 @@ Measurements use tabular numerals. Totals and rates use binary Russian units, wi
 
 ## Layout
 
-Desktop uses an internal sidebar (184px) and a flexible `minmax(0,1fr)` main region. Main padding is (24px 32px 32px). At (1050px) and below the sidebar narrows to (160px), main padding becomes (24px), and the status/theme strip can wrap. At (720px) and below the workspace becomes one column; labeled primary navigation scrolls horizontally, main padding becomes (24px 16px), and local navigation remains horizontally scrollable.
+Desktop uses an internal sidebar (184px) and a flexible `minmax(0,1fr)` main region. Main padding is (24px 32px 32px). At (1050px) and below the sidebar narrows to (160px), main padding becomes (24px), and the status strip can wrap. At (720px) and below the workspace becomes one column; one native select exposes all six destinations and names the current section, main padding becomes (16px), and local navigation wraps within the available width.
 
-The shared service/last-check strip and theme control precede the section title. Home puts connectivity checking beside the selected outgoing server, followed by the semantic traffic strip and additional routes. Server choices precede secondary telemetry; incoming listeners remain a separate destination. Section gaps use the established spacing scale, with open divisions rather than nested cards. Traffic metrics use five columns, three at (900px), then two at (720px).
+The shared service/last-check strip precedes the section title. The workspace theme control lives in Settings preferences, outside native editable panes. Home shows status and the selected outgoing connection before its change action and collapsed connectivity-check form, followed by service controls, the semantic traffic strip and additional routes. Embedded home omits repeated status headings; its refresh action follows the main content. Standalone Next retains its theme control. Server choices precede secondary telemetry; incoming listeners remain a separate destination. Section gaps use the established spacing scale, with open divisions rather than nested cards. Traffic metrics use five columns, three at (900px), then two at (720px).
 
 Native form labels occupy (200px) beside a flexible field, with a (24px) gap and controls capped at (42rem). On mobile labels stack above controls and input text is (16px). Rule/server tables become labeled stacked rows with wrapping actions; other wide native tables scroll within their section and retain a (520px) minimum width. Do not apply the stacked-row conversion to every table.
 
@@ -161,6 +161,12 @@ Primary and local navigation use current-page semantics, tinted selection and ex
 Server choices are discrete field surfaces with selected tint, accent border and explicit selection wording. Traffic uses a semantic definition list with tabular values. Diagnostic output wraps, scrolls locally and states what was tested. Advanced features stay under their task rather than a single large advanced dashboard.
 
 Native rules/settings retain parsing, dependencies, priority, modal editing and save/apply behavior. Settings that are not loaded must not parse empty values. Rebuilding a native map must rebuild the adapter, dispose previous subscriptions and preserve validation-location feedback.
+
+Rule enable controls name their rule. Above/below buttons have at least (44px)
+targets and stage the same native UCI order as optional drag/drop. Moving a row
+keeps draft fields mounted and announces its position and Save/Apply requirement;
+edge buttons disable and keyboard focus stays in the moved row. Rule-grid
+checkboxes are (24px); native dialog controls retain their established sizing.
 
 A probe result names its captured target and scope; route/service/configuration changes invalidate it. Hidden telemetry suspends, reset clears old live readings, requests do not overlap, and stale replies cannot restore obsolete state. Profile activation requires a current comparison.
 

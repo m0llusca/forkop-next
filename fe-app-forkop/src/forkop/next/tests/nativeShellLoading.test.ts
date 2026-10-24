@@ -342,6 +342,28 @@ it.each(['DOM draft', 'saved UCI', 'local UCI', 'reordered UCI'])(
     if (kind === 'DOM draft') expect(draft.value).toBe('unsaved DNS');
   },
 );
+it('keeps local theme preferences outside UCI drafts so immediate route actions remain available', async () => {
+  const state = setup({ getUiCapabilities: () => new Promise(() => {}) });
+  const root: HTMLElement = await state.controller.render();
+  document.body.append(root);
+  root
+    .querySelector<HTMLButtonElement>('[data-workspace-section=settings]')!
+    .click();
+  const theme = root.querySelector<HTMLSelectElement>(
+    '[data-workspace-preferences] select',
+  );
+  expect(theme).not.toBeNull();
+  theme!.value = 'dark';
+  theme!.dispatchEvent(new Event('input', { bubbles: true }));
+  theme!.dispatchEvent(new Event('change', { bubbles: true }));
+  vi.stubGlobal('fs', {
+    exec: async () => ({ code: 0, stdout: '{"success":true}', stderr: '' }),
+  });
+  expect(
+    await nextRequest('device_set', { address: '192.0.2.1', section: 'main' }),
+  ).toMatchObject({ success: true });
+});
+
 it('synchronizes clean native UCI after mutation without reloading the page and releases controls after failure', async () => {
   let finish!: (v: unknown) => void;
   const sync: string[] = [];

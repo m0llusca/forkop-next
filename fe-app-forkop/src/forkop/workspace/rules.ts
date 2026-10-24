@@ -176,3 +176,79 @@ export function renderRuleRoute(value: Rule | null | undefined): HTMLElement {
   );
   return root;
 }
+
+/** Keep native fields mounted; UCI's move operation owns persisted priority. */
+export function configureRuleOrder(
+  root: HTMLElement,
+  move: (id: string, reference: string, after: boolean) => boolean,
+): void {
+  const status = textNode('p', 'fkp-rule-order-status', '');
+  status.setAttribute('role', 'status');
+  status.setAttribute('aria-live', 'polite');
+  root.append(status);
+  const rows = () => [
+    ...root.querySelectorAll<HTMLElement>('tr.cbi-section-table-row[data-sid]'),
+  ];
+  function update() {
+    const ordered = rows();
+    ordered.forEach((row, index) => {
+      row.querySelector<HTMLButtonElement>('[data-rule-order=up]')!.disabled =
+        index === 0;
+      row.querySelector<HTMLButtonElement>('[data-rule-order=down]')!.disabled =
+        index === ordered.length - 1;
+    });
+  }
+  for (const row of rows()) {
+    const name =
+      row.querySelector('.fkp-rule-name')?.textContent || row.dataset.sid!;
+    row
+      .querySelector<HTMLInputElement>('input[type=checkbox]')
+      ?.setAttribute('aria-label', `Включить правило ${name}`);
+    const actions = row.querySelector('.cbi-section-actions');
+    const controls = textNode('div', 'fkp-rule-order', '');
+    for (const [direction, label] of [
+      ['up', 'Выше'],
+      ['down', 'Ниже'],
+    ]) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.dataset.ruleOrder = direction;
+      button.textContent = label;
+      button.setAttribute('aria-label', `${label}: ${name}`);
+      button.addEventListener('click', () => {
+        const ordered = rows();
+        const index = ordered.indexOf(row);
+        const after = direction === 'down';
+        const reference = ordered[index + (after ? 1 : -1)];
+        if (!reference) return;
+        try {
+          if (!move(row.dataset.sid!, reference.dataset.sid!, after))
+            throw new Error('move_rejected');
+          row.parentElement!.insertBefore(
+            row,
+            after ? reference.nextSibling : reference,
+          );
+          update();
+          if (button.disabled)
+            row
+              .querySelector<HTMLButtonElement>(
+                `[data-rule-order=${after ? 'up' : 'down'}]`,
+              )
+              ?.focus();
+          else button.focus();
+          status.textContent = `${name}: позиция ${rows().indexOf(row) + 1} из ${ordered.length}. Порядок изменён в черновике. Сохраните и примените изменения.`;
+          row.dispatchEvent(new Event('change', { bubbles: true }));
+        } catch {
+          status.textContent = `Не удалось изменить порядок правила «${name}». Повторите действие.`;
+        }
+      });
+      controls.append(button);
+    }
+    actions?.append(controls);
+  }
+  update();
+  // Native drag/drop remains an optional input path and moves existing rows.
+  const observer = new MutationObserver(update);
+  const body = root.querySelector('tbody');
+  if (body) observer.observe(body, { childList: true });
+}

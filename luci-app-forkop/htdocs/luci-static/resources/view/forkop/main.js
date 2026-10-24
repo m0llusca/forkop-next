@@ -858,13 +858,21 @@ function getProxyUrlName(url) {
 
 // src/forkop/next/styles.ts
 var nextStyles = `
+.fkp-next-overview>.fkp-next-heading:empty{display:none}
+.fkp-next-overview[data-workspace=true] .fkp-next-service,.fkp-next-overview[data-workspace=true] .fkp-next-connection{display:none}
+.fkp-next-overview[data-workspace=true] .fkp-next-status-block:has(>.fkp-next-notice:empty):not(:has(button)){display:none}
+.fkp-next-overview .fkp-next-content{grid-template-columns:minmax(0,1fr)}
+.fkp-next-overview .fkp-next-probe>summary{min-height:44px;cursor:pointer;font-weight:650;padding:10px 0;color:var(--next-accent);overflow-wrap:anywhere}
+.fkp-next-overview .fkp-next-probe>label{margin-top:12px}
+.fkp-next-overview .fkp-next-probe>summary:focus-visible{outline:2px solid var(--next-accent);outline-offset:3px}
+.fkp-next-overview .fkp-next-primary>h3{margin-bottom:8px}
 .fkp-next-heading{display:flex;align-items:center;justify-content:flex-end;gap:16px;flex-wrap:wrap;margin-bottom:24px}.fkp-next-heading>div{flex:1;min-width:200px}.fkp-next-heading>div>p{color:var(--next-muted)}.fkp-next-heading label{display:flex;flex-direction:column;gap:6px;font-size:14px;color:var(--next-muted)}
 .fkp-next-overview .fkp-next-content{align-items:start;gap:32px}.fkp-next-overview .fkp-next-content>section{min-width:0}.fkp-next.fkp-next-overview h3{font-size:16px;line-height:1.4;color:var(--next-muted);margin:0 0 16px}.fkp-next-overview .fkp-next-service{font-size:22px;line-height:1.3;font-weight:650;margin:0 0 12px;letter-spacing:-.02em}.fkp-next-overview .fkp-next-connection{font-size:14px;line-height:1.6;margin-bottom:16px}.fkp-next-overview .fkp-next-selected-name{font-size:24px;line-height:1.35;font-weight:650;letter-spacing:-.025em;overflow-wrap:anywhere}.fkp-next-overview .fkp-next-probe{margin-top:16px}.fkp-next-probe label{display:flex;flex-direction:column;gap:8px;color:var(--next-muted);font-size:13px;font-weight:550;max-width:34ch}.fkp-next-probe input{margin:0}.fkp-next-probe .fkp-next-help{font-size:12px;line-height:1.6;margin:12px 0 0}.fkp-next .fkp-next-primary-action,.fkp-workspace .fkp-next .fkp-next-primary-action{background:var(--next-accent);border-color:var(--next-accent);color:var(--next-bg)}.fkp-next .fkp-next-primary-action:hover,.fkp-workspace .fkp-next .fkp-next-primary-action:hover{background:var(--next-accent);filter:brightness(.93)}
 .fkp-workspace [data-tab=next]>h3{display:none}
 .fkp-next-metrics{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:24px;margin:0 0 16px;padding:0;font-variant-numeric:tabular-nums}.fkp-next-metrics>div{min-width:0}.fkp-next-metrics dt{font-size:12px;line-height:1.5;font-weight:500;color:var(--next-muted);margin:0 0 8px}.fkp-next-metrics dd{font-size:18px;line-height:1.5;font-weight:600;color:var(--next-fg);margin:0;overflow-wrap:anywhere}.fkp-next-traffic .fkp-next-traffic-status{font-size:12px;margin:0}.fkp-next-overview .fkp-next-route+.fkp-next-route{margin-top:16px;padding-top:16px;border-top:1px solid var(--next-line)}.fkp-next-routes{margin-top:32px}.fkp-next-routes .fkp-next-route p:first-child{font-weight:550;margin-bottom:4px}.fkp-next-routes .fkp-next-help{font-size:12px}.fkp-next-routes>div{margin-bottom:12px}.fkp-next{scrollbar-color:var(--next-line) var(--next-bg)}.fkp-next a{text-underline-offset:3px}.fkp-next-overview .fkp-next-heading:has(>button:only-child){margin-top:-8px;margin-bottom:16px}
 .fkp-workspace .fkp_dashboard-page__outbound-grid__item .fkp_dashboard-page__outbound-grid__item__select{width:100%;margin:16px 0 0;min-height:42px;background:transparent;color:var(--next-accent);border:1px solid var(--next-line);font-size:13px;text-align:center}.fkp-workspace .fkp_dashboard-page__outbound-grid__item .fkp_dashboard-page__outbound-grid__item__select:disabled{color:var(--next-muted);opacity:1;cursor:default}.fkp-workspace .fkp_dashboard-page__outbound-grid__item .fkp_dashboard-page__outbound-grid__item__select:not(:disabled):hover{background:var(--fkp-hover);border-color:var(--next-accent)}.fkp-workspace .fkp_dashboard-page__widgets-section{margin-top:24px}
 @media(max-width:900px){.fkp-next-metrics{gap:16px;grid-template-columns:repeat(3,minmax(0,1fr))}}
-@media(max-width:720px){.fkp-next-heading{gap:8px;margin-bottom:24px}.fkp-next-heading>div{flex-basis:100%}.fkp-next-heading label{flex:1}.fkp-next-overview .fkp-next-content{gap:32px}.fkp-next-primary{padding-top:24px;border-top:1px solid var(--next-line)}.fkp-next-metrics{grid-template-columns:repeat(2,minmax(0,1fr));gap:24px 16px}.fkp-next-metrics dd{font-size:18px}.fkp-next-overview .fkp-next-selected-name{font-size:22px}.fkp-next-probe label{max-width:none}}
+@media(max-width:720px){.fkp-next-heading{gap:8px;margin-bottom:24px}.fkp-next-heading>div{flex-basis:100%}.fkp-next-heading label{flex:1}.fkp-next-overview .fkp-next-content{gap:16px}.fkp-next-metrics{grid-template-columns:repeat(2,minmax(0,1fr));gap:24px 16px}.fkp-next-metrics dd{font-size:18px}.fkp-next-overview .fkp-next-selected-name{font-size:22px}.fkp-next-probe label{max-width:none}}
 .fkp-next-overview>.fkp-next-service{font-size:22px;font-weight:650;line-height:1.3;margin:24px 0 8px}.fkp-next-connection{font-variant-numeric:tabular-nums;overflow-wrap:anywhere}.fkp-next-traffic{margin-top:32px}.fkp-next details{min-width:0}.fkp-next summary{cursor:pointer;padding:14px 4px;min-height:48px;font-weight:600;overflow-wrap:anywhere}.fkp-next details>summary:hover{color:var(--next-accent)}.fkp-next-advanced{margin-top:32px;border-top:1px solid var(--next-line)}.fkp-next-advanced-content{padding-top:24px}.fkp-next-advanced-content>.fkp-next-content{display:block}.fkp-next-disclosure{border-top:1px solid var(--next-line);padding-bottom:8px}.fkp-next-disclosure>.fkp-next-panel{border:0;padding:8px 0 24px}.fkp-next-overview .fkp-next-advanced-content .fkp-next-tools{padding:16px 0}.fkp-next summary::marker{color:var(--next-muted)}
 .fkp-next{--next-bg:#f6f7f8;--next-fg:#17252d;--next-muted:#455863;--next-line:#ced7dc;--next-accent:#14635e;--next-field:#fff;color:var(--next-fg);background:var(--next-bg);padding:24px;border-radius:12px;font-family:inherit;line-height:1.5;accent-color:var(--next-accent);color-scheme:light}
 .fkp-next[data-theme=dark]{--next-bg:#16232b;--next-fg:#eef4f6;--next-muted:#b8c8d0;--next-line:#455963;--next-accent:#8bd6c8;--next-field:#21333e;color-scheme:dark}
@@ -919,6 +927,14 @@ var workspaceStyles = `
 .fkp-workspace-sidebar {min-width:0;padding:24px 12px;align-self:start;position:sticky;top:16px}
 .fkp-workspace-brand {font-size:22px;line-height:1.25;letter-spacing:-.025em;font-weight:700;padding:0 12px;margin-bottom:32px}
 .fkp-workspace-primary {display:flex;flex-direction:column;gap:8px}
+.fkp-workspace .fkp-workspace-mobile-menu {display:none}
+.fkp-workspace .fkp-workspace-preferences {margin-bottom:24px;padding:16px 0;border-bottom:1px solid var(--next-line)}
+.fkp-workspace .fkp-workspace-preferences h3 {font-size:16px;margin:0 0 12px}
+.fkp-workspace .fkp-workspace-preferences[hidden] {display:none}
+.fkp-workspace .fkp-rule-order {display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.fkp-workspace .fkp-rule-order button {min-height:44px;min-width:44px;white-space:normal;overflow-wrap:anywhere}
+.fkp-workspace .fkp-rule-order-status {font-size:13px;overflow-wrap:anywhere;margin:12px 0 0}
+.fkp-workspace .fkp-rule-order-status:empty {margin:0}
 .fkp-workspace-main {min-width:0;border-left:1px solid var(--next-line);padding:24px 32px 32px}
 .fkp-workspace-top {display:flex;align-items:flex-start;justify-content:space-between;gap:24px;padding-bottom:24px;border-bottom:1px solid var(--next-line);margin-bottom:24px}
 .fkp-workspace-status {display:flex;flex-direction:column;gap:4px;min-width:0}
@@ -979,6 +995,7 @@ var workspaceStyles = `
 .fkp-workspace textarea,.fkp-workspace-modal textarea {min-height:112px;width:100%;resize:vertical;font-variant-numeric:tabular-nums}
 .fkp-workspace input::placeholder,.fkp-workspace textarea::placeholder,.fkp-workspace-modal input::placeholder,.fkp-workspace-modal textarea::placeholder {color:var(--next-muted);opacity:1}
 .fkp-workspace input[type=checkbox],.fkp-workspace input[type=radio],.fkp-workspace-modal input[type=checkbox],.fkp-workspace-modal input[type=radio] {width:20px;height:20px;min-height:20px;margin:11px 8px 11px 0;vertical-align:middle;accent-color:var(--next-accent)}
+.fkp-workspace #cbi-forkop-section tr[data-sid] input[type=checkbox] {width:24px;height:24px;min-height:24px}
 .fkp-workspace .cbi-checkbox,.fkp-workspace-modal .cbi-checkbox {min-height:42px;display:inline-flex;align-items:center}
 .fkp-workspace button,.fkp-workspace .cbi-button,.fkp-workspace input[type=button],.fkp-workspace input[type=submit],
 .fkp-workspace-modal button,.fkp-workspace-modal .cbi-button,.fkp-workspace-modal input[type=button],.fkp-workspace-modal input[type=submit] {
@@ -1075,10 +1092,14 @@ var workspaceStyles = `
   .fkp-workspace {display:block;border-radius:8px;margin:16px 0}
   .fkp-workspace-sidebar {position:static;padding:16px 16px 12px;border-bottom:1px solid var(--next-line)}
   .fkp-workspace-brand {font-size:20px;padding:0;margin-bottom:12px}
-  .fkp-workspace-primary {flex-direction:row;overflow-x:auto;gap:4px;padding:4px;scrollbar-width:thin}
+  .fkp-workspace-primary {display:none}
+  .fkp-workspace .fkp-workspace-mobile-menu {display:flex;align-items:center;gap:12px;margin:0;min-width:0}
+  .fkp-workspace .fkp-workspace-mobile-menu select {flex:1;min-width:0;width:100%;max-width:100%;min-height:44px}
+  .fkp-workspace-local {flex-wrap:wrap;overflow:visible}
+  .fkp-workspace .fkp-workspace-local-button {white-space:normal;overflow-wrap:anywhere;max-width:100%}
   .fkp-workspace .fkp-workspace-nav-button {flex-shrink:0;min-height:44px}
-  .fkp-workspace-main {padding:24px 16px;border:0}
-  .fkp-workspace-top {margin-bottom:24px;padding-bottom:16px}
+  .fkp-workspace-main {padding:16px;border:0}
+  .fkp-workspace-top {margin-bottom:16px;padding-bottom:12px}
   .fkp-workspace .fkp-workspace-title {font-size:26px}
   .fkp-workspace .cbi-value,.fkp-workspace-modal .cbi-value {display:block;padding:12px 0}
   .fkp-workspace .cbi-value > label.cbi-value-title,.fkp-workspace-modal .cbi-value > label.cbi-value-title {display:block;width:100%;text-align:left;padding:0;margin:0 0 8px}
@@ -16689,7 +16710,7 @@ function renderNextPanel(request = nextRequest, loadConnections, adapters = {}) 
   const notice = el2("p", "", "fkp-next-notice");
   notice.setAttribute("role", "status");
   const status = el2("section", "", "fkp-next-status-block");
-  status.append(el2("h3", "\u0414\u043E\u0441\u0442\u0443\u043F \u0432 \u0441\u0435\u0442\u044C"), service, connection, notice);
+  status.append(service, connection, notice);
   let probeRevision = 0;
   let hasProbe = false;
   function invalidateProbe() {
@@ -16703,7 +16724,6 @@ function renderNextPanel(request = nextRequest, loadConnections, adapters = {}) 
   const serviceControl = el2("button", "\u0412\u043A\u043B\u044E\u0447\u0438\u0442\u044C \u0441\u0435\u0440\u0432\u0438\u0441");
   serviceControl.type = "button";
   serviceControl.disabled = true;
-  if (adapters.changeService) status.append(serviceControl);
   function updateServiceControl() {
     serviceControl.textContent = runtime?.running === true ? "\u041E\u0442\u043A\u043B\u044E\u0447\u0438\u0442\u044C \u0441\u0435\u0440\u0432\u0438\u0441" : "\u0412\u043A\u043B\u044E\u0447\u0438\u0442\u044C \u0441\u0435\u0440\u0432\u0438\u0441";
     serviceControl.disabled = servicePending || runtime?.pending === true || typeof runtime?.running !== "boolean" || Boolean(runtime?.error);
@@ -16797,7 +16817,8 @@ function renderNextPanel(request = nextRequest, loadConnections, adapters = {}) 
     "fkp-next-help"
   );
   server.append(addConnection, setupHelp);
-  const check = el2("div", "", "fkp-next-probe");
+  const check = el2("details", "", "fkp-next-probe");
+  check.append(el2("summary", "\u041F\u0440\u043E\u0432\u0435\u0440\u0438\u0442\u044C \u0441\u043E\u0435\u0434\u0438\u043D\u0435\u043D\u0438\u0435"));
   const domainLabel = el2("label", "\u0421\u0430\u0439\u0442 \u0434\u043B\u044F \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0438");
   const domain = el2("input");
   domain.name = "connection_domain";
@@ -16813,6 +16834,7 @@ function renderNextPanel(request = nextRequest, loadConnections, adapters = {}) 
       domain.setAttribute("aria-invalid", "true");
       connection.dataset.state = "error";
       connection.textContent = "\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u0434\u043E\u043C\u0435\u043D \u0441\u0430\u0439\u0442\u0430, \u043D\u0430\u043F\u0440\u0438\u043C\u0435\u0440 example.org, \u0431\u0435\u0437 https:// \u0438 \u043F\u0443\u0442\u0438.";
+      check.open = true;
       domain.focus();
       return;
     }
@@ -16852,10 +16874,10 @@ function renderNextPanel(request = nextRequest, loadConnections, adapters = {}) 
       "fkp-next-help"
     )
   );
-  status.append(check);
   const everyday = el2("div", "", "fkp-next-content");
   everyday.append(status, server);
-  root.append(everyday);
+  root.append(everyday, check);
+  if (adapters.changeService) root.append(serviceControl);
   const traffic = el2("section", "", "fkp-next-panel fkp-next-traffic");
   const trafficOutput = el2("div");
   traffic.append(el2("h3", "\u0422\u0440\u0430\u0444\u0438\u043A"), trafficOutput);
@@ -17002,7 +17024,9 @@ function renderNextPanel(request = nextRequest, loadConnections, adapters = {}) 
       );
     await Promise.all(tasks);
   }
-  header.append(action("\u041E\u0431\u043D\u043E\u0432\u0438\u0442\u044C \u0434\u0430\u043D\u043D\u044B\u0435", refresh));
+  const refreshControl = action("\u041E\u0431\u043D\u043E\u0432\u0438\u0442\u044C \u0434\u0430\u043D\u043D\u044B\u0435", refresh);
+  if (adapters.workspace) root.append(refreshControl);
+  else header.append(refreshControl);
   function configurationChanged() {
     invalidateProbe();
     generation++;
@@ -17342,7 +17366,11 @@ function mountForkopWorkspace(root) {
   const brand = el3("div", "fkp-workspace-brand", "Forkop");
   const primary = el3("nav", "fkp-workspace-primary");
   primary.setAttribute("aria-label", "\u0420\u0430\u0437\u0434\u0435\u043B\u044B Forkop");
-  sidebar.append(brand, primary);
+  const mobileLabel = el3("label", "fkp-workspace-mobile-menu", "\u0420\u0430\u0437\u0434\u0435\u043B");
+  const mobileMenu = el3("select", "");
+  mobileMenu.setAttribute("aria-label", "\u0420\u0430\u0437\u0434\u0435\u043B Forkop");
+  mobileLabel.append(mobileMenu);
+  sidebar.append(brand, mobileLabel, primary);
   const main = el3("div", "fkp-workspace-main");
   const top = el3("div", "fkp-workspace-top");
   const status = el3("div", "fkp-workspace-status");
@@ -17373,13 +17401,16 @@ function mountForkopWorkspace(root) {
   }
   theme.value = previousTheme || "auto";
   themeLabel.append(theme);
-  top.append(status, themeLabel);
+  top.append(status);
+  const preferences = el3("section", "fkp-workspace-preferences");
+  preferences.dataset.workspacePreferences = "";
+  preferences.append(el3("h3", "", "\u041F\u0440\u0435\u0434\u043F\u043E\u0447\u0442\u0435\u043D\u0438\u044F"), themeLabel);
   const heading = el3("h2", "fkp-workspace-title");
   const description = el3("p", "fkp-workspace-description");
   const secondary = el3("div", "fkp-workspace-secondary");
   const content = el3("div", "fkp-workspace-content");
   content.append(...originalContent);
-  main.append(top, heading, description, secondary, content);
+  main.append(top, heading, description, secondary, preferences, content);
   root.append(sidebar, main);
   let disposed = false;
   let wasConnected = root.isConnected;
@@ -17472,10 +17503,12 @@ function mountForkopWorkspace(root) {
     const active = panes.querySelector(':scope > [data-tab-active="true"]')?.dataset.tab || menu.querySelector(".cbi-tab:not(.cbi-tab-disabled)")?.dataset.tab || "";
     setText(description, pageHelp[active] || "");
     description.hidden = !description.textContent;
+    preferences.hidden = active !== "settings";
     const signature = [...tabs.keys()].join(",");
     if (signature !== navigationSignature) {
       navigationSignature = signature;
       primary.replaceChildren();
+      mobileMenu.replaceChildren();
       secondary.replaceChildren();
       for (const group of groups) {
         const pages = group.pages.filter(([id]) => tabs.has(id));
@@ -17484,6 +17517,9 @@ function mountForkopWorkspace(root) {
         button.type = "button";
         button.dataset.workspaceSection = group.id;
         primary.append(button);
+        const option = el3("option", "", group.label);
+        option.value = group.id;
+        mobileMenu.append(option);
         const local = el3("nav", "fkp-workspace-local");
         local.setAttribute("aria-label", `${group.label}: \u0441\u0442\u0440\u0430\u043D\u0438\u0446\u044B`);
         local.dataset.workspaceGroup = group.id;
@@ -17512,6 +17548,20 @@ function mountForkopWorkspace(root) {
         ).join("; "),
         group.label
       );
+      const mobileOption = [...mobileMenu.options].find(
+        (option) => option.value === group.id
+      );
+      if (mobileOption) {
+        const count = invalidPages.reduce(
+          (total, page) => total + page.count,
+          0
+        );
+        setText(
+          mobileOption,
+          count ? `${group.label} \u2014 \u043E\u0448\u0438\u0431\u043A\u0438: ${count}` : group.label
+        );
+      }
+      if (current) mobileMenu.value = group.id;
       const local = secondary.querySelector(
         `[data-workspace-group="${group.id}"]`
       );
@@ -17562,6 +17612,14 @@ function mountForkopWorkspace(root) {
   }
   primary.addEventListener("click", navigate);
   secondary.addEventListener("click", navigate);
+  function navigateMobile() {
+    const group = groups.find((item) => item.id === mobileMenu.value);
+    const tabs = availableTabs();
+    const id = group?.pages.find(([page]) => tabs.has(page))?.[0];
+    if (id) tabs.get(id)?.click();
+    sync();
+  }
+  mobileMenu.addEventListener("change", navigateMobile);
   theme.addEventListener("change", applyTheme);
   const unsubscribeService = store.subscribe((_next, _previous, diff) => {
     if (diff.servicesInfoWidget) sync();
@@ -17630,6 +17688,7 @@ function mountForkopWorkspace(root) {
     unsubscribeService();
     primary.removeEventListener("click", navigate);
     secondary.removeEventListener("click", navigate);
+    mobileMenu.removeEventListener("change", navigateMobile);
     theme.removeEventListener("change", applyTheme);
     media?.removeEventListener("change", applyTheme);
     for (const modal of markedModals) {
@@ -17891,6 +17950,69 @@ function renderRuleRoute(value) {
   );
   return root;
 }
+function configureRuleOrder(root, move) {
+  const status = textNode("p", "fkp-rule-order-status", "");
+  status.setAttribute("role", "status");
+  status.setAttribute("aria-live", "polite");
+  root.append(status);
+  const rows = () => [
+    ...root.querySelectorAll("tr.cbi-section-table-row[data-sid]")
+  ];
+  function update() {
+    const ordered = rows();
+    ordered.forEach((row, index) => {
+      row.querySelector("[data-rule-order=up]").disabled = index === 0;
+      row.querySelector("[data-rule-order=down]").disabled = index === ordered.length - 1;
+    });
+  }
+  for (const row of rows()) {
+    const name = row.querySelector(".fkp-rule-name")?.textContent || row.dataset.sid;
+    row.querySelector("input[type=checkbox]")?.setAttribute("aria-label", `\u0412\u043A\u043B\u044E\u0447\u0438\u0442\u044C \u043F\u0440\u0430\u0432\u0438\u043B\u043E ${name}`);
+    const actions = row.querySelector(".cbi-section-actions");
+    const controls = textNode("div", "fkp-rule-order", "");
+    for (const [direction, label] of [
+      ["up", "\u0412\u044B\u0448\u0435"],
+      ["down", "\u041D\u0438\u0436\u0435"]
+    ]) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.dataset.ruleOrder = direction;
+      button.textContent = label;
+      button.setAttribute("aria-label", `${label}: ${name}`);
+      button.addEventListener("click", () => {
+        const ordered = rows();
+        const index = ordered.indexOf(row);
+        const after = direction === "down";
+        const reference = ordered[index + (after ? 1 : -1)];
+        if (!reference) return;
+        try {
+          if (!move(row.dataset.sid, reference.dataset.sid, after))
+            throw new Error("move_rejected");
+          row.parentElement.insertBefore(
+            row,
+            after ? reference.nextSibling : reference
+          );
+          update();
+          if (button.disabled)
+            row.querySelector(
+              `[data-rule-order=${after ? "up" : "down"}]`
+            )?.focus();
+          else button.focus();
+          status.textContent = `${name}: \u043F\u043E\u0437\u0438\u0446\u0438\u044F ${rows().indexOf(row) + 1} \u0438\u0437 ${ordered.length}. \u041F\u043E\u0440\u044F\u0434\u043E\u043A \u0438\u0437\u043C\u0435\u043D\u0451\u043D \u0432 \u0447\u0435\u0440\u043D\u043E\u0432\u0438\u043A\u0435. \u0421\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u0435 \u0438 \u043F\u0440\u0438\u043C\u0435\u043D\u0438\u0442\u0435 \u0438\u0437\u043C\u0435\u043D\u0435\u043D\u0438\u044F.`;
+          row.dispatchEvent(new Event("change", { bubbles: true }));
+        } catch {
+          status.textContent = `\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0438\u0437\u043C\u0435\u043D\u0438\u0442\u044C \u043F\u043E\u0440\u044F\u0434\u043E\u043A \u043F\u0440\u0430\u0432\u0438\u043B\u0430 \xAB${name}\xBB. \u041F\u043E\u0432\u0442\u043E\u0440\u0438\u0442\u0435 \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u0435.`;
+        }
+      });
+      controls.append(button);
+    }
+    actions?.append(controls);
+  }
+  update();
+  const observer = new MutationObserver(update);
+  const body = root.querySelector("tbody");
+  if (body) observer.observe(body, { childList: true });
+}
 
 // src/forkop/next/configReload.ts
 var registered = /* @__PURE__ */ new WeakMap();
@@ -17934,6 +18056,7 @@ return baseclass.extend({
   applyUiStateToStore,
   bulkValidate,
   configureNamedSectionCreation,
+  configureRuleOrder,
   configureRuleWorkflow,
   coreService,
   disposeWorkspaceTools,

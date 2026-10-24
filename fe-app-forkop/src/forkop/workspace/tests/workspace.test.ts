@@ -68,6 +68,62 @@ const primary = (root: HTMLElement, id: string) =>
 const page = (root: HTMLElement, id: string) =>
   root.querySelector<HTMLButtonElement>(`[data-workspace-tab="${id}"]`)!;
 
+it('offers all six destinations in one menu and synchronizes native activation without replacing drafts', async () => {
+  const { root, menu } = nativeMap([
+    'next',
+    'dashboard',
+    'section',
+    'devices',
+    'diagnostic',
+    'settings',
+  ]);
+  mountForkopWorkspace(root);
+  const select = root.querySelector<HTMLSelectElement>(
+    '[aria-label="Раздел Forkop"]',
+  );
+  expect(select).not.toBeNull();
+  expect([...select!.options].map((o) => o.textContent)).toEqual([
+    'Главная',
+    'Серверы',
+    'Правила',
+    'Устройства',
+    'Диагностика',
+    'Настройки',
+  ]);
+  const draft = root.querySelector<HTMLInputElement>('[name=section]')!;
+  draft.value = 'несохранённое правило';
+  select!.value = 'rules';
+  select!.dispatchEvent(new Event('change'));
+  expect(
+    root.querySelector('[data-tab=section][data-tab-active=true]'),
+  ).not.toBeNull();
+  menu.querySelector<HTMLAnchorElement>('[data-tab=settings] a')!.click();
+  await flush();
+  expect(select!.value).toBe('settings');
+  expect(draft.value).toBe('несохранённое правило');
+  expect(root.querySelector('[name=section]')).toBe(draft);
+});
+
+it('shows theme preferences only under settings and outside native editable panes', () => {
+  const { root } = nativeMap();
+  mountForkopWorkspace(root);
+  const theme = root.querySelector<HTMLSelectElement>(
+    '[aria-label="Тема Forkop"]',
+  )!;
+  expect(theme.closest('[data-workspace-preferences]')).not.toBeNull();
+  expect(
+    theme.closest('[data-workspace-preferences]')!.hasAttribute('hidden'),
+  ).toBe(true);
+  primary(root, 'settings').click();
+  expect(
+    theme.closest('[data-workspace-preferences]')!.hasAttribute('hidden'),
+  ).toBe(false);
+  expect(theme.closest('.cbi-section[data-tab]')).toBeNull();
+  theme.value = 'dark';
+  theme.dispatchEvent(new Event('change', { bubbles: true }));
+  expect(root.dataset.theme).toBe('dark');
+});
+
 it('explains the task of each destination without changing native tabs or field drafts', () => {
   const { root } = nativeMap();
   mountForkopWorkspace(root);
