@@ -59,3 +59,25 @@ phase of **58 ms**. These are build measurements, not router loading claims.
 Generated `main.js` remains uncommitted for the controller's final consolidated
 build. Browser/device visual acceptance and router deployment were not performed
 by this task.
+
+## Accepted review fix round 1: invalidate displayed traffic on stop
+
+Independent review identified that `stop()` reset the epoch and rate baseline
+while leaving five readings visibly current during a deferred replacement read.
+Added one monitor regression and two renderer cases (configuration invalidation
+and suspension/resume). Ran the focused tests before the fix and observed
+exactly three failures, each retaining `1 КиБ/с`, `2 КиБ`/`1 КиБ` and three
+connections instead of unknown readings.
+
+`stop()` now clears all five readings synchronously and announces that traffic
+awaits an update. A fresh read with no baseline announces loading; existing
+failure text remains the failure state. Obsolete pending samples still fail the
+epoch guard and cannot restore old readings. The first new sample establishes a
+baseline with unknown rates; only a second fresh sample supplies rates.
+
+Focused GREEN: **33/33** across traffic, connection-home and overview-review
+tests. Final full GREEN: **685/685 across 64 files**. TypeScript, ESLint with zero
+warnings, all-src Prettier, whitespace, production build and executed native
+bundle checks passed. Build output: **555.97 KB**, build phase **59 ms**.
+Generated bundle remains uncommitted for final consolidation. No browser/router
+operations or additional scope.

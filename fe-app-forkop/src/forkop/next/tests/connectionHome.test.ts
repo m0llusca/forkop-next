@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, expect, it, vi } from 'vitest';
 import { renderNextPanel, type OverviewRuntime } from '../render';
-import { createTrafficMonitor } from '../traffic';
+import { createTrafficMonitor, type OverviewTraffic } from '../traffic';
 import type { ConnectionLoader } from '../advanced';
 
 const tick = async () => {
@@ -241,5 +241,61 @@ it.each(['navigation', 'runtime', 'route', 'configuration'])(
     expect(
       panel.querySelector('.fkp-next-connection')!.textContent,
     ).not.toContain('Есть сетевой ответ');
+  },
+);
+
+it.each(['configuration', 'suspension'])(
+  'clears every metric after %s while replacement telemetry is unresolved',
+  async (reset) => {
+    const clock = vi.spyOn(performance, 'now').mockReturnValue(1000);
+    let sample = { downloadTotal: 1024, uploadTotal: 0, connections: 1 };
+    let defer = false;
+    let finish!: (value: OverviewTraffic) => void;
+    const panel = renderNextPanel(undefined, undefined, {
+      readTraffic: () =>
+        defer
+          ? new Promise<OverviewTraffic>((resolve) => {
+              finish = resolve;
+            })
+          : Promise.resolve(sample),
+    });
+    document.body.append(panel);
+    await settle();
+    clock.mockReturnValue(2000);
+    sample = { downloadTotal: 2048, uploadTotal: 1024, connections: 3 };
+    button(panel, 'Обновить данные').click();
+    await tick();
+    expect(metric(panel, 'download-rate')).toBe('1 КиБ/с');
+    expect(metric(panel, 'connections')).toBe('3');
+    defer = true;
+    if (reset === 'configuration')
+      window.dispatchEvent(new CustomEvent('forkop:configuration-changed'));
+    else {
+      panel.hidden = true;
+      await settle();
+      panel.hidden = false;
+      await settle();
+    }
+    expect(
+      [...panel.querySelectorAll('[data-metric]')].map(
+        (node) => node.textContent,
+      ),
+    ).toEqual(['—', '—', '—', '—', '—']);
+    expect(panel.querySelector('.fkp-next-traffic-status')?.textContent).toBe(
+      'Обновляем трафик…',
+    );
+    clock.mockReturnValue(5000);
+    finish({ downloadTotal: 4096, uploadTotal: 2048, connections: 2 });
+    await tick();
+    expect(metric(panel, 'download-total')).toBe('4 КиБ');
+    expect(metric(panel, 'connections')).toBe('2');
+    expect(metric(panel, 'download-rate')).toBe('—');
+    expect(metric(panel, 'upload-rate')).toBe('—');
+    defer = false;
+    clock.mockReturnValue(6000);
+    sample = { downloadTotal: 5120, uploadTotal: 3072, connections: 1 };
+    button(panel, 'Обновить данные').click();
+    await tick();
+    expect(metric(panel, 'download-rate')).toBe('1 КиБ/с');
   },
 );

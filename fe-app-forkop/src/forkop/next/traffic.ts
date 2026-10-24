@@ -71,12 +71,15 @@ export function createTrafficMonitor(
     clearTimeout(timer);
     timer = undefined;
     previous = undefined;
+    readings();
+    status.textContent = 'Трафик ожидает обновления.';
   }
   async function refresh() {
     if (!read || !visible() || pending) return;
     clearTimeout(timer);
     timer = undefined;
     pending = true;
+    if (!previous) status.textContent = 'Обновляем трафик…';
     const current = epoch;
     try {
       const sample = await read();
