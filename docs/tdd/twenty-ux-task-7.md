@@ -160,28 +160,47 @@ device/game limits; **B4** `439f927` mobile layout and keyboard order/focus.
 No private endpoints, installed-core facts or deployment evidence are included.
 Every row still requires the final generated-bundle browser pass where marked.
 
-| Item                             | Behavioral evidence                                                                                                                     | Manual evidence and remaining acceptance                                                                                                                                                  |
-| -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| F01 — result context             | `next/trustEvidence.test.ts`, `connectionHome.test.ts`, `compatibility.test.ts`; [Task 1](twenty-ux-task-1.md)                          | Tests cover target changes and A/B response order. Final browser confirmation pending.                                                                                                    |
-| F02 — draft/save/apply           | `next/nativeShellLoading.test.ts`, `configReload.test.ts`; real captured Map/Value/UCI contracts; Tasks 1/7                             | B1 retained checkbox draft through Devices and blocked mutation. Stage A covers Reset with cached reorder. Final bundle pass pending.                                                     |
-| F03 — interrupted recovery       | `next/trustEvidence.test.ts`, `nativeShellLoading.test.ts`; `test_next_profiles.py`, `test_native_lifecycle.py`                         | Recovery has separate success/failure and retained result tests. Final browser pending; real interrupted-router recovery is separate.                                                     |
-| F04 — direct connection creation | `next/directNative.test.ts`, `workspace/namedCreation.test.ts`; [Task 3](twenty-ux-task-3.md)                                           | B3 opened the named editor at subscription input with all six sources. Final save/return-to-group browser pass pending.                                                                   |
-| F05 — add site                   | `next/directNative.test.ts`, `workspace/rules.test.ts`; Task 3                                                                          | B3 normalized a synthetic URL, appended the domain and retained existing conditions. Final browser pending.                                                                               |
-| F06 — device policies            | `next/directTools.test.ts`; `test_next_policies.py`, `test_policy_generator.py`                                                         | B3 rejected IPv6 locally with actionable wording. Final assignment/reset/inherit browser path pending.                                                                                    |
-| F07 — masking failure            | `tabs/diagnostic/tests/maskDiagnostics.test.ts`, `partials/modal/tests/renderModal.test.ts`; [Task 2](twenty-ux-task-2.md)              | B2 showed masking failure, no synthetic secret in DOM text and disabled Copy/Download. Final Russian catalog/raw-view pass pending.                                                       |
-| F08 — precise route question     | `next/diagnosisImpact.test.ts`; `test_route_explain.py`, `test_probe.py`; [Task 6](twenty-ux-task-6.md)                                 | UDP/443, TCP/8443, basis, unknown conditions and exact rule navigation tested. Final browser pending.                                                                                     |
-| F09 — eligible targets           | `next/workflows.test.ts`, `directTools.test.ts`; Task 3 review fixes                                                                    | Mixed actions/proxy availability, disabled reasons and exact setup destinations tested. Final browser pending.                                                                            |
-| F10 — current reads win          | `next/directTools.test.ts`, `tools.refresh.test.ts`, `compatibilityRefresh.test.ts`; Task 3                                             | Out-of-order replies and retained successful data after refresh failure tested. Final error/retry browser states pending.                                                                 |
-| F11 — truthful feedback          | `helpers/tests/feedback.test.ts`, modal/compatibility tests; Tasks 2/7                                                                  | B2/B3 cover visible local errors. Repeated global clipboard failure and manual focus/selection are automated. Final browser pending.                                                      |
-| F12 — numeric contract           | `next/numericSettings.test.ts`; Task 2                                                                                                  | Integer syntax, bounds, units and zero behavior tested against native validators. Final localized validation browser pass pending.                                                        |
-| F13 — bounded fresh telemetry    | `partials/modal/tests/renderModal.test.ts`, `next/traffic.test.ts`, `connectionHome.test.ts`; Task 2                                    | Hidden/closed pause, no overlap, retained text/selection, unknown/reset counters tested. Final browser pending; router performance is unmeasured.                                         |
-| F14 — mobile hierarchy           | `workspace/workspace.test.ts`, `visualSystem.test.ts`, `next/overview.test.ts`, `connectionHome.test.ts`; [Task 4](twenty-ux-task-4.md) | B4: 320/390/430 widths had no horizontal overflow; all six destinations and first-screen Home action accessible. Final desktop/light/dark/200%-zoom/long-error pass pending.              |
-| F15 — rule accessibility         | `workspace/rules.test.ts`; captured native table/UCI move; Task 4 fix                                                                   | B4: Enter moved a non-edge row, retained button focus and draft position feedback. Final keyboard/touch pass pending; screen reader not tested.                                           |
-| F16 — large subscriptions        | `next/largeSubscription.test.ts`; `test_extended_preview.py`; [Task 5](twenty-ux-task-5.md)                                             | Synthetic 200-node search/pinned selection and failed-attempt/last-success evidence tested. Final real-renderer keyboard/search pass pending.                                             |
-| F17 — change impact              | `next/diagnosisImpact.test.ts`, `tabs/updates/tests/componentImpact.test.ts`; `test_component_impact.py`; Task 6                        | Secret-free profile categories/digests, admitted current core evidence and unknown target capabilities tested. Final browser preview/completion pass pending.                             |
-| F18 — authoritative composition  | `next/extendedPreview.test.ts`, `nativeExtendedPreview.test.ts`; `test_extended_preview.py`; Task 5 review fixes                        | Native live Priority order, shared resolver parity, secret labels, filters/fallback and unknown source/core evidence tested. Final native/browser pass and Linux integrated gate pending. |
-| F19 — explicit game scope        | `next/directTools.test.ts`; `test_next_policies.py`; Task 3                                                                             | B3 selected-device scope with empty address showed an error and never expanded to all. Final route/scope browser confirmation pending.                                                    |
-| F20 — symptom-led diagnosis      | `tabs/diagnostic/tests/symptomGuide.test.ts`, `symptomController.test.ts`, `next/diagnosisImpact.test.ts`; Task 6                       | All five entries, bounded DNS/connection/rule/source cases, next step/log access, no navigation probe and stale replies tested. Final browser pending.                                    |
+**B5 — final native checkpoint `bbfc02b`**, using the unchanged `e262c16` bundle:
+root observed the real native renderer at desktop 1280 in light/dark, all six
+source editors, a saved-basis UDP/8443 question and exact winning-rule Conditions
+navigation. Malformed masked JSON exposed no synthetic secret and disabled safe
+exports. A checkbox draft plus keyboard reorder retained focus; Reset restored
+the checkbox while preserving cached order and its correct unsaved strip.
+The untouched Extended main preview showed draft membership without fabricated
+network evidence: two Priority nodes, levels «Основные → Резерв». Nested-child
+preview acceptance is still pending.
+
+The synthetic large subscription contained 200 leaf nodes plus two group rows:
+VLESS search reported `100/202`, Frankfurt `1/202`, and zero matches retained
+the active node. Tested mobile surfaces showed client/scroll widths `305/305`
+at 320, `375/375` at 390 and `415/415` at 430. At 320 all destinations except
+Servers were exercised; the primary Home action remained within the first screen
+(620px even with the pending banner). Actual 200% browser zoom was unavailable:
+the browser shortcut did not change the rendered scale/DPR, so no zoom result is
+claimed. Screen-reader and hardware performance checks remain unmeasured.
+
+| Item                             | Behavioral evidence                                                                                                                               | Manual evidence and remaining acceptance                                                                                                                                                                                                    |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| F01 — result context             | `next/trustEvidence.test.ts`, `connectionHome.test.ts`, `compatibility.test.ts`; [Task 1](twenty-ux-task-1.md)                                    | Tests cover target changes and A/B response order. Final browser confirmation pending.                                                                                                                                                      |
+| F02 — draft/save/apply           | `next/nativeShellLoading.test.ts`, `configReload.test.ts`; real captured Map/Value/UCI contracts; Tasks 1/7                                       | B1 and B5 retained the native draft and blocked unresolved mutation. B5 Reset restored checkbox, retained cached reorder and kept the correct unsaved strip.                                                                                |
+| F03 — interrupted recovery       | `next/trustEvidence.test.ts`, `nativeShellLoading.test.ts`; `test_next_profiles.py`, `test_native_lifecycle.py`                                   | Recovery has separate success/failure and retained result tests. Final browser pending; real interrupted-router recovery is separate.                                                                                                       |
+| F04 — direct connection creation | `next/directNative.test.ts`, `workspace/namedCreation.test.ts`; [Task 3](twenty-ux-task-3.md)                                                     | B3 opened the named editor at subscription input with all six sources. Final save/return-to-group browser pass pending.                                                                                                                     |
+| F05 — add site                   | `next/directNative.test.ts`, `workspace/rules.test.ts`; Task 3                                                                                    | B3 normalized a synthetic URL, appended the domain and retained existing conditions. Final browser pending.                                                                                                                                 |
+| F06 — device policies            | `next/directTools.test.ts`; `test_next_policies.py`, `test_policy_generator.py`                                                                   | B3 rejected IPv6 locally with actionable wording. Final assignment/reset/inherit browser path pending.                                                                                                                                      |
+| F07 — masking failure            | `tabs/diagnostic/tests/maskDiagnostics.test.ts`, `partials/modal/tests/renderModal.test.ts`; [Task 2](twenty-ux-task-2.md)                        | B2 and B5 showed masking failure, no synthetic secret in DOM text and disabled Copy/Download. Raw-view/copy retry details remain covered by behavioral tests.                                                                               |
+| F08 — precise route question     | `next/diagnosisImpact.test.ts`; `test_route_explain.py`, `test_probe.py`; [Task 6](twenty-ux-task-6.md)                                           | B5 asked saved-basis UDP/8443 for a synthetic domain/device, matched main and opened its exact Conditions tab. TCP/8443, unknown conditions and probe separation also have behavioral tests.                                                |
+| F09 — eligible targets           | `next/workflows.test.ts`, `directTools.test.ts`; Task 3 review fixes                                                                              | Mixed actions/proxy availability, disabled reasons and exact setup destinations tested. Final browser pending.                                                                                                                              |
+| F10 — current reads win          | `next/directTools.test.ts`, `tools.refresh.test.ts`, `compatibilityRefresh.test.ts`; Task 3                                                       | Out-of-order replies and retained successful data after refresh failure tested. Final error/retry browser states pending.                                                                                                                   |
+| F11 — truthful feedback          | `helpers/tests/feedback.test.ts`, modal/compatibility tests; Tasks 2/7                                                                            | B2/B3 cover visible local errors. Repeated global clipboard failure and manual focus/selection are automated. Final browser pending.                                                                                                        |
+| F12 — numeric contract           | `next/numericSettings.test.ts`; Task 2                                                                                                            | Integer syntax, bounds, units and zero behavior tested against native validators. Final localized validation browser pass pending.                                                                                                          |
+| F13 — bounded fresh telemetry    | `partials/modal/tests/renderModal.test.ts`, `next/traffic.test.ts`, `connectionHome.test.ts`; Task 2                                              | Hidden/closed pause, no overlap, retained text/selection, unknown/reset counters tested. Final browser pending; router performance is unmeasured.                                                                                           |
+| F14 — mobile hierarchy           | `workspace/workspace.test.ts`, `visualSystem.test.ts`, `next/overview.test.ts`, `connectionHome.test.ts`; [Task 4](twenty-ux-task-4.md)           | B5 desktop 1280 light/dark and tested 320/390/430 surfaces had no overflow; 320 covered all destinations except Servers and kept the Home action visible. Servers at 320 and actual 200% zoom remain unverified.                            |
+| F15 — rule accessibility         | `workspace/rules.test.ts`; captured native table/UCI move; Task 4 fix                                                                             | B4/B5 keyboard move retained button focus and draft feedback. B5 Reset preserved cached reorder with the unsaved strip. Screen reader remains untested.                                                                                     |
+| F16 — large subscriptions        | `next/largeSubscription.test.ts`; `test_extended_preview.py`; [Task 5](twenty-ux-task-5.md)                                                       | B5 searched 200 leaf + 2 group rows: VLESS 100/202, Frankfurt 1/202; zero matches kept active pinned. Source failure/last-success behavior is covered by tests.                                                                             |
+| F17 — change impact              | `next/diagnosisImpact.test.ts`, `tabs/updates/tests/componentImpact.test.ts`; `test_component_impact.py`; Task 6                                  | Secret-free profile categories/digests, admitted current core evidence and unknown target capabilities tested. Final browser preview/completion pass pending.                                                                               |
+| F18 — authoritative composition  | `next/extendedPreview.test.ts`, `nativeExtendedPreview.test.ts`, `nativePreviewDefaults.test.ts`; `test_extended_preview.py`; Task 5 review fixes | B5 untouched main draft preview succeeded with 2 Priority nodes and Основные → Резерв, without a network-success claim. Native baseline/cascade defaults and resolver parity are tested; nested-child browser and final Linux gate pending. |
+| F19 — explicit game scope        | `next/directTools.test.ts`; `test_next_policies.py`; Task 3                                                                                       | B3 selected-device scope with empty address showed an error and never expanded to all. Final route/scope browser confirmation pending.                                                                                                      |
+| F20 — symptom-led diagnosis      | `tabs/diagnostic/tests/symptomGuide.test.ts`, `symptomController.test.ts`, `next/diagnosisImpact.test.ts`; Task 6                                 | All five entries, bounded DNS/connection/rule/source cases, next step/log access, no navigation probe and stale replies tested. Final browser pending.                                                                                      |
 
 ### Complete frontend gate and generated-bundle identity
 
@@ -229,6 +248,40 @@ The bundle commit follows this recorded basis with generated output and evidence
 only. These identities allow root to verify parity after later backend-only
 integration without a duplicate frontend build. A frontend input change would
 require the affected gate again.
+
+### Final native correction verification
+
+Native source basis: `bbfc02b73aff41f050a25a56c5215633f53f9932`.
+Actual native acceptance exposed missing first-load UCI source baselines and an
+inactive cascade select's default first target. The reviewed fix loads the
+baseline after UCI and ignores inactive cascade target text; it preserves later
+dirty source/filter edits. Its RED/GREEN and independent scoped review are in
+[Task 5](twenty-ux-task-5.md). No TypeScript product source, build configuration
+or generated `main.js` changed from the prior frozen bundle.
+
+The native behavior change and two new regression tests justified one fresh full
+Vitest run: **89 files / 912 tests passed**, no skips/failures or unexpected
+ERROR/WARN/stderr. Commands:
+
+```text
+node node_modules/vitest/vitest.mjs run
+node node_modules/prettier/bin/prettier.cjs --check src/forkop/next/tests/nativePreviewDefaults.test.ts '../luci-app-forkop/htdocs/luci-static/resources/view/forkop/*.js' '!../luci-app-forkop/htdocs/luci-static/resources/view/forkop/main.js'
+node scripts/check-luci-bundle.mjs
+```
+
+All passed. Native `node --check` passed for all 11 JavaScript files. The existing
+shipped bundle/native overview executed and rendered successfully again; tsup
+was not repeated because its product inputs were unchanged. The aggregate
+`fe-app-forkop/src` subtree is now `4876ad25d8e62ec46036c37be7143e377d0b7994`
+because of the added tests. The updated authored `section.js` blob is
+`051c5adfea0b64c400a0c9deb236bcdab4b0936d`; generated bundle SHA256/blob remain
+exactly as recorded above. Source/POT reference locations were synchronized after
+the native line shifts: still 761 translated keys, original headers preserved,
+source and packaged catalogs identical.
+
+The native fix's scoped SPEC/QUALITY review approved both findings with none open.
+B5 above records root's actual native browser confirmation. Final integrated
+Linux/backend/package CI and whole-branch completion still need root evidence.
 
 ### Remaining integrated release gate — pending
 

@@ -3501,6 +3501,10 @@ function previewSourceSnapshot(sectionId, live) {
       : saved;
     parent[key] = value == null || value === "" ? [] : previewClone(value);
   });
+  // A hidden native select still chooses its first option. Its target has no
+  // source meaning while cascade is disabled; enabling cascade remains a change.
+  if (parent.outbound_detour_enabled !== "1")
+    parent.outbound_detour_section = [];
   return {
     parent,
     children: ["subscription_url", "section_interface"].flatMap((type) =>
@@ -7275,7 +7279,6 @@ function writeDnsRulesetReferences(section_id, values) {
 }
 
 function createSectionContent(section) {
-  rememberExtendedPreviewContext(section);
   let o;
 
   section.tab("settings", _("Settings"));
@@ -8282,6 +8285,9 @@ function configureSectionSection(sectionRef, options = {}) {
   };
 
   sectionRef.load = function () {
+    // Map.load has populated UCI before loading section options. Record the saved
+    // inputs before the editor renders; existing baselines never adopt dirty edits.
+    rememberExtendedPreviewContext(this);
     // The table renders only non-modal fields; the cloned Add/Edit modal loads
     // action/provider details when the user opens it.
     return loadSectionTableOptions(this);

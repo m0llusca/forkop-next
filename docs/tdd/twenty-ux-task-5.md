@@ -171,3 +171,32 @@ single whole-link `url.decode` then `url.strip_fragment` step used by
 URL interpretation is unchanged; no recursive decoding, resolver, generation,
 Priority-order or frontend changes. `git diff --check` passed. Final focused
 Linux GREEN awaits root's publication of this immutable fix.
+
+## Final native acceptance fix wave
+
+Root's actual native checkpoint exposed two initial-preview blockers. These were
+real lifecycle/default defects, not synthetic subscription metadata:
+`createSectionContent` ran before LuCI `Map.render()->load()` populated UCI, so
+no source baseline existed; the inactive nonoptional cascade select independently
+chose its first target (`games`) despite an empty saved value.
+
+Tests-only `1475c5c4dbe6c5ed635d42107f6ae90c1981c0bc` observed behavioral RED:
+`nativePreviewDefaults.test.ts`, two tests failed with `source_draft_changed`
+and `cascade_draft_changed` respectively, both expecting an untouched preview.
+The fixture executes the production native snapshot/load hook and actual detour
+option load/target helper; real HTML select default semantics expose the hidden
+first-choice behavior. Native checkbox value semantics use its DOM checked state.
+
+Minimal fix captures saved inputs from section load (after Map's UCI load and
+before rendering), never replacing an existing baseline with later dirty values.
+Inactive cascade target is normalized away only while the effective enabled
+flag is not `1`. Tests cover first capture, subsequent source edit/reload without
+rebasing, disabled target changes, enabling cascade, and active target changes.
+
+Focused verification: `node node_modules/vitest/vitest.mjs run` with
+`nativePreviewDefaults.test.ts`, `nativeExtendedPreview.test.ts`, and
+`extendedPreview.test.ts`: 3 files / 5 tests passed. Full TypeScript, scoped
+ESLint, scoped Prettier check, `node --check` on authored section.js and
+`git diff --check` passed. One test-regex spacing lint issue was corrected before
+the clean scoped lint result. No backend, TypeScript product, or bundle change;
+root owns updated native-browser checkpoint and final integration checks.

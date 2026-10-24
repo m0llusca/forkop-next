@@ -14,16 +14,23 @@ tests and observed synthetic browser checks is maintained in
 [Task 7's matrix](tdd/twenty-ux-task-7.md). Checkpoint browser observations belong
 to their named revisions; they do not certify the final 1.2.0 bundle.
 
-The complete frontend gate passed **910 tests in 88 files**, types/lint/format,
+The complete frontend gate passed **912 tests in 89 files**, with types/lint/format,
 native syntax, regenerated bundle and its execution smoke at the exact basis
 recorded in [Task 7](tdd/twenty-ux-task-7.md). Independent whole-branch review,
-integrated Linux backend/package CI and fresh final browser acceptance remain **pending**.
+integrated Linux backend/package CI and remaining final browser scenarios remain **pending**.
 Release and device installation follow only after these gates. No final-device
 performance, screen-reader result or deployment is claimed by the source work.
 
 The final browser pass must exercise the generated shipped renderer and native
 LuCI forms in light/dark themes, widths 320/390/430 and desktop, 200% zoom,
 long/error/unknown states, exact rule navigation and all six source editors.
+The final native checkpoint confirmed desktop light/dark, all six source editors,
+exact rule navigation, masked-error export blocking, draft/reorder/Reset semantics,
+large-list search and untouched Extended main preview. The matrix records tested
+mobile surfaces, the untested Servers destination at 320, pending nested-child
+preview and unavailable actual 200% zoom. Screen-reader/performance results are
+not claimed.
+
 Check draft protection and remaining UCI reorder after Reset, clipboard/manual
 fallback, current-context evidence, large-list search, Extended draft composition,
 component impact and symptom flows without a navigation-triggered mutation/probe.
