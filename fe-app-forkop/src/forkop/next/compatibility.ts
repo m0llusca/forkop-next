@@ -5,6 +5,7 @@ const object = (v: unknown): Obj =>
 export function renderCompatibilityPanel(
   request: (action: string, payload?: Obj) => Promise<NextResponse>,
   initialRequest = request,
+  showHeading = true,
 ): HTMLElement {
   const root = document.createElement('section');
   root.className = 'fkp-next-panel';
@@ -16,8 +17,8 @@ export function renderCompatibilityPanel(
     e.textContent = value;
     return e;
   };
+  if (showHeading) root.append(text('h3', 'Совместимость с 3x-ui и Xray'));
   root.append(
-    text('h3', 'Совместимость с 3x-ui и Xray'),
     text(
       'p',
       'Сопоставьте транспорт, flow, шифрование и TLS, затем проверьте реальное соединение. Версии сами по себе не подтверждают совместимость.',
@@ -72,8 +73,22 @@ export function renderCompatibilityPanel(
     return b;
   }
   let comparisonGeneration = 0;
+  const contextKey = () =>
+    JSON.stringify([section.value, outbound.value, domain.value, server.value]);
+  function invalidate() {
+    comparisonGeneration++;
+    result.textContent = 'Параметры изменены — проверьте снова';
+    compare.disabled = false;
+    handshake.disabled = !outbound.value;
+  }
   const comparison = async (probe = false) => {
     const generation = ++comparisonGeneration;
+    const captured = contextKey();
+    const connection = section.selectedOptions[0]?.textContent || section.value;
+    const node = outbound.selectedOptions[0]?.textContent || 'не выбран';
+    const target = domain.value.trim();
+    const startedAt = new Date().toLocaleString();
+    const context = `Подключение: ${connection} · Сервер: ${node} · Цель: ${target || 'сопоставление параметров'} · Источник: с роутера, не с клиентского устройства · ${startedAt}`;
     const payload: Obj = { section: section.value };
     if (outbound.value) payload.outbound_tag = outbound.value;
     if (server.value.trim()) {
@@ -103,10 +118,12 @@ export function renderCompatibilityPanel(
     try {
       response = await request('compatibility_check', payload);
     } catch (error) {
-      if (generation !== comparisonGeneration) return;
+      if (generation !== comparisonGeneration || captured !== contextKey())
+        return;
       throw error;
     }
-    if (generation !== comparisonGeneration) return;
+    if (generation !== comparisonGeneration || captured !== contextKey())
+      return;
     if (!response.success) {
       result.textContent = `Проверка не выполнена: ${response.error || 'неизвестная ошибка'}`;
       return;
@@ -132,6 +149,7 @@ export function renderCompatibilityPanel(
     };
     result.replaceChildren(
       text('strong', labels[status] || 'Совместимость неизвестна'),
+      text('p', context),
     );
     const versions = object(data.client),
       remote = object(data.server);
@@ -142,16 +160,53 @@ export function renderCompatibilityPanel(
       ),
     );
     const checks = document.createElement('ul');
+    const capabilities: Record<string, string> = {
+      metadata: 'Данные подключения',
+      server_client: 'Клиент на сервере',
+      protocol: 'Протокол',
+      transport: 'Транспорт',
+      flow: 'Режим потока (flow)',
+      encryption: 'Шифрование',
+      security: 'Защита соединения',
+      protocol_support: 'Поддержка протокола',
+      transport_support: 'Поддержка транспорта',
+      server_transport: 'Транспорт сервера',
+      server_reality_transport: 'Транспорт REALITY на сервере',
+      flow_support: 'Поддержка режима потока',
+      encryption_support: 'Поддержка шифрования',
+      vision_transport: 'Транспорт Vision',
+      vision_tls_version: 'Версия TLS для Vision',
+      security_support: 'Поддержка защиты соединения',
+      certificate_validation: 'Проверка сертификата',
+      sni: 'Имя сервера (SNI)',
+      reality: 'Параметры REALITY',
+      reality_key_exchange: 'Обмен ключами REALITY',
+      runtime_probe: 'Проверка соединения',
+    };
+    const checkStatuses: Record<string, string> = {
+      matched: 'Настройки совпадают',
+      unsupported: 'Не поддерживается или настройки различаются',
+      unknown: 'Не проверено',
+    };
     for (const raw of Array.isArray(data.checks) ? data.checks : []) {
       const c = object(raw);
       checks.append(
         text(
           'li',
-          `${c.capability || 'Параметр'}: ${c.status || 'unknown'} — ${c.detail || ''}${c.next_step ? ' · ' + c.next_step : ''}`,
+          `${capabilities[String(c.capability)] || 'Дополнительный параметр'}: ${checkStatuses[String(c.status)] || 'Неизвестный результат'}${c.detail ? ' — ' + c.detail : ''}${c.next_step ? ' · ' + c.next_step : ''}`,
         ),
       );
     }
     result.append(checks);
+    const details = document.createElement('details');
+    details.append(
+      text('summary', 'Технические подробности проверки'),
+      text(
+        'pre',
+        JSON.stringify({ status: data.status, checks: data.checks }, null, 2),
+      ),
+    );
+    result.append(details);
     if (data.probe) {
       const p = object(data.probe);
       result.append(
@@ -168,14 +223,18 @@ export function renderCompatibilityPanel(
       ),
     );
   };
-  button('Сопоставить настройки', () => comparison(false));
+  const compare = button('Сопоставить настройки', () => comparison(false));
   const handshake = button('Проверить соединение', () => comparison(true));
   handshake.disabled = true;
+  outbound.onchange = invalidate;
+  domain.oninput = invalidate;
+  server.oninput = invalidate;
   section.onchange = () => {
-    comparisonGeneration++;
+    invalidate();
     outbound.replaceChildren();
     handshake.disabled = true;
-    result.textContent = 'Подключение изменено. Сопоставьте настройки заново.';
+    result.textContent =
+      'Параметры изменены — проверьте снова. Подключение изменено. Сопоставьте настройки заново.';
   };
   const updates = text('div', '');
   updates.className = 'fkp-next-result';
@@ -249,6 +308,7 @@ export function renderCompatibilityPanel(
   root.append(updates);
   let routesGeneration = 0;
   function refreshRoutes(read = request) {
+    invalidate();
     const generation = ++routesGeneration;
     return read('status', {})
       .then((response) => {

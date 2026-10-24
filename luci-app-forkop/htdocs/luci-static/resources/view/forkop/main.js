@@ -936,10 +936,25 @@ var workspaceStyles = `
 .fkp-workspace .fkp-workspace-nav-button[data-errors]::after,.fkp-workspace .fkp-workspace-local-button[data-errors]::after {content:attr(data-errors);display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;margin-left:auto;padding:0 4px;border:1px solid currentColor;border-radius:4px;font-size:12px;font-variant-numeric:tabular-nums;line-height:1}
 .fkp-workspace .fkp-workspace-native-tabs {display:none!important}
 .fkp-workspace-content {min-width:0}
+.fkp-workspace .fkp-workspace-description {font-size:14px;line-height:1.6;color:var(--next-muted);margin:-4px 0 20px;max-width:75ch}
+.fkp-workspace .fkp-form-group,.fkp-workspace-modal .fkp-form-group {min-width:0;margin:0 0 24px;padding:0;border:0}
+.fkp-workspace .fkp-form-group>h3,.fkp-workspace-modal .fkp-form-group>h3 {margin:24px 0 8px;font-size:17px}
+.fkp-workspace .fkp-form-group:first-child>h3,.fkp-workspace-modal .fkp-form-group:first-child>h3 {margin-top:0}
+.fkp-workspace .fkp-form-help,.fkp-workspace-modal .fkp-form-help {font-size:13px;line-height:1.6;color:var(--next-muted);margin:0 0 12px;max-width:75ch}
+.fkp-workspace details.fkp-form-group,.fkp-workspace-modal details.fkp-form-group {border-top:1px solid var(--next-line);border-bottom:1px solid var(--next-line);padding:0;margin-top:24px}
+.fkp-workspace .fkp-form-group>summary,.fkp-workspace-modal .fkp-form-group>summary {padding:14px 0;min-height:48px;cursor:pointer;font-size:14px;font-weight:650;line-height:1.5;overflow-wrap:anywhere}
+.fkp-workspace .fkp-form-group>summary:hover,.fkp-workspace-modal .fkp-form-group>summary:hover {color:var(--next-accent)}
+.fkp-workspace .fkp-rule-name,.fkp-workspace .fkp-rule-action {display:block;font-size:14px;font-weight:650;line-height:1.5}
+.fkp-workspace .fkp-rule-scope,.fkp-workspace .fkp-rule-route {display:block;font-size:12px;font-weight:400;line-height:1.6;color:var(--next-muted);margin-top:4px;max-width:55ch;overflow-wrap:anywhere}
+.fkp-workspace .fkp-rule-state {display:inline-block;font-size:12px;font-weight:400;color:var(--next-muted);margin-top:4px}
+.fkp-workspace #cbi-forkop-section .cbi-section-table-row>:first-child {width:43%;min-width:180px}
+.fkp-workspace #cbi-forkop-section .cbi-section-table-row>:nth-child(2) {width:64px}
+.fkp-workspace #cbi-forkop-section .cbi-section-table-row>:nth-child(3) {min-width:160px}
 .fkp-workspace-content > h2,.fkp-workspace-content > .cbi-map-descr {display:none}
 .fkp-workspace .cbi-map-tabbed {background:transparent;border:0;padding:0;min-width:0}
 .fkp-workspace .cbi-map-tabbed > .cbi-section {padding:0;margin:0;background:transparent;border:0;box-shadow:none;min-width:0}
 .fkp-workspace .cbi-map-tabbed > .cbi-section[data-tab]:not([data-tab-active=true]),.fkp-workspace [hidden],.fkp-workspace-modal [hidden],.fkp-workspace .hidden,.fkp-workspace-modal .hidden {display:none!important}
+.fkp-workspace-modal .cbi-section-node-tabbed > [data-tab]:not([data-tab-active=true]) {display:none!important}
 .fkp-workspace h3,.fkp-workspace-modal h3,.fkp-workspace-modal h4 {color:var(--next-fg);font-weight:650;font-size:19px;line-height:1.3;margin:32px 0 12px;letter-spacing:-.015em;text-wrap:balance}
 .fkp-workspace .cbi-section > h3:first-child {margin-top:0}
 .fkp-workspace p,.fkp-workspace-modal p {max-width:75ch;overflow-wrap:anywhere}
@@ -952,6 +967,7 @@ var workspaceStyles = `
 .fkp-workspace .cbi-value > .cbi-value-field > :is(input:not([type=checkbox]):not([type=radio]),select,textarea,.cbi-select,.cbi-dropdown,.cbi-dynlist,.control-group),
 .fkp-workspace-modal .cbi-value > .cbi-value-field > :is(input:not([type=checkbox]):not([type=radio]),select,textarea,.cbi-select,.cbi-dropdown,.cbi-dynlist,.control-group) {width:100%;max-width:42rem;min-width:0;height:auto}
 .fkp-workspace .cbi-value .cbi-value-description,.fkp-workspace-modal .cbi-value .cbi-value-description {margin:6px 0 0;line-height:1.5;white-space:normal;max-width:75ch}
+.fkp-workspace .cbi-value-field > [id^="cbid.forkop."] > :is(input:not([type=checkbox]):not([type=radio]):not([type=hidden]),select,textarea),.fkp-workspace-modal .cbi-value-field > [id^="cbid.forkop."] > :is(input:not([type=checkbox]):not([type=radio]):not([type=hidden]),select,textarea) {width:100%;max-width:42rem;min-width:0}
 .fkp-workspace .cbi-value .cbi-dynlist > .add-item,.fkp-workspace-modal .cbi-value .cbi-dynlist > .add-item {display:flex;gap:4px;min-width:0}
 .fkp-workspace .cbi-value .cbi-dynlist > .add-item > :is(input,.cbi-dropdown),.fkp-workspace-modal .cbi-value .cbi-dynlist > .add-item > :is(input,.cbi-dropdown) {flex:1;min-width:0;width:100%}
 .fkp-workspace .cbi-value .cbi-dynlist > .add-item > button,.fkp-workspace-modal .cbi-value .cbi-dynlist > .add-item > button {flex:0 0 42px;min-width:42px}
@@ -988,8 +1004,10 @@ var workspaceStyles = `
 .fkp-workspace .cbi-section-table-row,.fkp-workspace .cbi-section-table-row:nth-child(2n),.fkp-workspace-modal .cbi-section-table-row {background:transparent}
 .fkp-workspace .cbi-section-actions > div,.fkp-workspace-modal .cbi-section-actions > div {display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:8px}
 .fkp-workspace .cbi-section-actions,.fkp-workspace-modal .cbi-section-actions {min-width:104px}
-.fkp-workspace :is(#cbi-forkop-section,#cbi-forkop-server) .td.cbi-section-actions {width:240px!important;min-width:240px!important;white-space:normal}
+.fkp-workspace :is(#cbi-forkop-section,#cbi-forkop-server) :is(td,.td).cbi-section-actions {width:240px!important;min-width:240px!important;white-space:nowrap}
 .fkp-workspace .td.cbi-section-actions > div:not(.cbi-dropdown) {display:flex;justify-content:flex-end;align-items:center;flex-wrap:wrap;gap:8px}
+.fkp-workspace :is(#cbi-forkop-section,#cbi-forkop-server) .cbi-section-actions > div {display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:flex-end}
+.fkp-workspace #cbi-forkop-section .cbi-section-actions :is(button,.cbi-button) {padding-inline:10px}
 .fkp-workspace .td.cbi-section-actions > div:not(.cbi-dropdown) > :is(button,.cbi-button) {flex:0 0 auto;width:auto;margin:0!important}
 .fkp-workspace .cbi-section-create,.fkp-workspace .cbi-page-actions,.fkp-workspace-modal .button-row {display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-top:24px;padding-top:16px}
 .fkp-workspace pre,.fkp-workspace code,.fkp-workspace-modal pre,.fkp-workspace-modal code {background:var(--next-field);color:var(--next-fg);font-size:13px;line-height:1.6;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
@@ -1053,6 +1071,7 @@ var workspaceStyles = `
   .fkp-workspace-top {gap:16px;flex-wrap:wrap}
 }
 @media (max-width:720px) {
+  .fkp-workspace #cbi-forkop-section .cbi-section-table-row>:first-child,.fkp-workspace #cbi-forkop-section .cbi-section-table-row>:nth-child(2),.fkp-workspace #cbi-forkop-section .cbi-section-table-row>:nth-child(3) {width:auto;min-width:0}
   .fkp-workspace {display:block;border-radius:8px;margin:16px 0}
   .fkp-workspace-sidebar {position:static;padding:16px 16px 12px;border-bottom:1px solid var(--next-line)}
   .fkp-workspace-brand {font-size:20px;padding:0;margin-bottom:12px}
@@ -14549,33 +14568,73 @@ function injectGlobalStyles() {
 }
 
 // src/forkop/next/api.ts
-async function nextRequest(action, payload = {}) {
-  const response = await executeShellCommand({
-    command: "/usr/bin/forkop",
-    args: action === "route_explain" ? ["route_explain", JSON.stringify(payload)] : ["next", action, JSON.stringify(payload)],
-    timeout: 6e4,
-    operationName: `Forkop Next ${action}`
+var configurationActions = /* @__PURE__ */ new Set([
+  "profile_apply",
+  "rollback",
+  "recover",
+  "device_set",
+  "gaming_apply",
+  "temporary_add",
+  "temporary_delete",
+  "recommendation_accept",
+  "smart_detect_configure"
+]);
+var configurationBusy = false;
+async function configurationEvent(name, action) {
+  const pending = [];
+  const event = new CustomEvent(name, {
+    cancelable: true,
+    detail: { action, waitUntil: (work) => pending.push(work) }
   });
+  window.dispatchEvent(event);
+  await Promise.all(pending);
+  if (event.defaultPrevented) throw Error("native_pending_changes");
+}
+async function nextRequest(action, payload = {}) {
+  const mutation = configurationActions.has(action) && typeof window !== "undefined";
+  if (mutation) {
+    if (configurationBusy)
+      return { success: false, error: "native_mutation_busy" };
+    configurationBusy = true;
+    try {
+      await configurationEvent("forkop:configuration-changing", action);
+    } catch (error) {
+      window.dispatchEvent(
+        new CustomEvent("forkop:configuration-settled", { detail: { action } })
+      );
+      configurationBusy = false;
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "native_pending_changes"
+      };
+    }
+  }
   try {
-    const value = JSON.parse(response.stdout);
-    if (!value || typeof value.success !== "boolean")
-      return { success: false, error: "invalid_response" };
-    if ((response.code ?? 0) !== 0 && value.success)
-      return { success: false, error: response.stderr || "command_failed" };
-    if (value.success && typeof window !== "undefined" && [
-      "profile_apply",
-      "rollback",
-      "device_set",
-      "gaming_apply",
-      "temporary_add",
-      "temporary_delete",
-      "recommendation_accept",
-      "smart_detect_configure"
-    ].includes(action))
-      window.dispatchEvent(new CustomEvent("forkop:configuration-changed"));
-    return value;
-  } catch {
-    return { success: false, error: response.stderr || "invalid_response" };
+    const response = await executeShellCommand({
+      command: "/usr/bin/forkop",
+      args: action === "route_explain" ? ["route_explain", JSON.stringify(payload)] : ["next", action, JSON.stringify(payload)],
+      timeout: 6e4,
+      operationName: `Forkop Next ${action}`
+    });
+    try {
+      const value = JSON.parse(response.stdout);
+      if (!value || typeof value.success !== "boolean")
+        return { success: false, error: "invalid_response" };
+      if ((response.code ?? 0) !== 0 && value.success)
+        return { success: false, error: response.stderr || "command_failed" };
+      if (value.success && mutation)
+        await configurationEvent("forkop:configuration-changed", action);
+      return value;
+    } catch {
+      return { success: false, error: response.stderr || "invalid_response" };
+    }
+  } finally {
+    if (mutation) {
+      configurationBusy = false;
+      window.dispatchEvent(
+        new CustomEvent("forkop:configuration-settled", { detail: { action } })
+      );
+    }
   }
 }
 
@@ -14591,8 +14650,8 @@ function createTrafficMonitor(output, read, visible) {
   let pending = false;
   let epoch = 0;
   let previous;
-  const list = document.createElement("dl");
-  list.className = "fkp-next-metrics";
+  const list2 = document.createElement("dl");
+  list2.className = "fkp-next-metrics";
   const fields = /* @__PURE__ */ new Map();
   for (const [key, label] of [
     ["download-rate", "\u041F\u0440\u0438\u0451\u043C"],
@@ -14608,14 +14667,14 @@ function createTrafficMonitor(output, read, visible) {
     value.dataset.metric = key;
     value.textContent = "\u2014";
     group.append(term, value);
-    list.append(group);
+    list2.append(group);
     fields.set(key, value);
   }
   const status = document.createElement("p");
   status.className = "fkp-next-help fkp-next-traffic-status";
   status.setAttribute("role", "status");
   status.textContent = "\u0422\u0440\u0430\u0444\u0438\u043A \u043F\u043E\u043A\u0430 \u043D\u0435\u0434\u043E\u0441\u0442\u0443\u043F\u0435\u043D.";
-  output.replaceChildren(list, status);
+  output.replaceChildren(list2, status);
   function readings(sample, download, upload) {
     fields.get("download-total").textContent = sample ? bytes(sample.downloadTotal) : "\u2014";
     fields.get("upload-total").textContent = sample ? bytes(sample.uploadTotal) : "\u2014";
@@ -14778,11 +14837,13 @@ function renderDeviceProfileTools(request, initialRequest = request, area = "all
   button("\u0421\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u044C \u043C\u0430\u0440\u0448\u0440\u0443\u0442 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430", deviceResult, async () => {
     if (!device.value.trim() || !route.value)
       throw new Error("\u0422\u0440\u0435\u0431\u0443\u044E\u0442\u0441\u044F \u0430\u0434\u0440\u0435\u0441 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430 \u0438 \u043C\u0430\u0440\u0448\u0440\u0443\u0442");
+    const address = device.value.trim();
+    const section = route.value;
     await call("device_set", {
-      address: device.value.trim(),
-      section: route.value
+      address,
+      section
     });
-    deviceResult.textContent = "\u041C\u0430\u0440\u0448\u0440\u0443\u0442 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430 \u0441\u043E\u0445\u0440\u0430\u043D\u0451\u043D.";
+    deviceResult.textContent = `\u041C\u0430\u0440\u0448\u0440\u0443\u0442 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430 \u0441\u043E\u0445\u0440\u0430\u043D\u0451\u043D: ${address} \u2192 ${routeLabels.get(section) || section}.`;
     try {
       await loadDevices();
     } catch {
@@ -14963,7 +15024,7 @@ function renderDeviceProfileTools(request, initialRequest = request, area = "all
 
 // src/forkop/next/compatibility.ts
 var object = (v) => v && typeof v === "object" ? v : {};
-function renderCompatibilityPanel(request, initialRequest = request) {
+function renderCompatibilityPanel(request, initialRequest = request, showHeading = true) {
   const root = document.createElement("section");
   root.className = "fkp-next-panel";
   const text = (tag, value) => {
@@ -14971,8 +15032,8 @@ function renderCompatibilityPanel(request, initialRequest = request) {
     e.textContent = value;
     return e;
   };
+  if (showHeading) root.append(text("h3", "\u0421\u043E\u0432\u043C\u0435\u0441\u0442\u0438\u043C\u043E\u0441\u0442\u044C \u0441 3x-ui \u0438 Xray"));
   root.append(
-    text("h3", "\u0421\u043E\u0432\u043C\u0435\u0441\u0442\u0438\u043C\u043E\u0441\u0442\u044C \u0441 3x-ui \u0438 Xray"),
     text(
       "p",
       "\u0421\u043E\u043F\u043E\u0441\u0442\u0430\u0432\u044C\u0442\u0435 \u0442\u0440\u0430\u043D\u0441\u043F\u043E\u0440\u0442, flow, \u0448\u0438\u0444\u0440\u043E\u0432\u0430\u043D\u0438\u0435 \u0438 TLS, \u0437\u0430\u0442\u0435\u043C \u043F\u0440\u043E\u0432\u0435\u0440\u044C\u0442\u0435 \u0440\u0435\u0430\u043B\u044C\u043D\u043E\u0435 \u0441\u043E\u0435\u0434\u0438\u043D\u0435\u043D\u0438\u0435. \u0412\u0435\u0440\u0441\u0438\u0438 \u0441\u0430\u043C\u0438 \u043F\u043E \u0441\u0435\u0431\u0435 \u043D\u0435 \u043F\u043E\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0430\u044E\u0442 \u0441\u043E\u0432\u043C\u0435\u0441\u0442\u0438\u043C\u043E\u0441\u0442\u044C."
@@ -15027,8 +15088,21 @@ function renderCompatibilityPanel(request, initialRequest = request) {
     return b;
   }
   let comparisonGeneration = 0;
+  const contextKey = () => JSON.stringify([section.value, outbound.value, domain.value, server.value]);
+  function invalidate() {
+    comparisonGeneration++;
+    result.textContent = "\u041F\u0430\u0440\u0430\u043C\u0435\u0442\u0440\u044B \u0438\u0437\u043C\u0435\u043D\u0435\u043D\u044B \u2014 \u043F\u0440\u043E\u0432\u0435\u0440\u044C\u0442\u0435 \u0441\u043D\u043E\u0432\u0430";
+    compare.disabled = false;
+    handshake.disabled = !outbound.value;
+  }
   const comparison = async (probe = false) => {
     const generation = ++comparisonGeneration;
+    const captured = contextKey();
+    const connection = section.selectedOptions[0]?.textContent || section.value;
+    const node = outbound.selectedOptions[0]?.textContent || "\u043D\u0435 \u0432\u044B\u0431\u0440\u0430\u043D";
+    const target = domain.value.trim();
+    const startedAt = (/* @__PURE__ */ new Date()).toLocaleString();
+    const context = `\u041F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435: ${connection} \xB7 \u0421\u0435\u0440\u0432\u0435\u0440: ${node} \xB7 \u0426\u0435\u043B\u044C: ${target || "\u0441\u043E\u043F\u043E\u0441\u0442\u0430\u0432\u043B\u0435\u043D\u0438\u0435 \u043F\u0430\u0440\u0430\u043C\u0435\u0442\u0440\u043E\u0432"} \xB7 \u0418\u0441\u0442\u043E\u0447\u043D\u0438\u043A: \u0441 \u0440\u043E\u0443\u0442\u0435\u0440\u0430, \u043D\u0435 \u0441 \u043A\u043B\u0438\u0435\u043D\u0442\u0441\u043A\u043E\u0433\u043E \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430 \xB7 ${startedAt}`;
     const payload = { section: section.value };
     if (outbound.value) payload.outbound_tag = outbound.value;
     if (server.value.trim()) {
@@ -15055,10 +15129,12 @@ function renderCompatibilityPanel(request, initialRequest = request) {
     try {
       response = await request("compatibility_check", payload);
     } catch (error) {
-      if (generation !== comparisonGeneration) return;
+      if (generation !== comparisonGeneration || captured !== contextKey())
+        return;
       throw error;
     }
-    if (generation !== comparisonGeneration) return;
+    if (generation !== comparisonGeneration || captured !== contextKey())
+      return;
     if (!response.success) {
       result.textContent = `\u041F\u0440\u043E\u0432\u0435\u0440\u043A\u0430 \u043D\u0435 \u0432\u044B\u043F\u043E\u043B\u043D\u0435\u043D\u0430: ${response.error || "\u043D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043D\u0430\u044F \u043E\u0448\u0438\u0431\u043A\u0430"}`;
       return;
@@ -15081,7 +15157,8 @@ function renderCompatibilityPanel(request, initialRequest = request) {
       verified: "\u0421\u043E\u0435\u0434\u0438\u043D\u0435\u043D\u0438\u0435 \u043F\u0440\u043E\u0432\u0435\u0440\u0435\u043D\u043E"
     };
     result.replaceChildren(
-      text("strong", labels[status] || "\u0421\u043E\u0432\u043C\u0435\u0441\u0442\u0438\u043C\u043E\u0441\u0442\u044C \u043D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043D\u0430")
+      text("strong", labels[status] || "\u0421\u043E\u0432\u043C\u0435\u0441\u0442\u0438\u043C\u043E\u0441\u0442\u044C \u043D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043D\u0430"),
+      text("p", context)
     );
     const versions = object(data.client), remote = object(data.server);
     result.append(
@@ -15091,16 +15168,53 @@ function renderCompatibilityPanel(request, initialRequest = request) {
       )
     );
     const checks = document.createElement("ul");
+    const capabilities = {
+      metadata: "\u0414\u0430\u043D\u043D\u044B\u0435 \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u044F",
+      server_client: "\u041A\u043B\u0438\u0435\u043D\u0442 \u043D\u0430 \u0441\u0435\u0440\u0432\u0435\u0440\u0435",
+      protocol: "\u041F\u0440\u043E\u0442\u043E\u043A\u043E\u043B",
+      transport: "\u0422\u0440\u0430\u043D\u0441\u043F\u043E\u0440\u0442",
+      flow: "\u0420\u0435\u0436\u0438\u043C \u043F\u043E\u0442\u043E\u043A\u0430 (flow)",
+      encryption: "\u0428\u0438\u0444\u0440\u043E\u0432\u0430\u043D\u0438\u0435",
+      security: "\u0417\u0430\u0449\u0438\u0442\u0430 \u0441\u043E\u0435\u0434\u0438\u043D\u0435\u043D\u0438\u044F",
+      protocol_support: "\u041F\u043E\u0434\u0434\u0435\u0440\u0436\u043A\u0430 \u043F\u0440\u043E\u0442\u043E\u043A\u043E\u043B\u0430",
+      transport_support: "\u041F\u043E\u0434\u0434\u0435\u0440\u0436\u043A\u0430 \u0442\u0440\u0430\u043D\u0441\u043F\u043E\u0440\u0442\u0430",
+      server_transport: "\u0422\u0440\u0430\u043D\u0441\u043F\u043E\u0440\u0442 \u0441\u0435\u0440\u0432\u0435\u0440\u0430",
+      server_reality_transport: "\u0422\u0440\u0430\u043D\u0441\u043F\u043E\u0440\u0442 REALITY \u043D\u0430 \u0441\u0435\u0440\u0432\u0435\u0440\u0435",
+      flow_support: "\u041F\u043E\u0434\u0434\u0435\u0440\u0436\u043A\u0430 \u0440\u0435\u0436\u0438\u043C\u0430 \u043F\u043E\u0442\u043E\u043A\u0430",
+      encryption_support: "\u041F\u043E\u0434\u0434\u0435\u0440\u0436\u043A\u0430 \u0448\u0438\u0444\u0440\u043E\u0432\u0430\u043D\u0438\u044F",
+      vision_transport: "\u0422\u0440\u0430\u043D\u0441\u043F\u043E\u0440\u0442 Vision",
+      vision_tls_version: "\u0412\u0435\u0440\u0441\u0438\u044F TLS \u0434\u043B\u044F Vision",
+      security_support: "\u041F\u043E\u0434\u0434\u0435\u0440\u0436\u043A\u0430 \u0437\u0430\u0449\u0438\u0442\u044B \u0441\u043E\u0435\u0434\u0438\u043D\u0435\u043D\u0438\u044F",
+      certificate_validation: "\u041F\u0440\u043E\u0432\u0435\u0440\u043A\u0430 \u0441\u0435\u0440\u0442\u0438\u0444\u0438\u043A\u0430\u0442\u0430",
+      sni: "\u0418\u043C\u044F \u0441\u0435\u0440\u0432\u0435\u0440\u0430 (SNI)",
+      reality: "\u041F\u0430\u0440\u0430\u043C\u0435\u0442\u0440\u044B REALITY",
+      reality_key_exchange: "\u041E\u0431\u043C\u0435\u043D \u043A\u043B\u044E\u0447\u0430\u043C\u0438 REALITY",
+      runtime_probe: "\u041F\u0440\u043E\u0432\u0435\u0440\u043A\u0430 \u0441\u043E\u0435\u0434\u0438\u043D\u0435\u043D\u0438\u044F"
+    };
+    const checkStatuses = {
+      matched: "\u041D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438 \u0441\u043E\u0432\u043F\u0430\u0434\u0430\u044E\u0442",
+      unsupported: "\u041D\u0435 \u043F\u043E\u0434\u0434\u0435\u0440\u0436\u0438\u0432\u0430\u0435\u0442\u0441\u044F \u0438\u043B\u0438 \u043D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438 \u0440\u0430\u0437\u043B\u0438\u0447\u0430\u044E\u0442\u0441\u044F",
+      unknown: "\u041D\u0435 \u043F\u0440\u043E\u0432\u0435\u0440\u0435\u043D\u043E"
+    };
     for (const raw of Array.isArray(data.checks) ? data.checks : []) {
       const c = object(raw);
       checks.append(
         text(
           "li",
-          `${c.capability || "\u041F\u0430\u0440\u0430\u043C\u0435\u0442\u0440"}: ${c.status || "unknown"} \u2014 ${c.detail || ""}${c.next_step ? " \xB7 " + c.next_step : ""}`
+          `${capabilities[String(c.capability)] || "\u0414\u043E\u043F\u043E\u043B\u043D\u0438\u0442\u0435\u043B\u044C\u043D\u044B\u0439 \u043F\u0430\u0440\u0430\u043C\u0435\u0442\u0440"}: ${checkStatuses[String(c.status)] || "\u041D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043D\u044B\u0439 \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442"}${c.detail ? " \u2014 " + c.detail : ""}${c.next_step ? " \xB7 " + c.next_step : ""}`
         )
       );
     }
     result.append(checks);
+    const details = document.createElement("details");
+    details.append(
+      text("summary", "\u0422\u0435\u0445\u043D\u0438\u0447\u0435\u0441\u043A\u0438\u0435 \u043F\u043E\u0434\u0440\u043E\u0431\u043D\u043E\u0441\u0442\u0438 \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0438"),
+      text(
+        "pre",
+        JSON.stringify({ status: data.status, checks: data.checks }, null, 2)
+      )
+    );
+    result.append(details);
     if (data.probe) {
       const p = object(data.probe);
       result.append(
@@ -15117,14 +15231,17 @@ function renderCompatibilityPanel(request, initialRequest = request) {
       )
     );
   };
-  button("\u0421\u043E\u043F\u043E\u0441\u0442\u0430\u0432\u0438\u0442\u044C \u043D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438", () => comparison(false));
+  const compare = button("\u0421\u043E\u043F\u043E\u0441\u0442\u0430\u0432\u0438\u0442\u044C \u043D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438", () => comparison(false));
   const handshake = button("\u041F\u0440\u043E\u0432\u0435\u0440\u0438\u0442\u044C \u0441\u043E\u0435\u0434\u0438\u043D\u0435\u043D\u0438\u0435", () => comparison(true));
   handshake.disabled = true;
+  outbound.onchange = invalidate;
+  domain.oninput = invalidate;
+  server.oninput = invalidate;
   section.onchange = () => {
-    comparisonGeneration++;
+    invalidate();
     outbound.replaceChildren();
     handshake.disabled = true;
-    result.textContent = "\u041F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435 \u0438\u0437\u043C\u0435\u043D\u0435\u043D\u043E. \u0421\u043E\u043F\u043E\u0441\u0442\u0430\u0432\u044C\u0442\u0435 \u043D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438 \u0437\u0430\u043D\u043E\u0432\u043E.";
+    result.textContent = "\u041F\u0430\u0440\u0430\u043C\u0435\u0442\u0440\u044B \u0438\u0437\u043C\u0435\u043D\u0435\u043D\u044B \u2014 \u043F\u0440\u043E\u0432\u0435\u0440\u044C\u0442\u0435 \u0441\u043D\u043E\u0432\u0430. \u041F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435 \u0438\u0437\u043C\u0435\u043D\u0435\u043D\u043E. \u0421\u043E\u043F\u043E\u0441\u0442\u0430\u0432\u044C\u0442\u0435 \u043D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438 \u0437\u0430\u043D\u043E\u0432\u043E.";
   };
   const updates = text("div", "");
   updates.className = "fkp-next-result";
@@ -15192,6 +15309,7 @@ function renderCompatibilityPanel(request, initialRequest = request) {
   root.append(updates);
   let routesGeneration = 0;
   function refreshRoutes(read = request) {
+    invalidate();
     const generation = ++routesGeneration;
     return read("status", {}).then((response) => {
       if (generation !== routesGeneration) return;
@@ -15340,6 +15458,7 @@ function renderAdvancedPanel(request = nextRequest, loadConnections, lazy = fals
   root.append(content);
   let digest = "";
   let sections = [];
+  const connectionLabel = (name, fallback = "\u2014") => sections.find(([id]) => id === name)?.[1] || String(name || fallback);
   let previewName = "";
   let previewDigest = "";
   let previewProfileDigest = "";
@@ -15359,7 +15478,8 @@ function renderAdvancedPanel(request = nextRequest, loadConnections, lazy = fals
   }
   function panel(title2, help, part) {
     const p = el("section", "", "fkp-next-panel");
-    p.append(el("h3", title2), el("p", help, "fkp-next-help"));
+    if (!lazy || area === "all") p.append(el("h3", title2));
+    p.append(el("p", help, "fkp-next-help"));
     if (!includes(part)) return p;
     if (lazy) {
       const details = el("details", "", "fkp-next-disclosure");
@@ -15383,12 +15503,37 @@ function renderAdvancedPanel(request = nextRequest, loadConnections, lazy = fals
     try {
       const result = await request(action2, payload);
       message.textContent = result.success ? "\u0413\u043E\u0442\u043E\u0432\u043E" : `\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0432\u044B\u043F\u043E\u043B\u043D\u0438\u0442\u044C \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u0435: ${result.error || "\u043D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043D\u0430\u044F \u043E\u0448\u0438\u0431\u043A\u0430"}`;
-      if (output)
-        output.textContent = JSON.stringify(
-          result.data ?? { error: result.error },
-          null,
-          2
+      if (output) {
+        const data = object2(result.data);
+        const changed = Array.isArray(data.changed) ? data.changed : null;
+        const summaries = {
+          profile_diff: changed ? changed.length ? `\u0418\u0437\u043C\u0435\u043D\u0451\u043D\u043D\u044B\u0445 \u043F\u0430\u0440\u0430\u043C\u0435\u0442\u0440\u043E\u0432: ${changed.length}. \u0417\u043D\u0430\u0447\u0435\u043D\u0438\u044F \u0441\u043A\u0440\u044B\u0442\u044B.` : "\u041F\u0440\u043E\u0444\u0438\u043B\u044C \u0441\u043E\u0432\u043F\u0430\u0434\u0430\u0435\u0442 \u0441 \u0442\u0435\u043A\u0443\u0449\u0435\u0439 \u043A\u043E\u043D\u0444\u0438\u0433\u0443\u0440\u0430\u0446\u0438\u0435\u0439." : "\u0421\u043F\u0438\u0441\u043E\u043A \u0438\u0437\u043C\u0435\u043D\u0435\u043D\u0438\u0439 \u043D\u0435 \u043F\u043E\u043B\u0443\u0447\u0435\u043D. \u041F\u0440\u043E\u0432\u0435\u0440\u044C\u0442\u0435 \u0442\u0435\u0445\u043D\u0438\u0447\u0435\u0441\u043A\u0438\u0435 \u043F\u043E\u0434\u0440\u043E\u0431\u043D\u043E\u0441\u0442\u0438.",
+          profile_apply: "\u041F\u0440\u043E\u0444\u0438\u043B\u044C \u043F\u0440\u0438\u043C\u0435\u043D\u0451\u043D.",
+          profile_save: `\u041F\u0440\u043E\u0444\u0438\u043B\u044C \xAB${data.name || payload.name || ""}\xBB \u0441\u043E\u0445\u0440\u0430\u043D\u0451\u043D.`,
+          rollback: "\u041F\u0440\u0435\u0434\u044B\u0434\u0443\u0449\u0430\u044F \u043A\u043E\u043D\u0444\u0438\u0433\u0443\u0440\u0430\u0446\u0438\u044F \u0432\u043E\u0441\u0441\u0442\u0430\u043D\u043E\u0432\u043B\u0435\u043D\u0430.",
+          recover: "\u041F\u0440\u0435\u0440\u0432\u0430\u043D\u043D\u043E\u0435 \u043F\u0440\u0438\u043C\u0435\u043D\u0435\u043D\u0438\u0435 \u0432\u043E\u0441\u0441\u0442\u0430\u043D\u043E\u0432\u043B\u0435\u043D\u043E."
+        };
+        output.replaceChildren(
+          el(
+            "strong",
+            result.success ? summaries[action2] || "\u0414\u0435\u0439\u0441\u0442\u0432\u0438\u0435 \u0432\u044B\u043F\u043E\u043B\u043D\u0435\u043D\u043E." : `\u0414\u0435\u0439\u0441\u0442\u0432\u0438\u0435 \u043D\u0435 \u0432\u044B\u043F\u043E\u043B\u043D\u0435\u043D\u043E: ${result.error || "\u043D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043D\u0430\u044F \u043E\u0448\u0438\u0431\u043A\u0430"}`
+          )
         );
+        const details = el("details");
+        details.append(el("summary", "\u0422\u0435\u0445\u043D\u0438\u0447\u0435\u0441\u043A\u0438\u0435 \u043F\u043E\u0434\u0440\u043E\u0431\u043D\u043E\u0441\u0442\u0438"));
+        if (result.success && action2 === "profile_diff" && changed?.length) {
+          const list2 = el("ul");
+          for (const key of changed) list2.append(el("li", String(key)));
+          details.append(list2);
+        }
+        details.append(
+          el(
+            "pre",
+            JSON.stringify(result.data ?? { error: result.error }, null, 2)
+          )
+        );
+        output.append(details);
+      }
       return result;
     } catch {
       message.textContent = "\u041D\u0435\u0442 \u0441\u0432\u044F\u0437\u0438 \u0441 \u0440\u043E\u0443\u0442\u0435\u0440\u043E\u043C. \u041F\u043E\u0432\u0442\u043E\u0440\u0438\u0442\u0435 \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u0435.";
@@ -15419,17 +15564,27 @@ function renderAdvancedPanel(request = nextRequest, loadConnections, lazy = fals
   domain.node.placeholder = "example.org";
   const device = input("device", "IP \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430 (\u043D\u0435\u043E\u0431\u044F\u0437\u0430\u0442\u0435\u043B\u044C\u043D\u043E)");
   const routeResult = el("div", "", "fkp-next-result");
+  let routeGeneration = 0;
+  let probeGeneration = 0;
+  const routeKey = () => JSON.stringify([domain.node.value, device.node.value]);
+  const probeKey = () => JSON.stringify([domain.node.value, probeSection.node.value]);
   routeResult.setAttribute("aria-live", "polite");
   route.append(
     domain.wrap,
     device.wrap,
     action("\u041E\u0431\u044A\u044F\u0441\u043D\u0438\u0442\u044C \u043C\u0430\u0440\u0448\u0440\u0443\u0442", async () => {
+      const generation = ++routeGeneration;
+      const key = routeKey();
+      const capturedDomain = domain.node.value.trim();
+      const capturedDevice = device.node.value.trim();
+      const capturedAt = (/* @__PURE__ */ new Date()).toLocaleString();
       const r = await invoke("route_explain", {
         domain: domain.node.value.trim(),
         device: device.node.value.trim(),
         port: 443,
         protocol: "tcp"
       });
+      if (generation !== routeGeneration || key !== routeKey()) return;
       routeResult.replaceChildren();
       if (!r.success) return;
       const data = object2(r.data);
@@ -15440,13 +15595,16 @@ function renderAdvancedPanel(request = nextRequest, loadConnections, lazy = fals
         blocked: "\u0417\u0430\u0431\u043B\u043E\u043A\u0438\u0440\u043E\u0432\u0430\u043D\u043E",
         indeterminate: "\u041C\u0430\u0440\u0448\u0440\u0443\u0442 \u0442\u0440\u0435\u0431\u0443\u0435\u0442 \u0443\u0442\u043E\u0447\u043D\u0435\u043D\u0438\u044F"
       };
-      const connectionLabel = sections.find(([name]) => name === decision.section)?.[1] || decision.section || decision.outbound || "\u2014";
       routeResult.append(
         el(
           "strong",
-          `${decisionLabels[String(decision.status)] || "\u041D\u0435 \u043E\u043F\u0440\u0435\u0434\u0435\u043B\u0435\u043D\u043E"} \u2192 ${connectionLabel}`
+          `${decisionLabels[String(decision.status)] || "\u041D\u0435 \u043E\u043F\u0440\u0435\u0434\u0435\u043B\u0435\u043D\u043E"} \u2192 ${connectionLabel(decision.section || decision.outbound)}`
         ),
-        el("p", "\u0414\u043E\u0441\u0442\u0443\u043F\u043D\u043E\u0441\u0442\u044C \u0441\u0430\u0439\u0442\u0430 \u043D\u0435 \u043F\u0440\u043E\u0432\u0435\u0440\u044F\u043B\u0430\u0441\u044C")
+        el("p", "\u0414\u043E\u0441\u0442\u0443\u043F\u043D\u043E\u0441\u0442\u044C \u0441\u0430\u0439\u0442\u0430 \u043D\u0435 \u043F\u0440\u043E\u0432\u0435\u0440\u044F\u043B\u0430\u0441\u044C"),
+        el(
+          "p",
+          `\u0426\u0435\u043B\u044C: ${capturedDomain} \xB7 \u0423\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u043E: ${capturedDevice || "\u043D\u0435 \u0443\u043A\u0430\u0437\u0430\u043D\u043E"} \xB7 \u0418\u0441\u0442\u043E\u0447\u043D\u0438\u043A \u043F\u0440\u0430\u0432\u0438\u043B: \u0440\u043E\u0443\u0442\u0435\u0440 \xB7 ${capturedAt}`
+        )
       );
       const trace = el("ol");
       trace.dataset.detail = "true";
@@ -15454,7 +15612,10 @@ function renderAdvancedPanel(request = nextRequest, loadConnections, lazy = fals
       for (const step of Array.isArray(data.trace) ? data.trace : []) {
         const row = object2(step);
         trace.append(
-          el("li", `${row.section || ""}: ${row.reason || row.match || ""}`)
+          el(
+            "li",
+            `${connectionLabel(row.section, "")}: ${row.reason || row.match || ""}`
+          )
         );
       }
       routeResult.append(trace);
@@ -15466,21 +15627,41 @@ function renderAdvancedPanel(request = nextRequest, loadConnections, lazy = fals
   ]);
   const probeResult = el("p", "", "fkp-next-result");
   probeResult.setAttribute("aria-live", "polite");
-  route.append(
-    probeSection.wrap,
-    action("\u041F\u0440\u043E\u0432\u0435\u0440\u0438\u0442\u044C \u0434\u043E\u0441\u0442\u0443\u043F\u043D\u043E\u0441\u0442\u044C", async () => {
-      const payload = { domain: domain.node.value.trim() };
-      if (probeSection.node.value) payload.section = probeSection.node.value;
-      const r = await invoke("probe", payload);
-      if (!r.success) {
-        probeResult.textContent = `\u041F\u0440\u043E\u0432\u0435\u0440\u043A\u0430 \u043D\u0435 \u0432\u044B\u043F\u043E\u043B\u043D\u0435\u043D\u0430: ${r.error}`;
-        return;
-      }
-      const d = object2(r.data);
-      probeResult.textContent = `${d.reachable ? "\u0421\u0430\u0439\u0442 \u0434\u043E\u0441\u0442\u0443\u043F\u0435\u043D" : "\u0421\u0430\u0439\u0442 \u043D\u0435\u0434\u043E\u0441\u0442\u0443\u043F\u0435\u043D"} \xB7 HTTP ${d.http_status || "\u2014"} \xB7 ${d.duration_ms ?? "\u2014"} \u043C\u0441. \u041F\u0440\u043E\u0432\u0435\u0440\u0435\u043D \u0441\u0435\u0442\u0435\u0432\u043E\u0439 \u0434\u043E\u0441\u0442\u0443\u043F \u0441 \u0440\u043E\u0443\u0442\u0435\u0440\u0430; \u0432\u0445\u043E\u0434 \u0432 \u0441\u0435\u0440\u0432\u0438\u0441 \u043D\u0435 \u043F\u0440\u043E\u0432\u0435\u0440\u044F\u0435\u0442\u0441\u044F.`;
-    }),
-    probeResult
-  );
+  const probeAction = action("\u041F\u0440\u043E\u0432\u0435\u0440\u0438\u0442\u044C \u0434\u043E\u0441\u0442\u0443\u043F\u043D\u043E\u0441\u0442\u044C", async () => {
+    const generation = ++probeGeneration;
+    const key = probeKey();
+    const target = domain.node.value.trim();
+    const route2 = probeSection.node.selectedOptions[0]?.textContent || "\u0422\u0435\u043A\u0443\u0449\u0438\u0439 \u043C\u0430\u0440\u0448\u0440\u0443\u0442 \u0440\u043E\u0443\u0442\u0435\u0440\u0430";
+    const capturedAt = (/* @__PURE__ */ new Date()).toLocaleString();
+    const context = `\u0426\u0435\u043B\u044C: ${target} \xB7 \u041F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435: ${route2} \xB7 \u0418\u0441\u0442\u043E\u0447\u043D\u0438\u043A: \u0441 \u0440\u043E\u0443\u0442\u0435\u0440\u0430, \u043D\u0435 \u0441 \u043A\u043B\u0438\u0435\u043D\u0442\u0441\u043A\u043E\u0433\u043E \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430 \xB7 ${capturedAt}`;
+    probeResult.textContent = `\u041F\u0440\u043E\u0432\u0435\u0440\u044F\u0435\u043C\u2026 ${context}`;
+    const payload = { domain: target };
+    if (probeSection.node.value) payload.section = probeSection.node.value;
+    const r = await invoke("probe", payload);
+    if (generation !== probeGeneration || key !== probeKey()) return;
+    if (!r.success) {
+      probeResult.textContent = `\u041F\u0440\u043E\u0432\u0435\u0440\u043A\u0430 \u043D\u0435 \u0432\u044B\u043F\u043E\u043B\u043D\u0435\u043D\u0430: ${r.error}. ${context}`;
+      return;
+    }
+    const d = object2(r.data);
+    probeResult.textContent = `${d.reachable === true ? "\u0421\u0430\u0439\u0442 \u0434\u043E\u0441\u0442\u0443\u043F\u0435\u043D" : d.reachable === false ? "\u0421\u0430\u0439\u0442 \u043D\u0435\u0434\u043E\u0441\u0442\u0443\u043F\u0435\u043D" : "\u0414\u043E\u0441\u0442\u0443\u043F\u043D\u043E\u0441\u0442\u044C \u043D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043D\u0430"} \xB7 HTTP ${d.http_status || "\u2014"} \xB7 ${d.duration_ms ?? "\u2014"} \u043C\u0441. ${context}. \u041F\u0440\u043E\u0432\u0435\u0440\u0435\u043D \u0441\u0435\u0442\u0435\u0432\u043E\u0439 \u0434\u043E\u0441\u0442\u0443\u043F \u0441 \u0440\u043E\u0443\u0442\u0435\u0440\u0430; \u0432\u0445\u043E\u0434 \u0432 \u0441\u0435\u0440\u0432\u0438\u0441 \u043D\u0435 \u043F\u0440\u043E\u0432\u0435\u0440\u044F\u0435\u0442\u0441\u044F.`;
+  });
+  function invalidateProbe() {
+    probeGeneration++;
+    probeAction.disabled = false;
+    probeResult.textContent = "\u041F\u0430\u0440\u0430\u043C\u0435\u0442\u0440\u044B \u0438\u0437\u043C\u0435\u043D\u0435\u043D\u044B \u2014 \u043F\u0440\u043E\u0432\u0435\u0440\u044C\u0442\u0435 \u0441\u043D\u043E\u0432\u0430";
+  }
+  function invalidateRoute() {
+    routeGeneration++;
+    routeResult.textContent = "\u041F\u0430\u0440\u0430\u043C\u0435\u0442\u0440\u044B \u0438\u0437\u043C\u0435\u043D\u0435\u043D\u044B \u2014 \u043F\u0440\u043E\u0432\u0435\u0440\u044C\u0442\u0435 \u0441\u043D\u043E\u0432\u0430";
+  }
+  domain.node.oninput = () => {
+    invalidateRoute();
+    invalidateProbe();
+  };
+  device.node.oninput = invalidateRoute;
+  probeSection.node.onchange = invalidateProbe;
+  route.append(probeSection.wrap, probeAction, probeResult);
   const profiles = panel(
     "\u041F\u0440\u043E\u0444\u0438\u043B\u0438 \u0438 \u0432\u043E\u0441\u0441\u0442\u0430\u043D\u043E\u0432\u043B\u0435\u043D\u0438\u0435",
     "\u0421\u043D\u0430\u0447\u0430\u043B\u0430 \u0441\u0440\u0430\u0432\u043D\u0438\u0442\u0435 \u043F\u0440\u043E\u0444\u0438\u043B\u044C. \u041F\u0440\u0438 \u043F\u0440\u0438\u043C\u0435\u043D\u0435\u043D\u0438\u0438 \u0441\u043E\u0445\u0440\u0430\u043D\u044F\u0435\u0442\u0441\u044F \u043F\u0440\u0435\u0434\u044B\u0434\u0443\u0449\u0430\u044F \u0440\u0430\u0431\u043E\u0447\u0430\u044F \u043A\u043E\u043D\u0444\u0438\u0433\u0443\u0440\u0430\u0446\u0438\u044F.",
@@ -15488,7 +15669,8 @@ function renderAdvancedPanel(request = nextRequest, loadConnections, lazy = fals
   );
   const profile = select("\u0421\u043E\u0445\u0440\u0430\u043D\u0451\u043D\u043D\u044B\u0439 \u043F\u0440\u043E\u0444\u0438\u043B\u044C", []);
   const profileName = input("profile_name", "\u041D\u0430\u0437\u0432\u0430\u043D\u0438\u0435 \u043D\u043E\u0432\u043E\u0433\u043E \u043F\u0440\u043E\u0444\u0438\u043B\u044F");
-  const profileResult = el("pre", "", "fkp-next-result");
+  const profileResult = el("div", "", "fkp-next-result");
+  profileResult.setAttribute("aria-live", "polite");
   const apply = action("\u041F\u0440\u0438\u043C\u0435\u043D\u0438\u0442\u044C \u043F\u0440\u043E\u0444\u0438\u043B\u044C", async () => {
     if (previewName !== profile.node.value || !previewDigest || !previewProfileDigest)
       return;
@@ -15547,6 +15729,28 @@ function renderAdvancedPanel(request = nextRequest, loadConnections, lazy = fals
   });
   rollback.disabled = true;
   profiles.append(rollback);
+  const recoveryNotice = el(
+    "p",
+    "\u041F\u0440\u0438\u043C\u0435\u043D\u0435\u043D\u0438\u0435 \u0431\u044B\u043B\u043E \u043F\u0440\u0435\u0440\u0432\u0430\u043D\u043E. \u0412\u043E\u0441\u0441\u0442\u0430\u043D\u043E\u0432\u0438\u0442\u0435 \u0442\u0440\u0430\u043D\u0437\u0430\u043A\u0446\u0438\u044E, \u0437\u0430\u0442\u0435\u043C \u043F\u0440\u043E\u0432\u0435\u0440\u044C\u0442\u0435 \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442."
+  );
+  const recoveryResult = el("div", "", "fkp-next-notice");
+  recoveryResult.setAttribute("aria-live", "polite");
+  const recover = action("\u0412\u043E\u0441\u0441\u0442\u0430\u043D\u043E\u0432\u0438\u0442\u044C \u043F\u0440\u0435\u0440\u0432\u0430\u043D\u043D\u043E\u0435 \u043F\u0440\u0438\u043C\u0435\u043D\u0435\u043D\u0438\u0435", async () => {
+    const result = await invoke("recover", {}, recoveryResult);
+    if (!result.success)
+      recoveryResult.append(
+        el(
+          "p",
+          "\u041F\u043E\u0432\u0442\u043E\u0440\u0438\u0442\u0435 \u0432\u043E\u0441\u0441\u0442\u0430\u043D\u043E\u0432\u043B\u0435\u043D\u0438\u0435 \u043F\u043E\u0441\u043B\u0435 \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0438 \u0441\u0432\u044F\u0437\u0438 \u0438 \u0441\u043E\u0441\u0442\u043E\u044F\u043D\u0438\u044F \u0441\u0435\u0440\u0432\u0438\u0441\u0430. \u041F\u0440\u0438\u0447\u0438\u043D\u0430 \u043E\u0442\u043A\u0430\u0437\u0430 \u0443\u043A\u0430\u0437\u0430\u043D\u0430 \u0432\u044B\u0448\u0435."
+        )
+      );
+    await refreshStatus();
+  });
+  recoveryNotice.hidden = true;
+  recover.hidden = true;
+  const recovery = el("div");
+  recovery.append(recoveryNotice, recover, recoveryResult);
+  root.insertBefore(recovery, content);
   const temporary = panel(
     "\u0412\u0440\u0435\u043C\u0435\u043D\u043D\u044B\u0435 \u043F\u0440\u0430\u0432\u0438\u043B\u0430",
     "\u041F\u0440\u0430\u0432\u0438\u043B\u043E \u0430\u0432\u0442\u043E\u043C\u0430\u0442\u0438\u0447\u0435\u0441\u043A\u0438 \u043F\u0435\u0440\u0435\u0441\u0442\u0430\u043D\u0435\u0442 \u0434\u0435\u0439\u0441\u0442\u0432\u043E\u0432\u0430\u0442\u044C \u043F\u043E \u0438\u0441\u0442\u0435\u0447\u0435\u043D\u0438\u0438 \u0432\u044B\u0431\u0440\u0430\u043D\u043D\u043E\u0433\u043E \u0441\u0440\u043E\u043A\u0430.",
@@ -15560,6 +15764,7 @@ function renderAdvancedPanel(request = nextRequest, loadConnections, lazy = fals
     ["86400", "24 \u0447\u0430\u0441\u0430"]
   ]);
   const tempList = el("div");
+  let temporaryItems;
   temporary.append(
     td.wrap,
     ts.wrap,
@@ -15587,6 +15792,13 @@ function renderAdvancedPanel(request = nextRequest, loadConnections, lazy = fals
   );
   recommendationDomain.node.placeholder = "example.org";
   const scanResult = el("p", "", "fkp-next-result");
+  let scanGeneration = 0;
+  const scanKey = () => JSON.stringify([recommendationDomain.node.value, rs.node.value]);
+  function invalidateScan() {
+    scanGeneration++;
+    scanAction.disabled = false;
+    scanResult.textContent = "\u041F\u0430\u0440\u0430\u043C\u0435\u0442\u0440\u044B \u0438\u0437\u043C\u0435\u043D\u0435\u043D\u044B \u2014 \u043F\u0440\u043E\u0432\u0435\u0440\u044C\u0442\u0435 \u0441\u043D\u043E\u0432\u0430";
+  }
   const autoDetect = input(
     "smart_detect_enabled",
     "\u0410\u0432\u0442\u043E\u043C\u0430\u0442\u0438\u0447\u0435\u0441\u043A\u0438 \u043F\u0440\u0435\u0434\u043B\u0430\u0433\u0430\u0442\u044C \u043E\u0431\u0445\u043E\u0434 \u043E\u0448\u0438\u0431\u043E\u043A \u0438\u0437 \u0436\u0443\u0440\u043D\u0430\u043B\u0430"
@@ -15596,22 +15808,29 @@ function renderAdvancedPanel(request = nextRequest, loadConnections, lazy = fals
   const autoResult = el("p", "", "fkp-next-result");
   autoResult.setAttribute("aria-live", "polite");
   scanResult.setAttribute("aria-live", "polite");
+  const scanAction = action("\u041F\u0440\u043E\u0432\u0435\u0440\u0438\u0442\u044C \u0434\u0440\u0443\u0433\u043E\u0439 \u043C\u0430\u0440\u0448\u0440\u0443\u0442", async () => {
+    const generation = ++scanGeneration;
+    const key = scanKey();
+    const context = `\u0426\u0435\u043B\u044C: ${recommendationDomain.node.value.trim()} \xB7 \u041F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435: ${rs.node.selectedOptions[0]?.textContent || rs.node.value} \xB7 \u0418\u0441\u0442\u043E\u0447\u043D\u0438\u043A: \u0441 \u0440\u043E\u0443\u0442\u0435\u0440\u0430, \u043D\u0435 \u0441 \u043A\u043B\u0438\u0435\u043D\u0442\u0441\u043A\u043E\u0433\u043E \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430 \xB7 ${(/* @__PURE__ */ new Date()).toLocaleString()}`;
+    const r = await invoke("recommendation_scan", {
+      domain: recommendationDomain.node.value.trim(),
+      section: rs.node.value
+    });
+    if (generation !== scanGeneration || key !== scanKey()) return;
+    if (r.success) {
+      const data = object2(r.data);
+      const current = object2(data.current), target = object2(data.section);
+      scanResult.textContent = `\u0422\u0435\u043A\u0443\u0449\u0438\u0439 \u043C\u0430\u0440\u0448\u0440\u0443\u0442: ${current.reachable === true ? "\u0435\u0441\u0442\u044C \u0441\u0435\u0442\u0435\u0432\u043E\u0439 \u043E\u0442\u0432\u0435\u0442" : current.reachable === false ? "\u043D\u0435\u0442 \u043E\u0442\u0432\u0435\u0442\u0430" : "\u0441\u043C. \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442\u044B \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0438"}. \u0412\u044B\u0431\u0440\u0430\u043D\u043D\u043E\u0435 \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435: ${target.reachable === true ? "\u0435\u0441\u0442\u044C \u0441\u0435\u0442\u0435\u0432\u043E\u0439 \u043E\u0442\u0432\u0435\u0442" : target.reachable === false ? "\u043D\u0435\u0442 \u043E\u0442\u0432\u0435\u0442\u0430" : "\u0441\u043C. \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442\u044B \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0438"}. ${context}. \u0420\u0435\u043A\u043E\u043C\u0435\u043D\u0434\u0430\u0446\u0438\u044F \u043F\u043E\u044F\u0432\u043B\u044F\u0435\u0442\u0441\u044F \u043F\u043E\u0441\u043B\u0435 \u043F\u043E\u0432\u0442\u043E\u0440\u043D\u044B\u0445 \u043D\u0430\u0431\u043B\u044E\u0434\u0435\u043D\u0438\u0439; \u043F\u0440\u0430\u0432\u0438\u043B\u0430 \u0430\u0432\u0442\u043E\u043C\u0430\u0442\u0438\u0447\u0435\u0441\u043A\u0438 \u043D\u0435 \u043F\u0440\u0438\u043C\u0435\u043D\u044F\u044E\u0442\u0441\u044F.`;
+      await refreshRecommendations();
+    } else
+      scanResult.textContent = `\u0421\u0440\u0430\u0432\u043D\u0435\u043D\u0438\u0435 \u043D\u0435 \u0432\u044B\u043F\u043E\u043B\u043D\u0435\u043D\u043E: ${r.error || "\u043D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043D\u0430\u044F \u043E\u0448\u0438\u0431\u043A\u0430"}. ${context}`;
+  });
+  recommendationDomain.node.oninput = invalidateScan;
+  rs.node.onchange = invalidateScan;
   recommendations.append(
     recommendationDomain.wrap,
     rs.wrap,
-    action("\u041F\u0440\u043E\u0432\u0435\u0440\u0438\u0442\u044C \u0434\u0440\u0443\u0433\u043E\u0439 \u043C\u0430\u0440\u0448\u0440\u0443\u0442", async () => {
-      const r = await invoke("recommendation_scan", {
-        domain: recommendationDomain.node.value.trim(),
-        section: rs.node.value
-      });
-      if (r.success) {
-        const data = object2(r.data);
-        const current = object2(data.current), target = object2(data.section);
-        scanResult.textContent = `\u0422\u0435\u043A\u0443\u0449\u0438\u0439 \u043C\u0430\u0440\u0448\u0440\u0443\u0442: ${current.reachable === true ? "\u0435\u0441\u0442\u044C \u0441\u0435\u0442\u0435\u0432\u043E\u0439 \u043E\u0442\u0432\u0435\u0442" : current.reachable === false ? "\u043D\u0435\u0442 \u043E\u0442\u0432\u0435\u0442\u0430" : "\u0441\u043C. \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442\u044B \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0438"}. \u0412\u044B\u0431\u0440\u0430\u043D\u043D\u043E\u0435 \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435: ${target.reachable === true ? "\u0435\u0441\u0442\u044C \u0441\u0435\u0442\u0435\u0432\u043E\u0439 \u043E\u0442\u0432\u0435\u0442" : target.reachable === false ? "\u043D\u0435\u0442 \u043E\u0442\u0432\u0435\u0442\u0430" : "\u0441\u043C. \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442\u044B \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0438"}. \u0420\u0435\u043A\u043E\u043C\u0435\u043D\u0434\u0430\u0446\u0438\u044F \u043F\u043E\u044F\u0432\u043B\u044F\u0435\u0442\u0441\u044F \u043F\u043E\u0441\u043B\u0435 \u043F\u043E\u0432\u0442\u043E\u0440\u043D\u044B\u0445 \u043D\u0430\u0431\u043B\u044E\u0434\u0435\u043D\u0438\u0439; \u043F\u0440\u0430\u0432\u0438\u043B\u0430 \u0430\u0432\u0442\u043E\u043C\u0430\u0442\u0438\u0447\u0435\u0441\u043A\u0438 \u043D\u0435 \u043F\u0440\u0438\u043C\u0435\u043D\u044F\u044E\u0442\u0441\u044F.`;
-        await refreshRecommendations();
-      } else
-        scanResult.textContent = `\u0421\u0440\u0430\u0432\u043D\u0435\u043D\u0438\u0435 \u043D\u0435 \u0432\u044B\u043F\u043E\u043B\u043D\u0435\u043D\u043E: ${r.error || "\u043D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043D\u0430\u044F \u043E\u0448\u0438\u0431\u043A\u0430"}`;
-    }),
+    scanAction,
     scanResult,
     recList
   );
@@ -15637,6 +15856,7 @@ function renderAdvancedPanel(request = nextRequest, loadConnections, lazy = fals
     const r = await read("status", {});
     if (current !== statusGeneration) return;
     if (!r.success) {
+      status.hidden = false;
       status.textContent = "\u0421\u043E\u0441\u0442\u043E\u044F\u043D\u0438\u0435 \u043D\u0435\u0434\u043E\u0441\u0442\u0443\u043F\u043D\u043E. \u041E\u0431\u043D\u043E\u0432\u0438\u0442\u0435 \u0441\u0442\u0440\u0430\u043D\u0438\u0446\u0443 \u0438\u043B\u0438 \u043F\u0440\u043E\u0432\u0435\u0440\u044C\u0442\u0435 \u0441\u0435\u0440\u0432\u0438\u0441.";
       return;
     }
@@ -15644,17 +15864,27 @@ function renderAdvancedPanel(request = nextRequest, loadConnections, lazy = fals
     const smart = object2(d.smart_detect);
     autoDetect.node.checked = smart.enabled === true;
     const refreshedDigest = String(d.digest || "");
+    if (digest && refreshedDigest !== digest) {
+      invalidateRoute();
+      invalidateProbe();
+      invalidateScan();
+    }
     if (previewName && refreshedDigest !== previewDigest) invalidatePreview();
     digest = refreshedDigest;
     const versions = object2(d.versions);
-    status.textContent = `Forkop ${versions.forkop || "\u2014"} \xB7 sing-box ${versions.sing_box || "\u2014"}${d.recovery_pending ? " \xB7 \u0422\u0440\u0435\u0431\u0443\u0435\u0442\u0441\u044F \u0432\u043E\u0441\u0441\u0442\u0430\u043D\u043E\u0432\u043B\u0435\u043D\u0438\u0435" : ""}`;
-    rollback.disabled = !d.previous_available;
+    status.textContent = area === "all" ? `Forkop ${versions.forkop || "\u2014"} \xB7 sing-box ${versions.sing_box || "\u2014"}${d.recovery_pending ? " \xB7 \u0422\u0440\u0435\u0431\u0443\u0435\u0442\u0441\u044F \u0432\u043E\u0441\u0441\u0442\u0430\u043D\u043E\u0432\u043B\u0435\u043D\u0438\u0435" : ""}` : d.recovery_pending ? "\u0422\u0440\u0435\u0431\u0443\u0435\u0442\u0441\u044F \u0432\u043E\u0441\u0441\u0442\u0430\u043D\u043E\u0432\u043B\u0435\u043D\u0438\u0435" : "";
+    status.hidden = !status.textContent;
+    rollback.disabled = !d.previous_available || d.recovery_pending === true;
+    recoveryNotice.hidden = d.recovery_pending !== true;
+    recover.hidden = d.recovery_pending !== true;
+    recover.disabled = d.recovery_pending !== true;
     sections = (Array.isArray(d.sections) ? d.sections : []).map(
       (s) => {
         const o = object2(s);
         return [String(o.name), String(o.label || o.name)];
       }
     );
+    if (temporaryItems) showTemporary();
     const probeChoice = probeSection.node.value;
     probeSection.node.replaceChildren();
     for (const [value, label] of [
@@ -15666,6 +15896,7 @@ function renderAdvancedPanel(request = nextRequest, loadConnections, lazy = fals
       probeSection.node.append(option);
     }
     probeSection.node.value = probeChoice;
+    if (probeSection.node.value !== probeChoice) invalidateProbe();
     for (const s of sectionSelects) {
       const old = s.value;
       s.replaceChildren();
@@ -15702,13 +15933,17 @@ function renderAdvancedPanel(request = nextRequest, loadConnections, lazy = fals
       message.textContent = "\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0437\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044C \u0432\u0440\u0435\u043C\u0435\u043D\u043D\u044B\u0435 \u043F\u0440\u0430\u0432\u0438\u043B\u0430. \u041D\u0430\u0436\u043C\u0438\u0442\u0435 \xAB\u041E\u0431\u043D\u043E\u0432\u0438\u0442\u044C \u0434\u0430\u043D\u043D\u044B\u0435\xBB.";
       return;
     }
+    temporaryItems = items(r.data);
+    showTemporary();
+  }
+  function showTemporary() {
     tempList.replaceChildren();
-    for (const t of items(r.data)) {
+    for (const t of temporaryItems || []) {
       const row = el("div", "", "fkp-next-row");
       row.append(
         el(
           "span",
-          `${t.domain} \u2192 ${t.section} \xB7 \u0434\u043E ${new Date(Number(t.expires) * 1e3).toLocaleString()}`
+          `${t.domain} \u2192 ${connectionLabel(t.section)} \xB7 \u0434\u043E ${new Date(Number(t.expires) * 1e3).toLocaleString()}`
         ),
         action("\u0423\u0434\u0430\u043B\u0438\u0442\u044C \u043F\u0440\u0430\u0432\u0438\u043B\u043E", async () => {
           await invoke("temporary_delete", { id: t.id });
@@ -15759,7 +15994,8 @@ function renderAdvancedPanel(request = nextRequest, loadConnections, lazy = fals
   function mountCompatibility() {
     const compatibility = renderCompatibilityPanel(
       request,
-      lazy ? request : initialRequest
+      lazy ? request : initialRequest,
+      !lazy || area === "all"
     );
     compatibility.classList.add("fkp-next-compatibility");
     return compatibility;
@@ -16249,7 +16485,220 @@ function renderNextPanel(request = nextRequest, loadConnections, adapters = {}) 
   return root;
 }
 
+// src/forkop/workspace/formGuide.ts
+var initializedGroups = /* @__PURE__ */ new WeakSet();
+var settingsGroups = {
+  dns: {
+    title: "DNS \u0438 \u0440\u0430\u0437\u0440\u0435\u0448\u0435\u043D\u0438\u0435 \u0438\u043C\u0451\u043D",
+    help: "\u041A\u0430\u043A \u0440\u043E\u0443\u0442\u0435\u0440 \u043F\u043E\u043B\u0443\u0447\u0430\u0435\u0442 \u0430\u0434\u0440\u0435\u0441\u0430 \u0441\u0430\u0439\u0442\u043E\u0432 \u0438 \u0441\u0435\u0440\u0432\u0435\u0440\u043E\u0432. \u041D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438 IPv4 \u0438 IPv6 \u043E\u0441\u0442\u0430\u044E\u0442\u0441\u044F \u0437\u0434\u0435\u0441\u044C."
+  },
+  network: {
+    title: "\u0421\u0435\u0442\u0435\u0432\u044B\u0435 \u0438\u043D\u0442\u0435\u0440\u0444\u0435\u0439\u0441\u044B",
+    help: "\u0418\u0437 \u043A\u0430\u043A\u043E\u0439 \u0441\u0435\u0442\u0438 \u043F\u0440\u0438\u043D\u0438\u043C\u0430\u0442\u044C \u0442\u0440\u0430\u0444\u0438\u043A \u0438 \u0447\u0435\u0440\u0435\u0437 \u043A\u0430\u043A\u043E\u0439 \u0438\u043D\u0442\u0435\u0440\u0444\u0435\u0439\u0441 \u0432\u044B\u0445\u043E\u0434\u0438\u0442\u044C \u0432 \u0438\u043D\u0442\u0435\u0440\u043D\u0435\u0442."
+  },
+  controller: {
+    title: "\u0414\u043E\u0441\u0442\u0443\u043F \u043A \u043A\u043E\u043D\u0442\u0440\u043E\u043B\u043B\u0435\u0440\u0443",
+    help: "YACD \u2014 \u043E\u0442\u0434\u0435\u043B\u044C\u043D\u0430\u044F \u043F\u0430\u043D\u0435\u043B\u044C \u0443\u043F\u0440\u0430\u0432\u043B\u0435\u043D\u0438\u044F. \u0414\u043B\u044F \u043E\u0431\u044B\u0447\u043D\u043E\u0439 \u0440\u0430\u0431\u043E\u0442\u044B \u0447\u0435\u0440\u0435\u0437 LuCI \u0432\u043A\u043B\u044E\u0447\u0430\u0442\u044C \u0435\u0451 \u043D\u0435 \u0442\u0440\u0435\u0431\u0443\u0435\u0442\u0441\u044F."
+  },
+  updates: {
+    title: "\u041E\u0431\u043D\u043E\u0432\u043B\u0435\u043D\u0438\u044F \u0438 \u0437\u0430\u0433\u0440\u0443\u0437\u043A\u0438",
+    help: "\u0420\u0430\u0441\u043F\u0438\u0441\u0430\u043D\u0438\u0435 \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0438 \u043A\u043E\u043C\u043F\u043E\u043D\u0435\u043D\u0442\u043E\u0432 \u0438 \u0437\u0430\u0433\u0440\u0443\u0437\u043A\u0438 \u0441\u043F\u0438\u0441\u043A\u043E\u0432. \u0418\u0441\u0442\u043E\u0447\u043D\u0438\u043A\u0438 \u0441\u0435\u0440\u0432\u0435\u0440\u043E\u0432 \u0438 \u0438\u0445 \u043F\u043E\u0434\u043F\u0438\u0441\u043A\u0438 \u0437\u0430\u0434\u0430\u044E\u0442\u0441\u044F \u0432 \u043F\u0440\u0430\u0432\u0438\u043B\u0430\u0445."
+  },
+  system: {
+    title: "\u0421\u0438\u0441\u0442\u0435\u043C\u043D\u044B\u0435 \u043F\u0430\u0440\u0430\u043C\u0435\u0442\u0440\u044B",
+    help: "\u0425\u0440\u0430\u043D\u0435\u043D\u0438\u0435 \u043A\u043E\u043D\u0444\u0438\u0433\u0443\u0440\u0430\u0446\u0438\u0438 \u0438 \u043A\u044D\u0448\u0430, \u0436\u0443\u0440\u043D\u0430\u043B, DHCP, QUIC \u0438 NTP.",
+    collapsed: true
+  }
+};
+var ruleGroups = {
+  action: {
+    title: "\u0414\u0435\u0439\u0441\u0442\u0432\u0438\u0435 \u043F\u0440\u0430\u0432\u0438\u043B\u0430",
+    help: "\u0421\u043D\u0430\u0447\u0430\u043B\u0430 \u0432\u044B\u0431\u0435\u0440\u0438\u0442\u0435, \u0447\u0442\u043E \u0434\u0435\u043B\u0430\u0442\u044C \u0441 \u0442\u0440\u0430\u0444\u0438\u043A\u043E\u043C. \u041D\u0430 \u0432\u043A\u043B\u0430\u0434\u043A\u0435 \xAB\u0423\u0441\u043B\u043E\u0432\u0438\u044F\xBB \u0437\u0430\u0434\u0430\u0439\u0442\u0435, \u043A \u043A\u0430\u043A\u0438\u043C \u0441\u0430\u0439\u0442\u0430\u043C \u0438 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430\u043C \u044D\u0442\u043E \u043E\u0442\u043D\u043E\u0441\u0438\u0442\u0441\u044F."
+  },
+  sources: {
+    title: "\u0418\u0441\u0442\u043E\u0447\u043D\u0438\u043A\u0438 \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u044F",
+    help: "\u0414\u043E\u0431\u0430\u0432\u044C\u0442\u0435 \u0441\u0441\u044B\u043B\u043A\u0438 \u0438\u043B\u0438 \u043F\u043E\u0434\u043F\u0438\u0441\u043A\u0443. \u0422\u0430\u043A\u0436\u0435 \u0434\u043E\u0441\u0442\u0443\u043F\u043D\u044B VPN-\u0438\u043D\u0442\u0435\u0440\u0444\u0435\u0439\u0441, JSON, \u0430\u0432\u0442\u043E\u043C\u0430\u0442\u0438\u0447\u0435\u0441\u043A\u0438\u0439 \u0432\u044B\u0431\u043E\u0440 URLTest \u0438 \u043F\u0435\u0440\u0435\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435 \u043F\u043E \u043F\u0440\u0438\u043E\u0440\u0438\u0442\u0435\u0442\u0443."
+  },
+  dns: { title: "DNS \u0434\u043B\u044F \u044D\u0442\u043E\u0433\u043E \u043F\u0440\u0430\u0432\u0438\u043B\u0430" },
+  advanced: {
+    title: "\u041A\u0430\u0441\u043A\u0430\u0434, \u043B\u043E\u043A\u0430\u043B\u044C\u043D\u044B\u0439 \u043F\u0440\u043E\u043A\u0441\u0438 \u0438 \u0434\u043E\u043F\u043E\u043B\u043D\u0438\u0442\u0435\u043B\u044C\u043D\u044B\u0435 \u043F\u0430\u0440\u0430\u043C\u0435\u0442\u0440\u044B",
+    help: "\u041F\u0440\u043E\u043C\u0435\u0436\u0443\u0442\u043E\u0447\u043D\u044B\u0439 \u0441\u0435\u0440\u0432\u0435\u0440, HTTP/SOCKS-\u0434\u043E\u0441\u0442\u0443\u043F, \u0440\u0430\u0437\u0440\u0435\u0448\u0435\u043D\u0438\u0435 IP \u0438 \u043E\u0442\u043E\u0431\u0440\u0430\u0436\u0435\u043D\u0438\u0435 \u0441\u0435\u0440\u0432\u0435\u0440\u043E\u0432.",
+    collapsed: true
+  },
+  other: { title: "\u041F\u0430\u0440\u0430\u043C\u0435\u0442\u0440\u044B \u0432\u044B\u0431\u0440\u0430\u043D\u043D\u043E\u0433\u043E \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u044F" }
+};
+var conditionGroups = {
+  destinations: {
+    title: "\u0421\u0430\u0439\u0442\u044B, \u0430\u0434\u0440\u0435\u0441\u0430 \u0438 \u0441\u043F\u0438\u0441\u043A\u0438",
+    help: "\u0423\u043A\u0430\u0436\u0438\u0442\u0435 \u0434\u043E\u043C\u0435\u043D\u044B \u0438 IP \u0432\u0440\u0443\u0447\u043D\u0443\u044E \u0438\u043B\u0438 \u0432\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u0433\u043E\u0442\u043E\u0432\u044B\u0435 \u0441\u043F\u0438\u0441\u043A\u0438. \u0424\u043E\u0440\u043C\u0430\u0442\u044B \u0438 \u0443\u0441\u043B\u043E\u0432\u0438\u044F \u0441\u043E\u043F\u043E\u0441\u0442\u0430\u0432\u043B\u0435\u043D\u0438\u044F \u0443\u043A\u0430\u0437\u0430\u043D\u044B \u0443 \u043A\u0430\u0436\u0434\u043E\u0433\u043E \u043F\u043E\u043B\u044F."
+  },
+  devices: {
+    title: "\u0423\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430 \u0438 \u043E\u0445\u0432\u0430\u0442 \u043F\u0440\u0430\u0432\u0438\u043B\u0430",
+    help: "\u0424\u0438\u043B\u044C\u0442\u0440 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430 \u043E\u0433\u0440\u0430\u043D\u0438\u0447\u0438\u0432\u0430\u0435\u0442 \u0443\u0441\u043B\u043E\u0432\u0438\u044F, \u0430 \u043F\u0440\u0438\u043D\u0443\u0434\u0438\u0442\u0435\u043B\u044C\u043D\u0430\u044F \u043C\u0430\u0440\u0448\u0440\u0443\u0442\u0438\u0437\u0430\u0446\u0438\u044F \u043D\u0430\u043F\u0440\u0430\u0432\u043B\u044F\u0435\u0442 \u0432\u0435\u0441\u044C \u0435\u0433\u043E \u0442\u0440\u0430\u0444\u0438\u043A. \u042D\u0442\u0438 \u0440\u0435\u0436\u0438\u043C\u044B \u0438\u043C\u0435\u044E\u0442 \u0440\u0430\u0437\u043D\u044B\u0439 \u0441\u043C\u044B\u0441\u043B."
+  },
+  other: { title: "\u0414\u043E\u043F\u043E\u043B\u043D\u0438\u0442\u0435\u043B\u044C\u043D\u044B\u0435 \u0443\u0441\u043B\u043E\u0432\u0438\u044F" }
+};
+var inboundGroups = {
+  access: {
+    title: "\u041F\u0440\u043E\u0442\u043E\u043A\u043E\u043B \u0438 \u0434\u043E\u0441\u0442\u0443\u043F",
+    help: "\u0412\u0445\u043E\u0434\u044F\u0449\u0435\u0435 \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435 \u043F\u0440\u0438\u043D\u0438\u043C\u0430\u0435\u0442 \u043A\u043B\u0438\u0435\u043D\u0442\u043E\u0432 \u043D\u0430 \u044D\u0442\u043E\u043C \u0440\u043E\u0443\u0442\u0435\u0440\u0435. \u0414\u043B\u044F \u0432\u044B\u0431\u043E\u0440\u0430 \u0443\u0434\u0430\u043B\u0451\u043D\u043D\u043E\u0433\u043E \u0441\u0435\u0440\u0432\u0435\u0440\u0430 \u043E\u0442\u043A\u0440\u043E\u0439\u0442\u0435 \xAB\u0418\u0441\u0445\u043E\u0434\u044F\u0449\u0438\u0435 \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u044F\xBB."
+  },
+  security: { title: "\u0417\u0430\u0449\u0438\u0442\u0430 \u0441\u043E\u0435\u0434\u0438\u043D\u0435\u043D\u0438\u044F: TLS \u0438 REALITY" },
+  transport: { title: "\u0422\u0440\u0430\u043D\u0441\u043F\u043E\u0440\u0442" },
+  credentials: { title: "\u0423\u0447\u0451\u0442\u043D\u044B\u0435 \u0434\u0430\u043D\u043D\u044B\u0435 \u0438 \u043F\u0430\u0440\u0430\u043C\u0435\u0442\u0440\u044B \u043F\u0440\u043E\u0442\u043E\u043A\u043E\u043B\u0430" },
+  route: { title: "\u041C\u0430\u0440\u0448\u0440\u0443\u0442 \u0432\u0445\u043E\u0434\u044F\u0449\u0435\u0433\u043E \u0442\u0440\u0430\u0444\u0438\u043A\u0430" }
+};
+function keyOf(field) {
+  return field.id.slice(field.id.lastIndexOf("-") + 1);
+}
+function settingsGroup(key) {
+  if (/^(dns_|bootstrap_dns)/.test(key)) return "dns";
+  if (/^(source_network|enable_output|output_network|enable_badwan|badwan)/.test(
+    key
+  ))
+    return "network";
+  if (/^(enable_yacd|yacd_)/.test(key)) return "controller";
+  if (/^(list_update|update_interval|component_update|download_|latency_test)/.test(
+    key
+  ))
+    return "updates";
+  return "system";
+}
+function ruleGroup(key) {
+  if (["enabled", "label", "action"].includes(key)) return "action";
+  if ([
+    "selector_proxy_links",
+    "subscription_url",
+    "interfaces",
+    "outbound_jsons",
+    "urltest",
+    "priority_group"
+  ].includes(key))
+    return "sources";
+  if (/^(dns_|bootstrap_dns)/.test(key)) return "dns";
+  if (/^(outbound_detour|mixed_proxy|sort_by_latency|resolve_real_ip|dashboard_filter)/.test(
+    key
+  ))
+    return "advanced";
+  return "other";
+}
+function conditionGroup(key) {
+  if (["source_ip_cidr", "fully_routed_ips"].includes(key)) return "devices";
+  if ([
+    "domain",
+    "ip_cidr",
+    "community_lists",
+    "rule_set",
+    "domain_ip_lists",
+    "_dns_rule_set",
+    "_dns_domain_ip_lists"
+  ].includes(key))
+    return "destinations";
+  return "other";
+}
+function inboundGroup(key) {
+  if (/^(tls_|reality_|security$|client_fingerprint)/.test(key))
+    return "security";
+  if (/^transport/.test(key)) return "transport";
+  if (/^(route_|routing_|outbound|detour)/.test(key)) return "route";
+  if (/^(server_(username|password)|socks_auth|shadowsocks_|vmess_|vless_|hysteria2_|mtproto_|tailscale_)/.test(
+    key
+  ))
+    return "credentials";
+  return "access";
+}
+function hiddenField(field) {
+  return field.hidden || field.classList.contains("hidden") || field.style.display === "none" || field.getAttribute("aria-hidden") === "true";
+}
+function enhanceForkopForms(scope) {
+  if (!scope.matches(".fkp-workspace,.fkp-workspace-modal")) return;
+  const parents = /* @__PURE__ */ new Set();
+  for (const field of scope.querySelectorAll(
+    '.cbi-value[id^="cbi-forkop-"]'
+  )) {
+    const parent = field.parentElement;
+    if (parent && !parent.classList.contains("fkp-form-group"))
+      parents.add(parent);
+  }
+  for (const parent of parents) {
+    const fields = [...parent.children].filter(
+      (node) => node instanceof HTMLElement && node.classList.contains("cbi-value")
+    );
+    const keys = fields.map(keyOf);
+    let definitions, classify;
+    if (parent.id === "cbi-forkop-settings" && keys.includes("dns_type")) {
+      definitions = settingsGroups;
+      classify = settingsGroup;
+    } else if (parent.dataset.tab === "settings" && keys.includes("action")) {
+      definitions = ruleGroups;
+      classify = ruleGroup;
+    } else if (parent.dataset.tab === "conditions" && keys.includes("domain")) {
+      definitions = conditionGroups;
+      classify = conditionGroup;
+    } else if (keys.includes("protocol") && keys.includes("enabled")) {
+      definitions = inboundGroups;
+      classify = inboundGroup;
+    } else continue;
+    const groups2 = /* @__PURE__ */ new Map();
+    for (const field of fields) {
+      const key = classify(keyOf(field));
+      let group = groups2.get(key);
+      if (!group) {
+        const definition = definitions[key];
+        group = document.createElement(
+          definition.collapsed ? "details" : "section"
+        );
+        group.className = "fkp-form-group";
+        const title = document.createElement(
+          definition.collapsed ? "summary" : "h3"
+        );
+        title.textContent = definition.title;
+        group.append(title);
+        if (definition.help) {
+          const help = document.createElement("p");
+          help.className = "fkp-form-help";
+          help.textContent = definition.help;
+          group.append(help);
+        }
+        parent.insertBefore(group, field);
+        groups2.set(key, group);
+      }
+      group.append(field);
+    }
+    for (const key of Object.keys(definitions)) {
+      const group = groups2.get(key);
+      if (group) parent.append(group);
+    }
+  }
+  for (const group of scope.querySelectorAll(".fkp-form-group")) {
+    const fields = [...group.children].filter(
+      (node) => node instanceof HTMLElement && node.classList.contains("cbi-value")
+    );
+    const hidden = fields.every(hiddenField);
+    if (group.hidden !== hidden) group.hidden = hidden;
+    if (group instanceof HTMLDetailsElement && !group.open && (group.querySelector(
+      '[aria-invalid="true"],.cbi-input-invalid,.cbi-value-error,[data-invalid="true"]'
+    ) || !initializedGroups.has(group) && group.querySelector('input[type="checkbox"]:checked')))
+      group.open = true;
+    initializedGroups.add(group);
+  }
+}
+
 // src/forkop/workspace/render.ts
+var pageHelp = {
+  next: "",
+  dashboard: "\u0412\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u0443\u0434\u0430\u043B\u0451\u043D\u043D\u044B\u0439 \u0441\u0435\u0440\u0432\u0435\u0440 \u0434\u043B\u044F \u043A\u0430\u0436\u0434\u043E\u0433\u043E \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u044F. \u041F\u0440\u043E\u0432\u0435\u0440\u043A\u0430 \u0437\u0430\u0434\u0435\u0440\u0436\u043A\u0438 \u0438 \u0441\u043C\u0435\u043D\u0430 \u0441\u0435\u0440\u0432\u0435\u0440\u0430 \u0432\u044B\u043F\u043E\u043B\u043D\u044F\u044E\u0442\u0441\u044F \u043E\u0442\u0434\u0435\u043B\u044C\u043D\u043E.",
+  server: "\u041D\u0430\u0441\u0442\u0440\u043E\u0439\u0442\u0435, \u043A\u0430\u043A \u0440\u043E\u0443\u0442\u0435\u0440 \u0431\u0443\u0434\u0435\u0442 \u043F\u0440\u0438\u043D\u0438\u043C\u0430\u0442\u044C \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u044F \u0434\u0440\u0443\u0433\u0438\u0445 \u043A\u043B\u0438\u0435\u043D\u0442\u043E\u0432: \u043F\u0440\u043E\u0442\u043E\u043A\u043E\u043B, \u0434\u043E\u0441\u0442\u0443\u043F, \u0437\u0430\u0449\u0438\u0442\u0430 \u0438 \u043C\u0430\u0440\u0448\u0440\u0443\u0442 \u0442\u0440\u0430\u0444\u0438\u043A\u0430.",
+  section: "\u041E\u043F\u0440\u0435\u0434\u0435\u043B\u0438\u0442\u0435, \u043A\u0430\u043A\u043E\u0439 \u0442\u0440\u0430\u0444\u0438\u043A \u043D\u0430\u043F\u0440\u0430\u0432\u043B\u044F\u0442\u044C \u0447\u0435\u0440\u0435\u0437 \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435, \u043F\u0440\u043E\u043F\u0443\u0441\u043A\u0430\u0442\u044C \u043D\u0430\u043F\u0440\u044F\u043C\u0443\u044E \u0438\u043B\u0438 \u0431\u043B\u043E\u043A\u0438\u0440\u043E\u0432\u0430\u0442\u044C. \u041F\u043E\u0440\u044F\u0434\u043E\u043A \u043F\u0440\u0430\u0432\u0438\u043B \u0437\u0430\u0434\u0430\u0451\u0442 \u043F\u0440\u0438\u043E\u0440\u0438\u0442\u0435\u0442.",
+  rule_tools: "\u0414\u043E\u0431\u0430\u0432\u044C\u0442\u0435 \u043F\u0440\u0430\u0432\u0438\u043B\u043E \u043D\u0430 \u0432\u0440\u0435\u043C\u044F \u0438\u043B\u0438 \u043F\u0440\u043E\u0441\u043C\u043E\u0442\u0440\u0438\u0442\u0435 \u0440\u0435\u043A\u043E\u043C\u0435\u043D\u0434\u0430\u0446\u0438\u0438 Smart Detect \u043F\u0435\u0440\u0435\u0434 \u0438\u0445 \u043F\u0440\u0438\u043C\u0435\u043D\u0435\u043D\u0438\u0435\u043C.",
+  devices: "\u041D\u0430\u0437\u043D\u0430\u0447\u044C\u0442\u0435 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0443 \u043C\u0430\u0440\u0448\u0440\u0443\u0442 \u0438\u043B\u0438 \u0438\u0433\u0440\u043E\u0432\u043E\u0439 \u043F\u0440\u0435\u0441\u0435\u0442. \u0423\u0441\u043B\u043E\u0432\u0438\u044F \u0434\u043B\u044F \u043E\u0442\u0434\u0435\u043B\u044C\u043D\u044B\u0445 \u0441\u0430\u0439\u0442\u043E\u0432 \u0438 \u0438\u0441\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u044F \u043D\u0430\u0445\u043E\u0434\u044F\u0442\u0441\u044F \u0432 \u043F\u0440\u0430\u0432\u0438\u043B\u0430\u0445.",
+  diagnostic: "\u041D\u0430\u0447\u043D\u0438\u0442\u0435 \u0441 \u0434\u0438\u0430\u0433\u043D\u043E\u0441\u0442\u0438\u043A\u0438: \u043E\u043D\u0430 \u043F\u0440\u043E\u0432\u0435\u0440\u0438\u0442 DNS, \u044F\u0434\u0440\u043E \u0438 \u043C\u0430\u0440\u0448\u0440\u0443\u0442\u0438\u0437\u0430\u0446\u0438\u044E. \u0416\u0443\u0440\u043D\u0430\u043B \u0438 \u0443\u043F\u0440\u0430\u0432\u043B\u0435\u043D\u0438\u0435 \u0441\u0435\u0440\u0432\u0438\u0441\u043E\u043C \u0434\u043E\u0441\u0442\u0443\u043F\u043D\u044B \u043D\u0438\u0436\u0435.",
+  route_tools: "\u0423\u0437\u043D\u0430\u0439\u0442\u0435, \u043A\u0430\u043A\u043E\u0435 \u043F\u0440\u0430\u0432\u0438\u043B\u043E \u0432\u044B\u0431\u0438\u0440\u0430\u0435\u0442\u0441\u044F \u0434\u043B\u044F \u0441\u0430\u0439\u0442\u0430, \u0438 \u043E\u0442\u0434\u0435\u043B\u044C\u043D\u043E \u043F\u0440\u043E\u0432\u0435\u0440\u044C\u0442\u0435 \u0435\u0433\u043E \u0434\u043E\u0441\u0442\u0443\u043F\u043D\u043E\u0441\u0442\u044C.",
+  monitoring: "\u041F\u043E\u0441\u043C\u043E\u0442\u0440\u0438\u0442\u0435 \u0442\u0435\u043A\u0443\u0449\u0438\u0435 \u0441\u043E\u0435\u0434\u0438\u043D\u0435\u043D\u0438\u044F, \u0442\u0440\u0430\u0444\u0438\u043A \u0438 \u0436\u0443\u0440\u043D\u0430\u043B \u0440\u0430\u0431\u043E\u0442\u044B. \u0414\u0430\u043D\u043D\u044B\u0435 \u043E\u0431\u043D\u043E\u0432\u043B\u044F\u044E\u0442\u0441\u044F, \u043F\u043E\u043A\u0430 \u0440\u0430\u0437\u0434\u0435\u043B \u043E\u0442\u043A\u0440\u044B\u0442.",
+  settings: "\u041D\u0430\u0441\u0442\u0440\u043E\u0439\u0442\u0435 DNS, \u0441\u0435\u0442\u0435\u0432\u044B\u0435 \u0438\u043D\u0442\u0435\u0440\u0444\u0435\u0439\u0441\u044B, \u0434\u043E\u0441\u0442\u0443\u043F \u043A \u043A\u043E\u043D\u0442\u0440\u043E\u043B\u043B\u0435\u0440\u0443 \u0438 \u0440\u0430\u0441\u043F\u0438\u0441\u0430\u043D\u0438\u0435 \u043E\u0431\u043D\u043E\u0432\u043B\u0435\u043D\u0438\u0439. \u041F\u0430\u0440\u0430\u043C\u0435\u0442\u0440\u044B \u0441\u0438\u0441\u0442\u0435\u043C\u044B \u0441\u043E\u0431\u0440\u0430\u043D\u044B \u043E\u0442\u0434\u0435\u043B\u044C\u043D\u043E.",
+  updates: "\u041F\u0440\u043E\u0432\u0435\u0440\u044C\u0442\u0435 \u0432\u0435\u0440\u0441\u0438\u0438 \u0438 \u0443\u043F\u0440\u0430\u0432\u043B\u044F\u0439\u0442\u0435 \u0443\u0441\u0442\u0430\u043D\u043E\u0432\u043B\u0435\u043D\u043D\u044B\u043C\u0438 \u043A\u043E\u043C\u043F\u043E\u043D\u0435\u043D\u0442\u0430\u043C\u0438. \u041D\u0430\u043B\u0438\u0447\u0438\u0435 \u043D\u043E\u0432\u043E\u0439 \u0432\u0435\u0440\u0441\u0438\u0438 \u0441\u0430\u043C\u043E \u043F\u043E \u0441\u0435\u0431\u0435 \u043D\u0435 \u043F\u043E\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0430\u0435\u0442 \u0441\u043E\u0432\u043C\u0435\u0441\u0442\u0438\u043C\u043E\u0441\u0442\u044C.",
+  advanced: "\u041F\u0440\u043E\u0432\u0435\u0440\u044C\u0442\u0435 \u0441\u043E\u0432\u043C\u0435\u0441\u0442\u0438\u043C\u043E\u0441\u0442\u044C \u0441 3x-ui \u0438 Xray, \u0441\u0440\u0430\u0432\u043D\u0438\u0442\u0435 \u043F\u0440\u043E\u0444\u0438\u043B\u0438, \u0441\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u0435 \u043A\u043E\u043D\u0444\u0438\u0433\u0443\u0440\u0430\u0446\u0438\u044E \u0438\u043B\u0438 \u0432\u043E\u0441\u0441\u0442\u0430\u043D\u043E\u0432\u0438\u0442\u0435 \u0435\u0451."
+};
 var groups = [
   { id: "home", label: "\u0413\u043B\u0430\u0432\u043D\u0430\u044F", pages: [["next", "\u041F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435"]] },
   {
@@ -16352,15 +16801,17 @@ function mountForkopWorkspace(root) {
   themeLabel.append(theme);
   top.append(status, themeLabel);
   const heading = el3("h2", "fkp-workspace-title");
+  const description = el3("p", "fkp-workspace-description");
   const secondary = el3("div", "fkp-workspace-secondary");
   const content = el3("div", "fkp-workspace-content");
   content.append(...originalContent);
-  main.append(top, heading, secondary, content);
+  main.append(top, heading, description, secondary, content);
   root.append(sidebar, main);
   let disposed = false;
   let wasConnected = root.isConnected;
   let navigationSignature = "";
   const markedModals = /* @__PURE__ */ new Set();
+  const modalContent = /* @__PURE__ */ new WeakMap();
   function surroundingTheme() {
     for (let parent = root.parentElement || document.body; parent; parent = parent.parentElement) {
       const choice = parent.dataset.theme || parent.getAttribute("data-darkmode");
@@ -16392,6 +16843,13 @@ function mountForkopWorkspace(root) {
       }
       if (modal.dataset.theme !== root.dataset.theme)
         modal.dataset.theme = root.dataset.theme;
+      const content2 = modal.querySelector(":scope > h4") || modal.firstElementChild;
+      const newContent = content2 != null && modalContent.get(modal) !== content2;
+      enhanceForkopForms(modal);
+      if (newContent && content2) {
+        modalContent.set(modal, content2);
+        modal.scrollTop = 0;
+      }
     }
     for (const modal of markedModals)
       if (!modal.isConnected) markedModals.delete(modal);
@@ -16420,13 +16878,13 @@ function mountForkopWorkspace(root) {
         tooltip: native?.dataset.tooltip || ""
       };
     };
-    const markErrors = (control, count, description, label) => {
+    const markErrors = (control, count, description2, label) => {
       if (!control) return;
       if (count) {
         control.setAttribute("data-errors", String(count));
-        control.setAttribute("data-tooltip", description);
+        control.setAttribute("data-tooltip", description2);
         control.setAttribute("data-tooltip-style", "error");
-        control.setAttribute("aria-label", `${label}: ${description}`);
+        control.setAttribute("aria-label", `${label}: ${description2}`);
       } else {
         for (const attr of [
           "data-errors",
@@ -16438,6 +16896,8 @@ function mountForkopWorkspace(root) {
       }
     };
     const active = panes.querySelector(':scope > [data-tab-active="true"]')?.dataset.tab || menu.querySelector(".cbi-tab:not(.cbi-tab-disabled)")?.dataset.tab || "";
+    setText(description, pageHelp[active] || "");
+    description.hidden = !description.textContent;
     const signature = [...tabs.keys()].join(",");
     if (signature !== navigationSignature) {
       navigationSignature = signature;
@@ -16535,6 +16995,15 @@ function mountForkopWorkspace(root) {
   const observer = new MutationObserver((records) => {
     if (records.some((record) => {
       const target = record.target instanceof Element ? record.target : record.target.parentElement;
+      return target?.matches(
+        '.cbi-value,.cbi-input-invalid,[aria-invalid="true"]'
+      ) || [...record.addedNodes].some(
+        (node) => node instanceof Element && (node.matches(".cbi-value") || node.querySelector(".cbi-value"))
+      );
+    }))
+      enhanceForkopForms(root);
+    if (records.some((record) => {
+      const target = record.target instanceof Element ? record.target : record.target.parentElement;
       return target && (menu.contains(target) || target === panes || target.parentElement === panes || target.closest(".fkp-next-overview"));
     }))
       sync();
@@ -16552,7 +17021,8 @@ function mountForkopWorkspace(root) {
       "aria-hidden",
       "data-errors",
       "data-tooltip",
-      "data-tooltip-style"
+      "data-tooltip-style",
+      "aria-invalid"
     ]
   });
   const media = window.matchMedia?.("(prefers-color-scheme: dark)");
@@ -16603,8 +17073,14 @@ function mountForkopWorkspace(root) {
     theme: () => theme.value,
     dispose
   });
-  lifecycle.observe(document.body, { childList: true, subtree: true });
+  lifecycle.observe(document.body, {
+    childList: true,
+    subtree: true,
+    attributes: true,
+    attributeFilter: ["class", "aria-invalid", "hidden", "style"]
+  });
   applyTheme();
+  enhanceForkopForms(root);
   markModals();
   sync();
 }
@@ -16703,17 +17179,165 @@ function configureNamedSectionCreation(section, label, buttonLabel) {
   };
 }
 
+// src/forkop/workspace/rules.ts
+function getRuleActionLabel(value) {
+  const action = String(value || "connection");
+  const labels = {
+    connection: "\u0427\u0435\u0440\u0435\u0437 \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435",
+    bypass: "\u041D\u0430\u043F\u0440\u044F\u043C\u0443\u044E",
+    block: "\u0411\u043B\u043E\u043A\u0438\u0440\u043E\u0432\u0430\u0442\u044C",
+    dns: "\u0421\u0432\u043E\u0439 DNS",
+    zapret: "Zapret",
+    zapret2: "Zapret2",
+    byedpi: "ByeDPI",
+    proxy: "\u0427\u0435\u0440\u0435\u0437 \u043F\u0440\u043E\u043A\u0441\u0438 (\u0441\u0442\u0430\u0440\u043E\u0435 \u043F\u0440\u0430\u0432\u0438\u043B\u043E)",
+    vpn: "\u0427\u0435\u0440\u0435\u0437 VPN (\u0441\u0442\u0430\u0440\u043E\u0435 \u043F\u0440\u0430\u0432\u0438\u043B\u043E)",
+    outbound: "\u0427\u0435\u0440\u0435\u0437 JSON (\u0441\u0442\u0430\u0440\u043E\u0435 \u043F\u0440\u0430\u0432\u0438\u043B\u043E)"
+  };
+  if (Object.prototype.hasOwnProperty.call(labels, action))
+    return labels[action];
+  return /^[\w-]{1,40}$/.test(action) ? `\u041D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043D\u043E\u0435 \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u0435: ${action}` : "\u041D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043D\u043E\u0435 \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u0435";
+}
+function list(value) {
+  if (Array.isArray(value))
+    return value.filter((item) => typeof item === "string" && item.trim());
+  return typeof value === "string" ? value.split(/\s+/).filter(Boolean) : [];
+}
+function conditionCount(rule, key) {
+  const primary = conditions(rule, [key]);
+  return primary.length || conditions(rule, [`${key}_text`]).length;
+}
+function conditions(rule, keys) {
+  return [
+    ...new Set(
+      keys.flatMap((key) => {
+        const values = Array.isArray(rule[key]) ? rule[key] : [rule[key]];
+        return values.flatMap(
+          (value) => typeof value === "string" ? parseValueList(value) : []
+        );
+      })
+    )
+  ];
+}
+function countLabel(label, count) {
+  return count ? `${label}: ${count > 999 ? "999+" : count}` : "";
+}
+function scopeSummary(rule) {
+  const dnsOnly = rule.action === "dns";
+  const domains = conditions(rule, [
+    "domain",
+    "domain_suffix",
+    "domain_suffix_text",
+    "domain_text",
+    "domain_keyword",
+    "domain_keyword_text",
+    "domain_regex",
+    "domain_regex_text"
+  ]);
+  const customLists = new Set(
+    [
+      ...list(rule.rule_set),
+      // DNS rejects subnet extraction and does not generate these matchers.
+      ...dnsOnly ? [] : list(rule.rule_set_with_subnets)
+    ].map((reference) => reference.trim())
+  );
+  const lists = list(rule.community_lists).length + customLists.size + list(rule.domain_ip_lists).length;
+  return [
+    countLabel("\u0414\u043E\u043C\u0435\u043D\u044B", domains.length),
+    countLabel("\u0421\u043F\u0438\u0441\u043A\u0438", lists),
+    dnsOnly ? "" : countLabel("IP \u043D\u0430\u0437\u043D\u0430\u0447\u0435\u043D\u0438\u044F", conditionCount(rule, "ip_cidr")),
+    dnsOnly ? "" : countLabel("\u041F\u043E\u0440\u0442\u044B", conditionCount(rule, "ports")),
+    countLabel("\u0424\u0438\u043B\u044C\u0442\u0440 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432", conditionCount(rule, "source_ip_cidr")),
+    countLabel(
+      dnsOnly ? "DNS \u0432\u0441\u0435\u0445 \u0437\u0430\u043F\u0440\u043E\u0441\u043E\u0432 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432" : "\u041F\u0440\u0438\u043D\u0443\u0434\u0438\u0442\u0435\u043B\u044C\u043D\u043E \u0434\u043B\u044F \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432",
+      list(rule.fully_routed_ips).length
+    )
+  ].filter(Boolean).join(" \xB7 ") || "\u0423\u0441\u043B\u043E\u0432\u0438\u044F \u043D\u0435 \u0437\u0430\u0434\u0430\u043D\u044B";
+}
+function sourceSummary(rule) {
+  return [
+    countLabel("\u0421\u0441\u044B\u043B\u043A\u0438", list(rule.selector_proxy_links).length),
+    countLabel("\u041F\u043E\u0434\u043F\u0438\u0441\u043A\u0438", list(rule.subscription_url).length),
+    countLabel("\u0418\u043D\u0442\u0435\u0440\u0444\u0435\u0439\u0441\u044B", list(rule.interfaces).length),
+    countLabel(
+      "JSON",
+      Array.isArray(rule.outbound_jsons) ? rule.outbound_jsons.filter(
+        (item) => typeof item === "string" && item.trim()
+      ).length : typeof rule.outbound_jsons === "string" && rule.outbound_jsons.trim() ? 1 : 0
+    ),
+    countLabel("URLTest", list(rule.urltest).length),
+    countLabel("\u041F\u0440\u0438\u043E\u0440\u0438\u0442\u0435\u0442", list(rule.priority_group).length)
+  ].filter(Boolean).join(" \xB7 ") || "\u0418\u0441\u0442\u043E\u0447\u043D\u0438\u043A\u0438 \u043D\u0435 \u0437\u0430\u0434\u0430\u043D\u044B";
+}
+function routeSummary(rule) {
+  switch (rule.action || "connection") {
+    case "connection":
+      return sourceSummary(rule);
+    case "bypass":
+      return "\u041E\u0431\u044B\u0447\u043D\u044B\u0439 \u043C\u0430\u0440\u0448\u0440\u0443\u0442 \u0440\u043E\u0443\u0442\u0435\u0440\u0430";
+    case "block":
+      return "\u0411\u043B\u043E\u043A\u0438\u0440\u043E\u0432\u043A\u0430 \u0441\u043E\u0432\u043F\u0430\u0432\u0448\u0438\u0445 \u043E\u0431\u0440\u0430\u0449\u0435\u043D\u0438\u0439";
+    case "dns":
+      return "DNS \u043F\u043E \u043D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0430\u043C \u043F\u0440\u0430\u0432\u0438\u043B\u0430";
+    case "zapret":
+    case "zapret2":
+    case "byedpi":
+      return "\u041E\u0431\u0440\u0430\u0431\u043E\u0442\u043A\u0430 \u043F\u043E \u043D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0430\u043C \u043F\u0440\u0430\u0432\u0438\u043B\u0430";
+    case "proxy":
+    case "vpn":
+    case "outbound":
+      return "\u0421\u043E\u0445\u0440\u0430\u043D\u0435\u043D\u044B \u043F\u0440\u0435\u0436\u043D\u0438\u0435 \u043D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438 \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u044F";
+    default:
+      return "\u041F\u0440\u043E\u0432\u0435\u0440\u044C\u0442\u0435 \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u0435 \u0432 \u0440\u0435\u0434\u0430\u043A\u0442\u043E\u0440\u0435";
+  }
+}
+function textNode(tag, className, text) {
+  const node = document.createElement(tag);
+  node.className = className;
+  node.textContent = text;
+  return node;
+}
+function renderRuleIdentity(value, id) {
+  const rule = value || {};
+  const root = document.createElement("div");
+  root.className = "fkp-rule-identity";
+  root.append(textNode("strong", "fkp-rule-name", String(rule.label || id)));
+  if (rule.enabled === "0")
+    root.append(textNode("span", "fkp-rule-state", "\u0412\u044B\u043A\u043B\u044E\u0447\u0435\u043D\u043E"));
+  root.append(textNode("span", "fkp-rule-scope", scopeSummary(rule)));
+  return root;
+}
+function renderRuleRoute(value) {
+  const rule = value || {};
+  const root = document.createElement("div");
+  root.className = "fkp-rule-routing";
+  root.append(
+    textNode("strong", "fkp-rule-action", getRuleActionLabel(rule.action)),
+    textNode("span", "fkp-rule-route", routeSummary(rule))
+  );
+  return root;
+}
+
 // src/forkop/next/configReload.ts
-var registered = /* @__PURE__ */ new WeakSet();
-function registerConfigurationReload(target = window) {
-  if (registered.has(target)) return;
-  registered.add(target);
+var registered = /* @__PURE__ */ new WeakMap();
+function registerConfigurationReload(target = window, adapter) {
+  if (registered.has(target)) {
+    if (adapter) registered.set(target, adapter);
+    return;
+  }
+  registered.set(target, adapter);
+  for (const [event, method] of [
+    ["forkop:configuration-changing", "beforeChange"],
+    ["forkop:configuration-changed", "changed"]
+  ])
+    target.addEventListener(event, (event2) => {
+      const active = registered.get(target);
+      if (active)
+        event2.detail?.waitUntil(active[method]());
+    });
   target.addEventListener(
-    "forkop:configuration-changed",
-    () => {
-      target.setTimeout(() => target.location.reload(), 200);
-    },
-    { once: true }
+    "forkop:configuration-settled",
+    () => registered.get(target)?.settled()
   );
 }
 
@@ -16741,12 +17365,15 @@ return baseclass.extend({
   getClashUIUrl,
   getDashboardSections,
   getProxyUrlName,
+  getRuleActionLabel,
   injectGlobalStyles,
   mountForkopWorkspace,
   parseValueList,
   refreshRuntimeUiState,
   registerConfigurationReload,
   renderNextPanel,
+  renderRuleIdentity,
+  renderRuleRoute,
   renderWorkspaceTools,
   showToast,
   store,

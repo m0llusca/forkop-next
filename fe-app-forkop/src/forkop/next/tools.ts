@@ -136,11 +136,13 @@ export function renderDeviceProfileTools(
   button('Сохранить маршрут устройства', deviceResult, async () => {
     if (!device.value.trim() || !route.value)
       throw new Error('Требуются адрес устройства и маршрут');
+    const address = device.value.trim();
+    const section = route.value;
     await call('device_set', {
-      address: device.value.trim(),
-      section: route.value,
+      address,
+      section,
     });
-    deviceResult.textContent = 'Маршрут устройства сохранён.';
+    deviceResult.textContent = `Маршрут устройства сохранён: ${address} → ${routeLabels.get(section) || section}.`;
     try {
       await loadDevices();
     } catch {

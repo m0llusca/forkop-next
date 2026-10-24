@@ -68,6 +68,62 @@ const primary = (root: HTMLElement, id: string) =>
 const page = (root: HTMLElement, id: string) =>
   root.querySelector<HTMLButtonElement>(`[data-workspace-tab="${id}"]`)!;
 
+it('explains the task of each destination without changing native tabs or field drafts', () => {
+  const { root } = nativeMap();
+  mountForkopWorkspace(root);
+  primary(root, 'rules').click();
+  expect(
+    root.querySelector('.fkp-workspace-description')?.textContent,
+  ).toContain('какой трафик');
+  primary(root, 'servers').click();
+  expect(
+    root.querySelector('.fkp-workspace-description')?.textContent,
+  ).toContain('удалённый сервер');
+  page(root, 'server').click();
+  expect(
+    root.querySelector('.fkp-workspace-description')?.textContent,
+  ).toContain('принимать подключения');
+  primary(root, 'settings').click();
+  expect(
+    root.querySelector('.fkp-workspace-description')?.textContent,
+  ).toContain('DNS');
+});
+
+it('groups a lazy native settings form and reveals errors after native widget updates', async () => {
+  const { root, panes } = nativeMap();
+  mountForkopWorkspace(root);
+  const pane = panes.querySelector('[data-tab=settings]')!;
+  pane.innerHTML =
+    '<div class="cbi-section-node" id="cbi-forkop-settings"><div class="cbi-value" id="cbi-forkop-settings-dns_type"><input value="doh"></div><div class="cbi-value" id="cbi-forkop-settings-config_path"><input name="path" value="/tmp/draft.json"></div></div>';
+  await flush();
+  const advanced = pane.querySelector('details')!;
+  expect(advanced).not.toBeNull();
+  expect(advanced.open).toBe(false);
+  const input = pane.querySelector<HTMLInputElement>('input[name=path]')!;
+  input.classList.add('cbi-input-invalid');
+  await flush();
+  expect(advanced.open).toBe(true);
+  expect(input.value).toBe('/tmp/draft.json');
+});
+
+it('opens a new Forkop dialog at its beginning without resetting user scroll during updates', async () => {
+  const { root } = nativeMap();
+  mountForkopWorkspace(root);
+  const modal = document.createElement('div');
+  modal.className = 'modal';
+  modal.innerHTML = '<h4>Правило</h4><div id="cbi-forkop-rule">Поля</div>';
+  document.body.append(modal);
+  await flush();
+  modal.scrollTop = 220;
+  modal.append(document.createElement('p'));
+  await flush();
+  expect(modal.scrollTop).toBe(220);
+  modal.innerHTML =
+    '<h4>Новое входящее подключение</h4><div id="cbi-forkop-server">Другие поля</div>';
+  await flush();
+  expect(modal.scrollTop).toBe(0);
+});
+
 it('activates native primary and secondary tabs without replacing draft inputs or their listeners', async () => {
   const { root, menu, panes } = nativeMap();
   const draft = root.querySelector<HTMLInputElement>('input[name=server]')!;

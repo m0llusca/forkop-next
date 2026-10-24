@@ -47,6 +47,11 @@ export {
 } from './forkop/workspace/tools';
 export { configureNamedSectionCreation } from './forkop/workspace/namedCreation';
 export {
+  getRuleActionLabel,
+  renderRuleIdentity,
+  renderRuleRoute,
+} from './forkop/workspace/rules';
+export {
   refreshRuntimeUiState,
   subscribeRuntimeUiState,
 } from './forkop/services/runtimeUiState.service';

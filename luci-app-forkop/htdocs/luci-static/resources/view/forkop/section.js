@@ -166,8 +166,13 @@ function dependsOnRuleConditions(option) {
       option.depends({ action, [condition]: /\S/ }),
     ),
   );
-  ["domain", "community_lists", "_dns_rule_set", "_dns_domain_ip_lists"].forEach(
-    (condition) => option.depends({ action: "dns", [condition]: /\S/ }),
+  [
+    "domain",
+    "community_lists",
+    "_dns_rule_set",
+    "_dns_domain_ip_lists",
+  ].forEach((condition) =>
+    option.depends({ action: "dns", [condition]: /\S/ }),
   );
   return option;
 }
@@ -2537,9 +2542,7 @@ function addUrlTestItemOptions(itemSection, options = {}) {
     form.Flag,
     "interrupt_exist_connections",
     _("Interrupt connections"),
-    _(
-      "Interrupt connections when URLTest switches the selected server",
-    ),
+    _("Interrupt connections when URLTest switches the selected server"),
   );
   o.default = "1";
   o.rmempty = false;
@@ -4051,61 +4054,21 @@ function getRuleResolvedAction(section_id) {
 }
 
 function getActionOptionLabel(action) {
-  switch (`${action}`) {
-    case "block":
-      return "Block";
-    case "bypass":
-      return "Bypass";
-    case "connection":
-      return "Connection";
-    case "dns":
-      return "DNS";
-    case "vpn":
-      return "VPN";
-    case "zapret":
-      return "Zapret";
-    case "zapret2":
-      return "Zapret2";
-    case "byedpi":
-      return "ByeDPI";
-    case "outbound":
-      return _("JSON outbound");
-    case "proxy":
-    default:
-      return "Proxy";
-  }
-}
-
-function getRuleActionDisplayValue(section_id) {
-  const action = getRuleResolvedAction(section_id);
-
-  if (action === "zapret") {
-    return "Zapret";
-  }
-
-  if (action === "zapret2") {
-    return "Zapret2";
-  }
-
-  if (action === "byedpi") {
-    return "ByeDPI";
-  }
-
-  return getActionOptionLabel(action);
+  return main.getRuleActionLabel(action);
 }
 
 function getRuleActionDisplayMarkup(section_id) {
-  return getRuleActionDisplayValue(section_id);
+  return main.renderRuleRoute(uci.get(UCI_PACKAGE, section_id));
 }
 
-function populateActionOptionValues(option) {
+function populateActionOptionValues(option, section_id) {
   delete option.keylist;
   delete option.vallist;
 
   option.value("connection", getActionOptionLabel("connection"));
-  option.value("bypass", "Bypass");
-  option.value("block", "Block");
-  option.value("dns", "DNS");
+  option.value("bypass", getActionOptionLabel("bypass"));
+  option.value("block", getActionOptionLabel("block"));
+  option.value("dns", getActionOptionLabel("dns"));
   if (isZapretInstalledForUi()) {
     option.value("zapret", getActionOptionLabel("zapret"));
   }
@@ -4114,6 +4077,10 @@ function populateActionOptionValues(option) {
   }
   if (isByedpiInstalledForUi()) {
     option.value("byedpi", getActionOptionLabel("byedpi"));
+  }
+  const configuredAction = section_id && getRuleConfiguredAction(section_id);
+  if (configuredAction && !option.keylist.includes(configuredAction)) {
+    option.value(configuredAction, getActionOptionLabel(configuredAction));
   }
 }
 
@@ -6967,24 +6934,24 @@ function createSectionContent(section) {
     "settings",
     form.DummyValue,
     "_action_display",
-    _("Action"),
+    "Маршрут и источники",
   );
   o.modalonly = false;
+  o.tableonly = true;
   o.rawhtml = true;
   o.cfgvalue = function (section_id) {
     return getRuleActionDisplayMarkup(section_id);
   };
   o.textvalue = function (section_id) {
-    return getRuleActionDisplayValue(section_id);
+    return getRuleActionDisplayMarkup(section_id);
   };
-  o.width = "7rem";
 
   o = section.taboption(
     "settings",
     form.Value,
     "label",
-    _("Section name"),
-    _("Visible name of this section"),
+    "Название правила",
+    "Помогает узнать правило в списке и при выборе маршрута",
   );
   o.rmempty = false;
   o.modalonly = true;
@@ -6997,7 +6964,7 @@ function createSectionContent(section) {
     form.ListValue,
     "action",
     _("Action"),
-    _("What Forkop should do when this section matches"),
+    "Что делать с обращениями, которые подходят под условия правила",
   );
   populateActionOptionValues(o);
   o.default = "connection";
@@ -7008,7 +6975,7 @@ function createSectionContent(section) {
   };
   o.load = function (section_id) {
     return ensureActionProvidersAvailabilityLoaded().then(() => {
-      populateActionOptionValues(this);
+      populateActionOptionValues(this, section_id);
       return this.cfgvalue(section_id);
     });
   };
@@ -7789,9 +7756,7 @@ function createSectionContent(section) {
     form.DynamicList,
     "domain_ip_lists",
     _("Domain and IP lists"),
-    _(
-      "Add URLs or local paths to .lst lists containing domains and subnets.",
-    ),
+    _("Add URLs or local paths to .lst lists containing domains and subnets."),
   );
   domainIpListsOption.modalonly = true;
   // Both widgets map to domain_ip_lists, so neither inactive view may erase shared storage.
@@ -7890,6 +7855,29 @@ function loadSectionTableOptions(sectionRef) {
 
 function configureSectionSection(sectionRef, options = {}) {
   setActionProvidersAvailabilityLoader(options.loadActionProvidersAvailability);
+  const renderContents = sectionRef.renderContents;
+  sectionRef.renderContents = function () {
+    const node = renderContents.apply(this, arguments);
+    // LuCI titleFn stringifies sectiontitle for row metadata and modal titles.
+    // Keep that contract textual and decorate only the rendered name cell.
+    node
+      .querySelectorAll("tr.cbi-section-table-row[data-sid]")
+      .forEach((row) => {
+        const titleCell = row.querySelector(
+          ":scope > td.cbi-section-table-titles",
+        );
+        if (titleCell) {
+          const section_id = row.getAttribute("data-sid");
+          titleCell.replaceChildren(
+            main.renderRuleIdentity(
+              uci.get(UCI_PACKAGE, section_id),
+              section_id,
+            ),
+          );
+        }
+      });
+    return node;
+  };
 
   const handleRemove = sectionRef.handleRemove;
   sectionRef.handleRemove = function (section_id) {

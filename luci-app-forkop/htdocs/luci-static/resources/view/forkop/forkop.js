@@ -368,18 +368,229 @@ const EntryPoint = {
       _("Configuration for Forkop service"),
     );
     forkopMap.tabbed = true;
-    const originalRenderContents = forkopMap.renderContents;
-    forkopMap.renderContents = function () {
-      if (this.root) main.disposeWorkspaceTools(this.root);
-      return Promise.resolve(
-        originalRenderContents.apply(this, arguments),
-      ).then(function (rendered) {
-        main.mountForkopWorkspace(rendered);
-        return rendered;
+    let nativeDirty = false;
+    let mutationBusy = false;
+    let synchronizationFailed = false;
+    let pendingSaved = false;
+    let refreshingNative = false;
+    let stateVersion = 0;
+    let preserveToolHosts = false;
+    let disabledControls = [];
+    const pendingBar = document.createElement("div");
+    pendingBar.className = "fkp-next-notice";
+    pendingBar.setAttribute("role", "status");
+    pendingBar.hidden = true;
+    const pendingText = document.createElement("span");
+    const saveDraft = document.createElement("button");
+    saveDraft.type = "button";
+    saveDraft.textContent = "Сохранить изменения";
+    const applyDraft = document.createElement("button");
+    applyDraft.type = "button";
+    applyDraft.textContent = "Применить сейчас";
+    const refreshEditor = document.createElement("button");
+    refreshEditor.type = "button";
+    refreshEditor.textContent = "Обновить редактор";
+    refreshEditor.hidden = true;
+    pendingBar.append(pendingText, saveDraft, applyDraft, refreshEditor);
+    const showPending = function (message) {
+      pendingBar.hidden = false;
+      pendingText.textContent =
+        message ||
+        (nativeDirty
+          ? "Есть несохранённые изменения. Сохранение оставит их неприменёнными; применение изменит работу роутера."
+          : "Изменения сохранены, но ещё не применены. Нажмите «Применить сейчас», затем повторите действие.");
+    };
+    const localChanges = function () {
+      return ["changes", "creates", "deletes", "reorder"].some(function (kind) {
+        const value = uci.state?.[kind]?.[UCI_PACKAGE];
+        return value === true || Object.keys(value || {}).length > 0;
       });
     };
-    const originalHandleSaveApply = forkopMap.handleSaveApply;
-    forkopMap.handleSaveApply = function (ev, mode) {
+    const readPending = async function () {
+      const changes = await uci.changes();
+      if (!changes || typeof changes !== "object")
+        throw new Error("native_state_unavailable");
+      return (
+        Object.keys(changes[UCI_PACKAGE] || {}).length > 0 || localChanges()
+      );
+    };
+    const originalSave = forkopMap.save;
+    forkopMap.save = function () {
+      if (mutationBusy || refreshingNative || synchronizationFailed)
+        return Promise.reject(new Error("native_refresh_required"));
+      stateVersion++;
+      return Promise.resolve(originalSave.apply(this, arguments)).then(
+        async function (result) {
+          nativeDirty = false;
+          try {
+            pendingSaved = await readPending();
+          } catch (error) {
+            showPending(
+              "Изменения сохранены; не удалось проверить, применены ли они. Повторите действие после восстановления связи.",
+            );
+            return result;
+          }
+          if (pendingSaved) showPending();
+          else pendingBar.hidden = true;
+          return result;
+        },
+      );
+    };
+    const originalReset = forkopMap.reset;
+    forkopMap.reset = function () {
+      return Promise.resolve(originalReset.apply(this, arguments)).then(
+        function (result) {
+          nativeDirty = false;
+          if (!pendingSaved) pendingBar.hidden = true;
+          return result;
+        },
+      );
+    };
+    const synchronizeNative = async function () {
+      try {
+        uci.unload(UCI_PACKAGE);
+        await uci.load(UCI_PACKAGE);
+        await forkopMap.load();
+        preserveToolHosts = true;
+        try {
+          await forkopMap.reset();
+        } finally {
+          preserveToolHosts = false;
+        }
+        synchronizationFailed = false;
+        refreshEditor.hidden = true;
+        showPending(
+          "Изменения применены. Данные обновлены без перезагрузки страницы.",
+        );
+      } catch (error) {
+        synchronizationFailed = true;
+        refreshEditor.hidden = false;
+        showPending(
+          "Изменения применены, но не удалось обновить данные редактора. Нажмите «Обновить редактор»; до этого сохранение редактора заблокировано.",
+        );
+      }
+    };
+    refreshEditor.onclick = async function () {
+      if (mutationBusy || refreshingNative) return;
+      refreshingNative = true;
+      rendered.inert = true;
+      try {
+        if (nativeDirty || (await readPending())) {
+          showPending(
+            "Черновик сохранён в редакторе. Сначала отмените его штатной кнопкой LuCI, затем обновите редактор.",
+          );
+          return;
+        }
+        await synchronizeNative();
+      } catch (error) {
+        showPending(
+          "Не удалось проверить неприменённые изменения. Повторите обновление после восстановления связи.",
+        );
+      } finally {
+        rendered.inert = false;
+        refreshingNative = false;
+      }
+    };
+    saveDraft.onclick = function () {
+      void forkopMap.save().catch(function () {
+        showPending(
+          "Не удалось сохранить изменения. Исправьте отмеченные поля и повторите сохранение.",
+        );
+      });
+    };
+    applyDraft.onclick = function (event) {
+      return forkopView
+        .handleSaveApply(event, "0")
+        .then(function () {
+          showPending(
+            "Изменения сохранены. Применение запущено в LuCI — дождитесь результата в штатном диалоге.",
+          );
+        })
+        .catch(function () {
+          showPending(
+            "Не удалось применить изменения. Проверьте поля и состояние сервиса, затем повторите применение.",
+          );
+        });
+    };
+    const originalRenderContents = forkopMap.renderContents;
+    forkopMap.renderContents = function () {
+      const activeTab = preserveToolHosts
+        ? this.root?.querySelector('.cbi-map-tabbed > [data-tab-active="true"]')
+            ?.dataset.tab
+        : null;
+      const retainedTools = preserveToolHosts
+        ? Array.from(
+            this.root?.querySelectorAll(".fkp-workspace-tools") || [],
+          ).filter(function (host) {
+            return host.querySelector(".fkp-next");
+          })
+        : [];
+      const originalParents = retainedTools.map(function (host) {
+        return host.parentElement;
+      });
+      const staging = retainedTools.length
+        ? document.createElement("div")
+        : null;
+      if (staging) {
+        staging.hidden = true;
+        this.root.before(staging);
+        retainedTools.forEach(function (host) {
+          staging.append(host);
+        });
+      }
+      if (this.root) {
+        if (!retainedTools.length) main.disposeWorkspaceTools(this.root);
+        else
+          this.root
+            .querySelectorAll(".fkp-workspace-tools")
+            .forEach(function (host) {
+              if (!retainedTools.includes(host))
+                host.dispatchEvent(new Event("forkop:dispose-tools"));
+            });
+      }
+      return Promise.resolve(originalRenderContents.apply(this, arguments))
+        .then(function (rendered) {
+          retainedTools.forEach(function (host) {
+            const replacement = rendered.querySelector(
+              '.fkp-workspace-tools[data-tools-area="' +
+                host.dataset.toolsArea +
+                '"]',
+            );
+            if (replacement) {
+              replacement.dispatchEvent(new Event("forkop:dispose-tools"));
+              replacement.replaceWith(host);
+            }
+          });
+          staging?.remove();
+          main.mountForkopWorkspace(rendered);
+          rendered.prepend(pendingBar);
+          if (activeTab)
+            rendered
+              .querySelector('.cbi-tabmenu [data-tab="' + activeTab + '"] a')
+              ?.click();
+          retainedTools.forEach(function (host) {
+            host
+              .querySelector(".fkp-next")
+              ?.dispatchEvent(new Event("forkop:refresh"));
+          });
+          return rendered;
+        })
+        .catch((error) => {
+          retainedTools.forEach((host, index) => {
+            if (host.parentElement === staging) {
+              const parent = originalParents[index];
+              (parent?.isConnected ? parent : this.root).append(host);
+            }
+          });
+          staging?.remove();
+          throw error;
+        });
+    };
+    const forkopView = this;
+    const originalHandleSaveApply = forkopView.handleSaveApply;
+    forkopView.handleSaveApply = function (ev, mode) {
+      if (mutationBusy || refreshingNative || synchronizationFailed)
+        return Promise.reject(new Error("native_refresh_required"));
       const refreshUiState = function () {
         main.ForkopShellMethods.getUiState()
           .then((response) => {
@@ -406,7 +617,8 @@ const EntryPoint = {
         });
       }
 
-      return Promise.resolve(originalHandleSaveApply.call(this, ev, mode))
+      return Promise.resolve()
+        .then(() => originalHandleSaveApply.call(this, ev, mode))
         .then((result) => {
           window.setTimeout(refreshUiState, 250);
 
@@ -434,14 +646,14 @@ const EntryPoint = {
     const rulesSection = forkopMap.section(
       form.GridSection,
       "section",
-      _("Sections"),
+      "Правила",
       _("Drag rows to change priority. The rule at the top is checked first."),
     );
     configureGridSection(
       rulesSection,
       "section",
-      _("Section"),
-      _("Add a section"),
+      "Правило",
+      "Добавить правило",
     );
     section.configureSectionSection(rulesSection, {
       loadActionProvidersAvailability: loadUiCapabilities,
@@ -614,6 +826,90 @@ const EntryPoint = {
     void loadUiCapabilities().catch(showCapabilityError);
 
     const rendered = await forkopMap.render();
+    const markDirty = function (event) {
+      const pane = event.target.closest?.(".cbi-section[data-tab]");
+      if (
+        pane &&
+        ["settings", "section", "server"].includes(pane.dataset.tab)
+      ) {
+        nativeDirty = true;
+        stateVersion++;
+        showPending();
+      }
+    };
+    rendered.addEventListener("input", markDirty);
+    rendered.addEventListener("change", markDirty);
+    main.registerConfigurationReload(window, {
+      beforeChange: async function () {
+        if (!rendered.isConnected) return;
+        if (refreshingNative) throw new Error("native_refresh_required");
+        if (mutationBusy) throw new Error("native_mutation_busy");
+        mutationBusy = true;
+        stateVersion++;
+        try {
+          pendingSaved = await readPending();
+          if (nativeDirty || pendingSaved) {
+            showPending(
+              "Есть неприменённые изменения. «Сохранить изменения» сохраняет черновик. «Применить сейчас» применит его; затем повторите действие. Черновик также можно отменить штатной кнопкой LuCI.",
+            );
+            throw new Error("native_pending_changes");
+          }
+          if (synchronizationFailed) {
+            showPending(
+              "Сначала нажмите «Обновить редактор», затем повторите действие.",
+            );
+            throw new Error("native_refresh_required");
+          }
+          disabledControls = Array.from(
+            rendered.querySelectorAll("input,select,textarea,button"),
+          ).filter(function (control) {
+            return !control.disabled;
+          });
+          disabledControls.forEach(function (control) {
+            control.disabled = true;
+          });
+          rendered.inert = true;
+          rendered.setAttribute("aria-busy", "true");
+        } catch (error) {
+          if (
+            !["native_pending_changes", "native_refresh_required"].includes(
+              error.message,
+            )
+          )
+            showPending(
+              "Не удалось проверить неприменённые изменения. Повторите действие после восстановления связи с роутером.",
+            );
+          throw error;
+        }
+      },
+      changed: async function () {
+        if (!rendered.isConnected) return;
+        await synchronizeNative();
+      },
+      settled: function () {
+        if (!mutationBusy) return;
+        disabledControls.forEach(function (control) {
+          control.disabled = false;
+        });
+        disabledControls = [];
+        mutationBusy = false;
+        rendered.removeAttribute("aria-busy");
+        rendered.inert = false;
+      },
+    });
+    const initialVersion = stateVersion;
+    void readPending()
+      .then(function (pending) {
+        if (initialVersion !== stateVersion) return;
+        pendingSaved = pending;
+        if (pending) showPending();
+      })
+      .catch(function () {
+        if (initialVersion === stateVersion)
+          showPending(
+            "Не удалось проверить неприменённые изменения. Перед немедленным действием проверка будет повторена.",
+          );
+      });
     mapRendered = true;
     if (uiCapabilities.loaded)
       void initializeSettings().catch(showCapabilityError);

@@ -16,7 +16,7 @@ function createDashboardContent(section) {
     sources.className = "fkp-workspace-sources";
     const help = document.createElement("p");
     help.textContent =
-      "Подписки, URLTest и группы задаются в правилах маршрутизации.";
+      "Ссылки и подписки, VPN-интерфейсы, JSON, URLTest и резервирование по приоритету настраиваются в источниках подключения внутри правила.";
     const edit = document.createElement("button");
     edit.type = "button";
     edit.className = "cbi-button";

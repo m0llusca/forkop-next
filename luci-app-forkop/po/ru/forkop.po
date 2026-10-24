@@ -1704,7 +1704,7 @@ msgid "Server group for automatic lowest-latency selection"
 msgstr "Группа серверов для автоматического выбора по наименьшей задержке"
 
 msgid "Server group for priority failover"
-msgstr "Группа автоматически выбирает рабочий узел на основе установленного приоритета."
+msgstr "Автоматически выбирает доступный сервер по заданному приоритету."
 
 msgid "Server information"
 msgstr "Информация о сервере"
@@ -2287,3 +2287,12 @@ msgstr "Прямой доступ"
 
 msgid "Block"
 msgstr "Блокировка"
+
+msgid "Remote YACD access is off without a secret key, including older configurations. LuCI continues to use its authenticated connection."
+msgstr "Доступ к YACD из сети отключён без секретного ключа, в том числе для старых конфигураций. LuCI использует собственное защищённое подключение."
+
+msgid "Enter a secret key to enable remote YACD access."
+msgstr "Для доступа к YACD из сети задайте секретный ключ."
+
+msgid "A secret key is required for YACD access from LAN or WAN. Without remote access, the controller stays private and LuCI uses its authenticated connection."
+msgstr "Для доступа к YACD из локальной сети или интернета нужен секретный ключ. Если этот доступ отключён, контроллер остаётся закрытым, а LuCI использует собственное защищённое подключение."

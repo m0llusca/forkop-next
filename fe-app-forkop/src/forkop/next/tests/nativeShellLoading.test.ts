@@ -10,6 +10,8 @@ import {
   disposeWorkspaceTools,
 } from '../../workspace/tools';
 import { configureNamedSectionCreation } from '../../workspace/namedCreation';
+import { registerConfigurationReload } from '../configReload';
+import { nextRequest } from '../api';
 const tick = async () => {
   for (let i = 0; i < 40; i++) await Promise.resolve();
 };
@@ -29,8 +31,14 @@ afterEach(() => {
     .querySelectorAll('[data-native-test-style]')
     .forEach((node) => node.remove());
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+  vi.useRealTimers();
 });
-function setup(shell: Record<string, unknown>) {
+function setup(
+  shell: Record<string, unknown>,
+  uci: Record<string, unknown> = {},
+  afterNativeRebuild?: () => Promise<void>,
+) {
   const native = nativeLuciHarness();
   vi.spyOn(console, 'warn').mockImplementation(() => {});
   const maps: NativeMap[] = [];
@@ -93,22 +101,20 @@ function setup(shell: Record<string, unknown>) {
     root!: HTMLElement;
     tabbed = false;
     config = 'forkop';
-    data = { save: async () => {} };
+    data = { save: vi.fn(async () => {}) };
     parent?: NativeMap;
     renderContents!: () => Promise<HTMLElement>;
     save!: (...args: unknown[]) => Promise<HTMLElement>;
     reset!: () => Promise<HTMLElement>;
-    nativeSaveApply = vi.fn(async function (
-      this: NativeMap,
-      _e: unknown,
-      _m: unknown,
-    ) {
-      await this.parse();
-      return 'saved';
-    });
-    handleSaveApply = this.nativeSaveApply;
     constructor(..._args: unknown[]) {
       Object.assign(this, native.map);
+      if (afterNativeRebuild)
+        this.renderContents = async () => {
+          const rebuilding = !!this.root?.firstChild;
+          const rendered = await native.map.renderContents.call(this);
+          if (rebuilding) await afterNativeRebuild();
+          return rendered;
+        };
       maps.push(this);
     }
     section(_type: unknown, type: string, title: string) {
@@ -158,7 +164,7 @@ function setup(shell: Record<string, unknown>) {
       ...shell,
     },
     injectGlobalStyles: vi.fn(),
-    registerConfigurationReload: vi.fn(),
+    registerConfigurationReload: vi.fn(registerConfigurationReload),
     coreService: vi.fn(),
     applyUiStateToStore: vi.fn(),
     mountForkopWorkspace,
@@ -176,6 +182,31 @@ function setup(shell: Record<string, unknown>) {
     createNextContent: (s: NativeSection) => {
       const o = s.option(null, 'overview');
       o.cfgvalue = () => 'Essential overview';
+    },
+  };
+  const applyChanges = vi.fn((_checked: boolean) => {});
+  // LuCI view methods, not Map methods. Adapted only at the DOM/UI boundary.
+  // https://github.com/openwrt/luci/blob/master/modules/luci-base/htdocs/luci-static/resources/luci.js
+  const nativeView = {
+    handleSave(_event: unknown) {
+      const tasks: Array<Promise<unknown>> = [];
+      document.querySelectorAll('.cbi-map').forEach((map) => {
+        tasks.push(
+          (
+            native.dom.findClassInstance(map as HTMLElement) as NativeMap
+          ).save(),
+        );
+      });
+      return Promise.all(tasks);
+    },
+    handleSaveApply(
+      this: { handleSave(event: unknown): Promise<unknown> },
+      event: unknown,
+      mode: unknown,
+    ) {
+      return this.handleSave(event).then(() => {
+        applyChanges(mode == '0');
+      });
     },
   };
   const source = readFileSync(
@@ -200,7 +231,7 @@ function setup(shell: Record<string, unknown>) {
     '_',
     source,
   )(
-    { extend: (v: unknown) => v },
+    { extend: (v: object) => Object.assign(Object.create(nativeView), v) },
     {
       Map: NativeMap,
       TypedSection: NativeSection,
@@ -209,7 +240,12 @@ function setup(shell: Record<string, unknown>) {
       DummyValue: 'dummy',
     },
     {},
-    {},
+    {
+      changes: async () => ({}),
+      unload: () => {},
+      load: async () => {},
+      ...uci,
+    },
     {},
     main,
     next,
@@ -232,6 +268,7 @@ function setup(shell: Record<string, unknown>) {
     settingsParse,
     native,
     NativeMap,
+    applyChanges,
   };
 }
 it('mounts workspace navigation on the real native render result and retains its native map', async () => {
@@ -246,6 +283,161 @@ it('mounts workspace navigation on the real native render result and retains its
   expect(rendered.querySelector('[data-tab="dashboard"]')?.className).toBe(
     'cbi-tab',
   );
+});
+it.each(['DOM draft', 'saved UCI', 'local UCI', 'reordered UCI'])(
+  'prevents immediate mutations before shell when native %s changes exist',
+  async (kind) => {
+    let executed = 0;
+    vi.stubGlobal('fs', {
+      exec: async (_: string, args: string[]) => {
+        if (args[1] === 'device_set') executed++;
+        return { code: 0, stdout: '{"success":true}', stderr: '' };
+      },
+    });
+    const state = setup(
+      { getUiCapabilities: () => new Promise(() => {}) },
+      {
+        changes: async () =>
+          kind === 'saved UCI'
+            ? { forkop: [['set', 'settings', 'dns', 'draft']] }
+            : {},
+        state: {
+          changes:
+            kind === 'local UCI'
+              ? { forkop: { settings: { dns: 'draft' } } }
+              : {},
+          reorder: kind === 'reordered UCI' ? { forkop: true } : {},
+        },
+      },
+    );
+    const root: HTMLElement = await state.controller.render();
+    document.body.append(root);
+    await tick();
+    if (kind === 'saved UCI')
+      expect(root.textContent).toContain(
+        'Изменения сохранены, но ещё не применены',
+      );
+    const draft = root.querySelector<HTMLInputElement>(
+      '[name=native-settings]',
+    )!;
+    if (kind === 'DOM draft') {
+      draft.value = 'unsaved DNS';
+      draft.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+    root
+      .querySelector<HTMLButtonElement>('[data-workspace-section=devices]')!
+      .click();
+    const response = await nextRequest('device_set', {
+      address: '192.0.2.1',
+      section: 'main',
+    });
+    expect(response).toEqual({
+      success: false,
+      error: 'native_pending_changes',
+    });
+    expect(executed).toBe(0);
+    expect(root.contains(draft)).toBe(true);
+    expect(root.textContent).toContain('Сохранить изменения');
+    expect(root.textContent).toContain('Применить сейчас');
+    if (kind === 'DOM draft') expect(draft.value).toBe('unsaved DNS');
+  },
+);
+it('synchronizes clean native UCI after mutation without reloading the page and releases controls after failure', async () => {
+  let finish!: (v: unknown) => void;
+  const sync: string[] = [];
+  const state = setup(
+    { getUiCapabilities: () => new Promise(() => {}) },
+    { unload: () => sync.push('unload'), load: async () => sync.push('load') },
+  );
+  const root: HTMLElement = await state.controller.render();
+  document.body.append(root);
+  await tick();
+  vi.stubGlobal('fs', {
+    exec: () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  });
+  const draft = root.querySelector<HTMLInputElement>('[name=native-settings]')!;
+  const mutation = nextRequest('device_set', {
+    address: '192.0.2.1',
+    section: 'main',
+  });
+  await tick();
+  expect(draft.disabled).toBe(true);
+  finish({ code: 0, stdout: '{"success":true}', stderr: '' });
+  await mutation;
+  expect(sync).toEqual(['unload', 'load']);
+  expect(
+    root.querySelector<HTMLInputElement>('[name=native-settings]')!.disabled,
+  ).toBe(false);
+  expect(root.textContent).toContain('Изменения применены');
+  vi.stubGlobal('fs', {
+    exec: async () => {
+      throw Error('offline');
+    },
+  });
+  expect((await nextRequest('recover')).success).toBe(false);
+  expect(
+    root.querySelector<HTMLInputElement>('[name=native-settings]')!.disabled,
+  ).toBe(false);
+});
+it('blocks a mutation when pending-state lookup fails and permits retry after cache synchronization failure', async () => {
+  let lookupFailed = true,
+    syncFailed = true,
+    executed = 0;
+  const state = setup(
+    { getUiCapabilities: () => new Promise(() => {}) },
+    {
+      changes: async () => {
+        if (lookupFailed) throw Error('offline');
+        return {};
+      },
+      load: async () => {
+        if (syncFailed) throw Error('sync failed');
+      },
+    },
+  );
+  const root: HTMLElement = await state.controller.render();
+  document.body.append(root);
+  vi.stubGlobal('fs', {
+    exec: async () => {
+      executed++;
+      return { code: 0, stdout: '{"success":true}', stderr: '' };
+    },
+  });
+  expect((await nextRequest('recover')).success).toBe(false);
+  expect(executed).toBe(0);
+  lookupFailed = false;
+  await nextRequest('recover');
+  expect(
+    root.querySelector<HTMLInputElement>('[name=native-settings]')!.disabled,
+  ).toBe(false);
+  expect(root.textContent).toContain('не удалось обновить');
+  syncFailed = false;
+  const refresh = [...root.querySelectorAll('button')].find(
+    (button) => button.textContent === 'Обновить редактор',
+  );
+  expect(refresh).toBeDefined();
+  refresh!.click();
+  await tick();
+  expect(executed).toBe(1);
+  await nextRequest('recover');
+  expect(root.textContent).toContain('Изменения применены');
+});
+it('lets native reset explicitly discard a DOM draft before retrying an immediate mutation', async () => {
+  const state = setup({ getUiCapabilities: () => new Promise(() => {}) });
+  const root: HTMLElement = await state.controller.render();
+  document.body.append(root);
+  const field = root.querySelector<HTMLInputElement>('[name=native-settings]')!;
+  field.value = 'draft';
+  field.dispatchEvent(new Event('input', { bubbles: true }));
+  vi.stubGlobal('fs', {
+    exec: async () => ({ code: 0, stdout: '{"success":true}', stderr: '' }),
+  });
+  expect((await nextRequest('recover')).error).toBe('native_pending_changes');
+  await state.maps[0].reset();
+  expect((await nextRequest('recover')).success).toBe(true);
 });
 it('appends focused pure UI sections after original native IDs and exposes all six primary areas', async () => {
   const state = setup({ getUiCapabilities: () => new Promise(() => {}) });
@@ -483,19 +675,132 @@ it('retains independent runtime fallback detection when primary and UI state cal
   expect(caps.serverInboundsEnabledCount).toBe(2);
   expect(state.settings.createSettingsContent).toHaveBeenCalledOnce();
 });
-it('preserves original Save and Apply arguments, return value and failure semantics before capabilities resolve', async () => {
+it('uses the real view Save and checked Apply lifecycle and preserves save failure semantics before capabilities resolve', async () => {
   const state = setup({ getUiCapabilities: () => new Promise(() => {}) });
   const rendered = await state.controller.render();
   document.body.append(rendered);
   const map = state.maps[0];
   const event = { type: 'apply' };
-  expect(await map.handleSaveApply(event, 'checked')).toBe('saved');
-  expect(map.nativeSaveApply).toHaveBeenCalledExactlyOnceWith(event, 'checked');
+  await state.controller.handleSaveApply(event, '0');
+  expect(map.data.save).toHaveBeenCalledOnce();
+  expect(state.applyChanges).toHaveBeenCalledExactlyOnceWith(true);
   expect(state.settingsParse).not.toHaveBeenCalled();
-  map.nativeSaveApply.mockRejectedValueOnce(Error('save failed'));
-  await expect(map.handleSaveApply(event, 'checked')).rejects.toThrow(
+  await state.controller.handleSaveApply(event, '1');
+  expect(state.applyChanges).toHaveBeenLastCalledWith(false);
+  map.data.save.mockRejectedValueOnce(Error('save failed'));
+  await expect(state.controller.handleSaveApply(event, '0')).rejects.toThrow(
     'save failed',
   );
+  expect(state.applyChanges).toHaveBeenCalledTimes(2);
+});
+it('applies the pending strip through the native view and reports failed saves without applying', async () => {
+  const state = setup({ getUiCapabilities: () => new Promise(() => {}) });
+  const root: HTMLElement = await state.controller.render();
+  document.body.append(root);
+  const field = root.querySelector<HTMLInputElement>('[name=native-settings]')!;
+  field.value = 'DNS draft';
+  field.dispatchEvent(new Event('input', { bubbles: true }));
+  const apply = [...root.querySelectorAll('button')].find(
+    (b) => b.textContent === 'Применить сейчас',
+  )!;
+  // Await the actual click handler so synchronous integration failures are visible.
+  await apply.onclick!.call(apply, new PointerEvent('click'));
+  await tick();
+  expect(state.maps[0].data.save).toHaveBeenCalledOnce();
+  expect(state.applyChanges).toHaveBeenCalledExactlyOnceWith(true);
+  expect(root.textContent).toContain('дождитесь результата в штатном диалоге');
+  state.maps[0].data.save.mockRejectedValueOnce(Error('invalid DNS'));
+  await apply.onclick!.call(apply, new PointerEvent('click'));
+  await tick();
+  expect(state.applyChanges).toHaveBeenCalledOnce();
+  expect(root.textContent).toContain('Не удалось применить изменения');
+});
+it('refreshes service evidence after native view apply or save rejection without bypassing LuCI activation', async () => {
+  const getUiState = vi.fn(async () => ({ success: false }));
+  const state = setup({
+    getUiCapabilities: () => new Promise(() => {}),
+    getUiState,
+  });
+  const root: HTMLElement = await state.controller.render();
+  document.body.append(root);
+  vi.useFakeTimers();
+  await state.controller.handleSaveApply(new Event('click'), '0');
+  expect(getUiState).not.toHaveBeenCalled();
+  await vi.advanceTimersByTimeAsync(250);
+  expect(getUiState).toHaveBeenCalledOnce();
+  state.maps[0].data.save.mockRejectedValueOnce(Error('invalid config'));
+  await expect(
+    state.controller.handleSaveApply(new Event('click'), '0'),
+  ).rejects.toThrow('invalid config');
+  expect(getUiState).toHaveBeenCalledTimes(2);
+  expect(state.applyChanges).toHaveBeenCalledExactlyOnceWith(true);
+});
+it('retains the connected recovery tool and its result through actual native synchronization', async () => {
+  let pending = true;
+  let finishRebuild!: () => void;
+  vi.stubGlobal('fs', {
+    exec: async (_command: string, args: string[]) => {
+      const action = args[1];
+      if (action === 'recover') pending = false;
+      const data =
+        action === 'status'
+          ? {
+              digest: pending ? 'before' : 'after',
+              recovery_pending: pending,
+              previous_available: true,
+              sections: [],
+            }
+          : { items: [] };
+      return {
+        code: 0,
+        stdout: JSON.stringify({ success: true, data }),
+        stderr: '',
+      };
+    },
+  });
+  const state = setup(
+    { getUiCapabilities: () => new Promise(() => {}) },
+    {},
+    () =>
+      new Promise((resolve) => {
+        finishRebuild = resolve;
+      }),
+  );
+  const root: HTMLElement = await state.controller.render();
+  document.body.append(root);
+  root
+    .querySelector<HTMLButtonElement>('[data-workspace-section=settings]')!
+    .click();
+  root
+    .querySelector<HTMLButtonElement>('[data-workspace-tab=advanced]')!
+    .click();
+  await tick();
+  const host = root.querySelector<HTMLElement>('[data-tools-area=settings]')!;
+  const recover = [...host.querySelectorAll('button')].find(
+    (b) => b.textContent === 'Восстановить прерванное применение',
+  )!;
+  expect(recover.hidden).toBe(false);
+  const recovery = recover.onclick!.call(recover, new PointerEvent('click'));
+  await tick();
+  const connectedDuringRebuild = host.isConnected;
+  finishRebuild();
+  await recovery;
+  await tick();
+  expect(connectedDuringRebuild).toBe(true);
+  expect(root.querySelector('[data-tools-area=settings]')).toBe(host);
+  expect(host.isConnected).toBe(true);
+  expect(root.textContent).toContain('Прерванное применение восстановлено');
+  expect(recover.hidden).toBe(true);
+  expect(
+    [...host.querySelectorAll('button')].find(
+      (b) => b.textContent === 'Вернуть предыдущую конфигурацию',
+    )!.disabled,
+  ).toBe(false);
+  expect(
+    root
+      .querySelector('.cbi-map-tabbed > [data-tab=advanced]')
+      ?.getAttribute('data-tab-active'),
+  ).toBe('true');
 });
 it('does not fabricate feature evidence from malformed successful capability responses', async () => {
   const failed = async () => ({ success: false });
