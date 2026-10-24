@@ -247,26 +247,52 @@ export function renderCompatibilityPanel(
     );
   });
   root.append(updates);
-  void initialRequest('status', {})
-    .then((response) => {
-      if (!response.success) {
-        result.textContent =
-          'Не удалось загрузить подключения. Обновите страницу.';
-        return;
-      }
-      const sections = object(response.data).sections;
-      for (const raw of Array.isArray(sections) ? sections : []) {
-        const s = object(raw);
-        const option = text('option', String(s.label || s.name));
-        option.value = String(s.name);
-        section.append(option);
-      }
-      section.value = section.options[0]?.value || '';
-    })
-    .catch(
-      () =>
-        (result.textContent =
-          'Не удалось загрузить подключения. Обновите страницу.'),
-    );
+  let routesGeneration = 0;
+  function refreshRoutes(read = request) {
+    const generation = ++routesGeneration;
+    return read('status', {})
+      .then((response) => {
+        if (generation !== routesGeneration) return;
+        if (!response.success) {
+          result.textContent =
+            'Не удалось загрузить подключения. Нажмите «Обновить подключения».';
+          return;
+        }
+        const previous = section.value;
+        section.replaceChildren();
+        const sections = object(response.data).sections;
+        for (const raw of Array.isArray(sections) ? sections : []) {
+          const s = object(raw);
+          const option = text('option', String(s.label || s.name));
+          option.value = String(s.name);
+          section.append(option);
+        }
+        section.value = [...section.options].some(
+          (option) => option.value === previous,
+        )
+          ? previous
+          : section.options[0]?.value || '';
+        if (section.value !== previous)
+          section.dispatchEvent(new Event('change'));
+        result.textContent = 'Подключения загружены. Проверка не выполнялась.';
+      })
+      .catch(() => {
+        if (generation === routesGeneration)
+          result.textContent =
+            'Не удалось загрузить подключения. Нажмите «Обновить подключения».';
+      });
+  }
+  button('Обновить подключения', async () => {
+    await refreshRoutes();
+  });
+  root.addEventListener(
+    'forkop:refresh-tools',
+    (event) =>
+      void refreshRoutes(
+        (event as CustomEvent<{ read?: typeof request }>).detail?.read ||
+          request,
+      ),
+  );
+  void refreshRoutes(initialRequest);
   return root;
 }

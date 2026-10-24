@@ -188,8 +188,12 @@ it('shows honest traffic totals then rates from two monotonic samples, resets af
   document.body.append(panel);
   await settle();
   await tick();
-  expect(panel.textContent).toContain('Получено: 1000 Б');
-  expect(panel.textContent).toContain('Соединений: 2');
+  expect(
+    panel.querySelector('[data-metric="download-total"]')?.textContent,
+  ).toBe('1\u00a0000 Б');
+  expect(panel.querySelector('[data-metric="connections"]')?.textContent).toBe(
+    '2',
+  );
   expect(panel.textContent).toContain('Скорость ещё не измерена');
   vi.useFakeTimers();
   vi.spyOn(performance, 'now').mockReturnValue(4000);
@@ -197,7 +201,12 @@ it('shows honest traffic totals then rates from two monotonic samples, resets af
   button(panel, 'Обновить данные').click();
   await tick();
   expect(panel.textContent).toContain('Б/с');
-  expect(panel.textContent).toContain('приём 1000 Б/с · отправка 500 Б/с');
+  expect(
+    panel.querySelector('[data-metric="download-rate"]')?.textContent,
+  ).toBe('1\u00a0000 Б/с');
+  expect(panel.querySelector('[data-metric="upload-rate"]')?.textContent).toBe(
+    '500 Б/с',
+  );
   vi.spyOn(performance, 'now').mockReturnValue(7000);
   snapshot = { downloadTotal: 5, uploadTotal: 1, connections: 0 };
   button(panel, 'Обновить данные').click();

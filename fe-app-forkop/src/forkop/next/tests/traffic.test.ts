@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, expect, it, vi } from 'vitest';
-import { createTrafficMonitor } from '../traffic';
+import { createTrafficMonitor, type OverviewTraffic } from '../traffic';
 afterEach(() => {
   vi.useRealTimers();
   vi.restoreAllMocks();
@@ -71,5 +71,64 @@ it('resets the rate baseline after a failed sample', async () => {
   clock.mockReturnValue(5000);
   await monitor.refresh();
   expect(output.textContent).toContain('Скорость ещё не измерена');
+  monitor.stop();
+});
+
+it('clears stopped readings, rejects an obsolete sample and needs two fresh samples for rates', async () => {
+  vi.useFakeTimers();
+  const clock = vi.spyOn(performance, 'now').mockReturnValue(1000);
+  let sample = { downloadTotal: 1024, uploadTotal: 0, connections: 1 };
+  let defer = false;
+  let finish!: (value: OverviewTraffic) => void;
+  const output = document.createElement('div');
+  const monitor = createTrafficMonitor(
+    output,
+    () =>
+      defer
+        ? new Promise<OverviewTraffic>((resolve) => {
+            finish = resolve;
+          })
+        : Promise.resolve(sample),
+    () => true,
+  );
+  const value = (name: string) =>
+    output.querySelector(`[data-metric="${name}"]`)?.textContent;
+  const expectUnknown = () =>
+    expect(
+      [...output.querySelectorAll('[data-metric]')].map(
+        (node) => node.textContent,
+      ),
+    ).toEqual(['—', '—', '—', '—', '—']);
+  await monitor.refresh();
+  clock.mockReturnValue(2000);
+  sample = { downloadTotal: 2048, uploadTotal: 1024, connections: 3 };
+  await monitor.refresh();
+  expect(value('download-rate')).toBe('1 КиБ/с');
+  expect(value('connections')).toBe('3');
+  defer = true;
+  const obsolete = monitor.refresh();
+  monitor.stop();
+  expectUnknown();
+  finish({ downloadTotal: 3072, uploadTotal: 2048, connections: 4 });
+  await obsolete;
+  expectUnknown();
+  const replacement = monitor.refresh();
+  expectUnknown();
+  expect(output.querySelector('[role=status]')?.textContent).toBe(
+    'Обновляем трафик…',
+  );
+  clock.mockReturnValue(5000);
+  finish({ downloadTotal: 4096, uploadTotal: 2048, connections: 2 });
+  await replacement;
+  expect(value('download-total')).toBe('4 КиБ');
+  expect(value('connections')).toBe('2');
+  expect(value('download-rate')).toBe('—');
+  expect(value('upload-rate')).toBe('—');
+  defer = false;
+  clock.mockReturnValue(6000);
+  sample = { downloadTotal: 5120, uploadTotal: 3072, connections: 1 };
+  await monitor.refresh();
+  expect(value('download-rate')).toBe('1 КиБ/с');
+  expect(value('upload-rate')).toBe('1 КиБ/с');
   monitor.stop();
 });

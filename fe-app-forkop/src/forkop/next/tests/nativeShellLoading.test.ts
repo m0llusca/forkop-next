@@ -1,6 +1,15 @@
 // @vitest-environment happy-dom
 import { readFileSync } from 'node:fs';
 import { afterEach, expect, it, vi } from 'vitest';
+import { mountForkopWorkspace } from '../../workspace/render';
+import { nativeLuciHarness } from '../../workspace/tests/fixtures/nativeLuciHarness';
+import { store } from '../../services/store.service';
+import { workspaceStyles } from '../../workspace/styles';
+import {
+  renderWorkspaceTools,
+  disposeWorkspaceTools,
+} from '../../workspace/tools';
+import { configureNamedSectionCreation } from '../../workspace/namedCreation';
 const tick = async () => {
   for (let i = 0; i < 40; i++) await Promise.resolve();
 };
@@ -15,9 +24,14 @@ const capabilities = {
 };
 afterEach(() => {
   document.body.replaceChildren();
+  store.reset();
+  document.head
+    .querySelectorAll('[data-native-test-style]')
+    .forEach((node) => node.remove());
   vi.restoreAllMocks();
 });
 function setup(shell: Record<string, unknown>) {
+  const native = nativeLuciHarness();
   vi.spyOn(console, 'warn').mockImplementation(() => {});
   const maps: NativeMap[] = [];
   const settingsParse = vi.fn(async () => {});
@@ -29,7 +43,16 @@ function setup(shell: Record<string, unknown>) {
       public title: string,
     ) {}
     option(_type: unknown, name: string) {
-      const o = { option: name, cfgvalue: () => '', parse: async () => {} };
+      const o = {
+        option: name,
+        cfgvalue: () => '',
+        parse: native.value.parse,
+        isActive: () => true,
+        isValid: () => true,
+        formvalue: () => null,
+        rmempty: true,
+        remove: () => {},
+      };
       this.children.push(o);
       return o;
     }
@@ -42,12 +65,21 @@ function setup(shell: Record<string, unknown>) {
     }
     async parse() {
       if (this.sectiontype === 'settings') settingsParse();
+      await Promise.all(
+        this.children.map((o) =>
+          (o.parse as (section: string) => unknown).call(o, this.sectiontype),
+        ),
+      );
     }
     async render() {
       const pane = document.createElement('section');
       pane.className = 'cbi-section';
       pane.dataset.tab = this.sectiontype;
-      pane.dataset.tabActive = this.sectiontype === 'next' ? 'true' : 'false';
+      pane.dataset.tabTitle = this.title;
+      const input = document.createElement('input');
+      input.name = `native-${this.sectiontype}`;
+      input.value = 'saved';
+      pane.append(input);
       for (const o of this.children) {
         const result = (o.cfgvalue as () => unknown)?.();
         if (result instanceof Node) pane.append(result);
@@ -60,6 +92,12 @@ function setup(shell: Record<string, unknown>) {
     children: NativeSection[] = [];
     root!: HTMLElement;
     tabbed = false;
+    config = 'forkop';
+    data = { save: async () => {} };
+    parent?: NativeMap;
+    renderContents!: () => Promise<HTMLElement>;
+    save!: (...args: unknown[]) => Promise<HTMLElement>;
+    reset!: () => Promise<HTMLElement>;
     nativeSaveApply = vi.fn(async function (
       this: NativeMap,
       _e: unknown,
@@ -70,6 +108,7 @@ function setup(shell: Record<string, unknown>) {
     });
     handleSaveApply = this.nativeSaveApply;
     constructor(..._args: unknown[]) {
+      Object.assign(this, native.map);
       maps.push(this);
     }
     section(_type: unknown, type: string, title: string) {
@@ -86,39 +125,14 @@ function setup(shell: Record<string, unknown>) {
       );
     }
     checkDepends = vi.fn();
+    async load() {
+      await Promise.all(this.children.map((section) => section.load()));
+    }
+    async renderChildren() {
+      return Promise.all(this.children.map((section) => section.render()));
+    }
     async render() {
-      this.root = document.createElement('div');
-      this.root.className = 'cbi-map';
-      const menu = document.createElement('ul');
-      menu.className = 'cbi-tabmenu';
-      const panes = document.createElement('div');
-      panes.className = 'cbi-map-tabbed';
-      this.root.append(menu, panes);
-      for (const s of this.children) {
-        await s.load();
-        panes.append(await s.render());
-        const item = document.createElement('li');
-        item.dataset.tab = s.sectiontype;
-        item.className =
-          s.sectiontype === 'next' ? 'cbi-tab' : 'cbi-tab-disabled';
-        const link = document.createElement('a');
-        link.textContent = s.title;
-        item.append(link);
-        menu.append(item);
-        link.onclick = () => {
-          for (const tab of [...menu.children])
-            tab.className =
-              tab.getAttribute('data-tab') === s.sectiontype
-                ? 'cbi-tab'
-                : 'cbi-tab-disabled';
-          for (const pane of [...panes.children])
-            pane.setAttribute(
-              'data-tab-active',
-              String(pane.getAttribute('data-tab') === s.sectiontype),
-            );
-        };
-      }
-      return this.root;
+      return this.renderContents();
     }
   }
   const settings = {
@@ -147,6 +161,10 @@ function setup(shell: Record<string, unknown>) {
     registerConfigurationReload: vi.fn(),
     coreService: vi.fn(),
     applyUiStateToStore: vi.fn(),
+    mountForkopWorkspace,
+    renderWorkspaceTools,
+    disposeWorkspaceTools,
+    configureNamedSectionCreation,
   };
   const feature = {
     createDiagnosticContent: vi.fn(),
@@ -204,8 +222,82 @@ function setup(shell: Record<string, unknown>) {
     feature,
     (s: string) => s,
   );
-  return { controller, maps, settings, server, section, main, settingsParse };
+  return {
+    controller,
+    maps,
+    settings,
+    server,
+    section,
+    main,
+    settingsParse,
+    native,
+    NativeMap,
+  };
 }
+it('mounts workspace navigation on the real native render result and retains its native map', async () => {
+  const state = setup({ getUiCapabilities: () => new Promise(() => {}) });
+  const rendered: HTMLElement = await state.controller.render();
+  document.body.append(rendered);
+  expect(rendered.classList.contains('fkp-workspace')).toBe(true);
+  expect(rendered).toBe(state.maps[0].root);
+  rendered
+    .querySelector<HTMLButtonElement>('[data-workspace-section="servers"]')!
+    .click();
+  expect(rendered.querySelector('[data-tab="dashboard"]')?.className).toBe(
+    'cbi-tab',
+  );
+});
+it('appends focused pure UI sections after original native IDs and exposes all six primary areas', async () => {
+  const state = setup({ getUiCapabilities: () => new Promise(() => {}) });
+  const rendered: HTMLElement = await state.controller.render();
+  document.body.append(rendered);
+  const ids = state.maps[0].children.map((s) => s.sectiontype);
+  expect(ids).toEqual([
+    'next',
+    'section',
+    'server',
+    'settings',
+    'diagnostic',
+    'dashboard',
+    'monitoring',
+    'updates',
+    'devices',
+    'rule_tools',
+    'route_tools',
+    'advanced',
+  ]);
+  expect(rendered.querySelectorAll('[data-workspace-section]')).toHaveLength(6);
+  for (const s of state.maps[0].children.slice(8)) {
+    expect(s.children).toHaveLength(1);
+    expect(s.children[0].option).toBe('_workspace_tools');
+  }
+});
+it('disposes unvisited tool hosts before every native reset/save reconstruction', async () => {
+  const state = setup({ getUiCapabilities: () => new Promise(() => {}) });
+  const dispose = vi.spyOn(state.main, 'disposeWorkspaceTools');
+  const rendered: HTMLElement = await state.controller.render();
+  document.body.append(rendered);
+  const oldTools = rendered.querySelector('[data-tools-area="rules"]');
+  expect(oldTools).not.toBeNull();
+  await state.maps[0].reset();
+  expect(dispose).toHaveBeenCalledWith(rendered);
+  expect(rendered.querySelector('[data-tools-area="rules"]')).not.toBe(
+    oldTools,
+  );
+  await state.maps[0].save(null, true);
+  expect(dispose).toHaveBeenCalledTimes(2);
+  expect(rendered.querySelectorAll('.fkp-workspace-sidebar')).toHaveLength(1);
+});
+it('does not rerender pure tool values during native Value.parse or create uninserted observers on save', async () => {
+  const state = setup({ getUiCapabilities: () => new Promise(() => {}) });
+  const render = vi.spyOn(state.main, 'renderWorkspaceTools');
+  const rendered: HTMLElement = await state.controller.render();
+  document.body.append(rendered);
+  expect(render).toHaveBeenCalledTimes(4);
+  render.mockClear();
+  await state.maps[0].parse();
+  expect(render).not.toHaveBeenCalled();
+});
 it('renders the essential native page without waiting for pending capabilities and preserves settings on unrelated saves', async () => {
   const state = setup({ getUiCapabilities: () => new Promise(() => {}) });
   let rendered: HTMLElement | undefined;
@@ -246,7 +338,7 @@ it('mounts settings with real capabilities after first paint without replacing u
   expect(
     map.findElement('.cbi-map-tabbed > .cbi-section[data-tab="settings"]')
       ?.dataset.tabActive,
-  ).toBe('false');
+  ).not.toBe('true');
   await map.parse();
   expect(state.settingsParse).toHaveBeenCalledOnce();
   const providerLoader =
@@ -448,4 +540,126 @@ it('does not parse newly created settings until their asynchronous load and moun
   expect(rendered.textContent).toContain('Mounted settings');
   await state.maps[0].parse();
   expect(state.settingsParse).toHaveBeenCalledOnce();
+});
+
+it.each(['save', 'reset', 'modal-parent-reset'])(
+  'rebinds the same native map root after %s reconstructs its children',
+  async (operation) => {
+    const state = setup({ getUiCapabilities: () => new Promise(() => {}) });
+    const root: HTMLElement = await state.controller.render();
+    document.body.append(root);
+    const map = state.maps[0];
+    const style = document.createElement('style');
+    style.dataset.nativeTestStyle = '';
+    style.textContent = workspaceStyles;
+    document.head.append(style);
+    const oldMenu = root.querySelector('.cbi-tabmenu')!;
+    const oldPanes = root.querySelector('.cbi-map-tabbed')!;
+    const oldControl = root.querySelector<HTMLButtonElement>(
+      '[data-workspace-section="rules"]',
+    )!;
+    const oldService = root.querySelector('.fkp-workspace-service')!;
+    const oldInput = root.querySelector('input[name="native-section"]')!;
+    if (operation === 'save') await map.save();
+    else if (operation === 'reset') await map.reset();
+    else {
+      const modal = new state.NativeMap();
+      modal.parent = map;
+      await modal.render();
+      await state.native.grid.handleModalSave.call(
+        {
+          getActiveModalMap: () => modal.root,
+          handleModalCancel: async () => {},
+        },
+        modal,
+        new Event('click'),
+      );
+    }
+    expect(map.root).toBe(root);
+    expect(root.querySelectorAll('.fkp-workspace-primary')).toHaveLength(1);
+    expect(root.querySelector('.cbi-tabmenu')).not.toBe(oldMenu);
+    expect(root.querySelector('.cbi-map-tabbed')).not.toBe(oldPanes);
+    expect(root.contains(oldInput)).toBe(false);
+    root
+      .querySelector<HTMLButtonElement>('[data-workspace-section="servers"]')!
+      .click();
+    root
+      .querySelector<HTMLButtonElement>('[data-workspace-tab="server"]')!
+      .click();
+    expect(
+      [...root.querySelector('.cbi-map-tabbed')!.children]
+        .filter((pane) => getComputedStyle(pane).display !== 'none')
+        .map((pane) => pane.getAttribute('data-tab')),
+    ).toEqual(['server']);
+    const oldActive = oldPanes.querySelector('[data-tab-active=true]');
+    oldControl.click();
+    expect(oldPanes.querySelector('[data-tab-active=true]')).toBe(oldActive);
+    oldService.textContent = 'retired shell';
+    store.set({
+      servicesInfoWidget: {
+        loading: false,
+        failed: false,
+        data: {
+          singbox: 1,
+          forkopRunning: 1,
+          forkopEnabled: 1,
+          forkopStatus: 'running',
+        },
+      },
+    });
+    expect(root.querySelector('.fkp-workspace-service')?.textContent).toBe(
+      'Сервис запущен',
+    );
+    expect(oldService.textContent).toBe('retired shell');
+    mountForkopWorkspace(root);
+    expect(root.querySelectorAll('.fkp-workspace-primary')).toHaveLength(1);
+  },
+);
+
+it('mirrors native invalid-tab counts and tooltips, opens their pane and clears feedback without discarding its draft', async () => {
+  const state = setup({ getUiCapabilities: () => new Promise(() => {}) });
+  const root: HTMLElement = await state.controller.render();
+  document.body.append(root);
+  const draft = root.querySelector<HTMLInputElement>(
+    'input[name="native-settings"]',
+  )!;
+  draft.value = 'invalid unsaved value';
+  draft.classList.add('cbi-input-invalid');
+  const update = root.querySelector<HTMLInputElement>(
+    'input[name="native-updates"]',
+  )!;
+  update.classList.add('cbi-input-invalid');
+  root
+    .querySelector<HTMLButtonElement>('[data-workspace-section="rules"]')!
+    .click();
+  state.native.tabs.updateTabs(undefined, root);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const primary = root.querySelector<HTMLButtonElement>(
+    '[data-workspace-section="settings"]',
+  )!;
+  const page = root.querySelector<HTMLButtonElement>(
+    '[data-workspace-tab="settings"]',
+  )!;
+  expect(primary.dataset.errors).toBe('2');
+  expect(page.dataset.errors).toBe('1');
+  expect(page.getAttribute('data-tooltip')).toBe('1 invalid field(s)');
+  expect(page.getAttribute('aria-label')).toContain('1 invalid field(s)');
+  primary.click();
+  page.click();
+  expect(
+    root
+      .querySelector('.cbi-map-tabbed > [data-tab=settings]')
+      ?.getAttribute('data-tab-active'),
+  ).toBe('true');
+  expect(root.querySelector('input[name="native-settings"]')).toBe(draft);
+  expect(draft.value).toBe('invalid unsaved value');
+  draft.classList.remove('cbi-input-invalid');
+  update.classList.remove('cbi-input-invalid');
+  state.native.tabs.updateTabs(undefined, root);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(primary.hasAttribute('data-errors')).toBe(false);
+  expect(page.hasAttribute('data-errors')).toBe(false);
+  expect(page.hasAttribute('data-tooltip')).toBe(false);
+  expect(page.hasAttribute('aria-label')).toBe(false);
+  expect(draft.value).toBe('invalid unsaved value');
 });

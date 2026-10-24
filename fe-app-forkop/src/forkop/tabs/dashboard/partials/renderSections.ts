@@ -301,6 +301,31 @@ function renderDefaultState({
       outbound.runtimeAvailable !== false &&
       !selectorSwitching &&
       !outbound.selected;
+    const selectionButton = E(
+      'button',
+      {
+        type: 'button',
+        class: 'btn fkp_dashboard-page__outbound-grid__item__select',
+        'aria-label': `${_('Выбрать сервер')}: ${outbound.displayName}`,
+        'aria-busy': String(outboundSwitching),
+        disabled: !canChooseOutbound ? true : undefined,
+        click: (event: MouseEvent) => {
+          event.preventDefault();
+          event.stopPropagation();
+          if (canChooseOutbound)
+            onChooseOutbound(section.sectionName, section.code, outbound.code);
+        },
+      },
+      outboundSwitching
+        ? _('Переключаем…')
+        : outbound.selected
+          ? _('Выбран')
+          : outbound.runtimeAvailable === false
+            ? _('Недоступен')
+            : _('Выбрать'),
+    );
+    selectionButton.setAttribute('data-outbound-select', outbound.code);
+    selectionButton.setAttribute('aria-pressed', String(outbound.selected));
     const className = [
       'fkp_dashboard-page__outbound-grid__item',
       outbound.selected
@@ -323,8 +348,6 @@ function renderDefaultState({
       {
         class: className,
         'aria-busy': outboundSwitching ? 'true' : undefined,
-        'aria-disabled':
-          section.withTagSelect && !canChooseOutbound ? 'true' : undefined,
         click: () =>
           canChooseOutbound &&
           onChooseOutbound(section.sectionName, section.code, outbound.code),
@@ -440,6 +463,7 @@ function renderDefaultState({
             ],
           ),
         ]),
+        ...(section.withTagSelect ? [selectionButton] : []),
       ],
     );
   }
