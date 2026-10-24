@@ -648,6 +648,26 @@
       ],
       "asset": "sing-box-extended_1.14.3-extended-2.7.3_openwrt_x86_64.ipk",
       "archive_sha256": "8bcbc904e23cebe3ae57cb6150e29d1422bff549477762d657256a1c7ead3d9e"
+    },
+    {
+      "version": "1.14.3-extended-2.7.3-forkop-record1",
+      "sha256": "1ec3de87db4aea2e98efe5c05ef0d100b7f7ba6e6c32e7b0c90b2c71cb13dfd6",
+      "architecture": "arm64-compressed",
+      "upstream_commit": "d9442d14b19ddd02605bf3ee893a171947038e19",
+      "patch_sha256": "4ccad18d3d13b87e4305f77e8ae3de349661fb03aa0d122b4c73d9ec1f636bc0",
+      "reality_hybrid": true,
+      "reality_record_fragment": true,
+      "fingerprints": [
+        "chrome"
+      ],
+      "source": "forkop-next-record",
+      "release_tag": "core-1.14.3-extended-2.7.3-forkop-record1",
+      "asset": "sing-box-1.14.3-extended-2.7.3-forkop-record1-linux-arm64-compressed.tar.gz",
+      "archive_sha256": "9c05230852c3ea7ab9fe3e48ff1fa1c395691fe8789a70c874aa58a453529f2e",
+      "source_asset": "sing-box-1.14.3-extended-2.7.3-forkop-record1-source.tar.gz",
+      "source_archive_sha256": "ea0d6464b21f2e477a57b0e35383e2ef6a28776b9a62371f4e493a7c6d7cc853",
+      "source_current": true,
+      "validation_memory_kb": 140000
     }
   ]
 }

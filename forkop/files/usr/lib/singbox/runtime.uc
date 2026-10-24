@@ -37,6 +37,7 @@ const SB_SERVICE_MIXED_INBOUND_ADDRESS = getenv("SB_SERVICE_MIXED_INBOUND_ADDRES
 const SB_SERVICE_MIXED_INBOUND_PORT = getenv("SB_SERVICE_MIXED_INBOUND_PORT") || "4534";
 const SB_VARIANT_STATE_FILE = getenv("SB_VARIANT_STATE_FILE") || "/etc/forkop/sing-box-variant";
 const SB_VERSION_STATE_FILE = getenv("SB_VERSION_STATE_FILE") || "/etc/forkop/sing-box-version";
+const SB_SOURCE_STATE_FILE = getenv("SB_SOURCE_STATE_FILE") || "/etc/forkop/sing-box-source";
 const SB_MANAGED_SERVICE_MARKER = getenv("SB_MANAGED_SERVICE_MARKER") || "Forkop managed sing-box service for binary variants";
 
 function as_string(value) {
@@ -209,6 +210,26 @@ function sing_box_marker_is(value) {
 
 function sing_box_version_state() {
     return file_first_line(SB_VERSION_STATE_FILE);
+}
+
+function sing_box_source_state() {
+    return file_first_line(SB_SOURCE_STATE_FILE);
+}
+
+function sing_box_write_source_state(source) {
+    source = as_string(source);
+    if (source != "" && source != "forkop-next-record")
+        return false;
+    if (source == "")
+        return fs.lstat(SB_SOURCE_STATE_FILE) == null || fs.unlink(SB_SOURCE_STATE_FILE);
+    if (!ensure_parent_dir(SB_SOURCE_STATE_FILE))
+        return false;
+    let staged = SB_SOURCE_STATE_FILE + ".tmp";
+    if (!write_file(staged, source + "\n") || !fs.rename(staged, SB_SOURCE_STATE_FILE)) {
+        fs.unlink(staged);
+        return false;
+    }
+    return true;
 }
 
 function sing_box_write_version_state(version) {
@@ -875,6 +896,10 @@ else if (mode == "version-from-output")
     print(first_line_last_field(fs.readfile("/dev/stdin")), "\n");
 else if (mode == "read-version-state")
     print(sing_box_version_state(), "\n");
+else if (mode == "read-source-state")
+    print(sing_box_source_state(), "\n");
+else if (mode == "write-source-state")
+    exit(sing_box_write_source_state(ARGV[1]) ? 0 : 1);
 else if (mode == "write-version-state")
     exit(sing_box_write_version_state(ARGV[1]) ? 0 : 1);
 else if (mode == "clear-version-state")
