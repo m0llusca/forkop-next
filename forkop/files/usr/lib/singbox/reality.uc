@@ -46,14 +46,33 @@ function supported_outbound(outbound, profile) {
         utls.enabled === true && utls.fingerprint == 'chrome' &&
         index(array(profile.fingerprints), utls.fingerprint) >= 0;
 }
+function record_fragment_supported(outbound, profile) {
+    return supported_outbound(outbound, profile) &&
+        object(profile).reality_record_fragment === true;
+}
+function record_fragment_error(outbound, profile) {
+    let reality = object(object(object(outbound).tls).reality);
+    if (index(keys(reality), 'record_fragment_size') < 0) return '';
+    let size = reality.record_fragment_size;
+    if (type(size) != 'int' || size < 0 || size > 16384)
+        return 'tls.reality.record_fragment_size must be an integer from 0 to 16384';
+    if (object(profile).reality_record_fragment !== true)
+        return 'tls.reality.record_fragment_size requires an exactly verified record-fragment core';
+    return '';
+}
 function adapt_outbound(outbound, profile) {
+    let error = record_fragment_error(outbound, profile);
+    if (error != '') die(error);
     if (supported_outbound(outbound, profile) &&
         index(keys(outbound.tls.reality), 'support_x25519mlkem768') < 0)
         outbound.tls.reality.support_x25519mlkem768 = true;
+    if (record_fragment_supported(outbound, profile) &&
+        index(keys(outbound.tls.reality), 'record_fragment_size') < 0)
+        outbound.tls.reality.record_fragment_size = 256;
     return outbound;
 }
 function hybrid_enabled(outbound, profile) {
     return supported_outbound(outbound, profile) &&
         outbound.tls.reality.support_x25519mlkem768 === true;
 }
-return {runtime_binary, runtime_version, verified_runtime, supported_outbound, adapt_outbound, hybrid_enabled};
+return {runtime_binary, runtime_version, verified_runtime, supported_outbound, record_fragment_supported, record_fragment_error, adapt_outbound, hybrid_enabled};

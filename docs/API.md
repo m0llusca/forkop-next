@@ -119,3 +119,20 @@ candidate or applying a valid one. Profile and recovery checks hash the exact
 in-memory bytes they will use, rather than rereading the path for the hash.
 These checks detect concurrent edits at the checked boundaries; external writers
 must still respect the operation lock for complete serialization.
+## Record compatibility core source
+
+The optional `forkop-next-record` source is selected explicitly through:
+
+```text
+forkop component_action sing_box install_forkop_record_compressed
+```
+
+It keeps the genuine `extended-compressed` variant. Source state lives in `/etc/forkop/sing-box-source`; only an absent/empty official source or the allowlisted custom value is writable. The source marker selects update routing and never grants runtime capability.
+
+The trusted core manifest records a single `source_current: true` target per custom source/architecture. It pins the own-repository core-prefixed release tag, archive SHA and executable SHA separately. Historical runtime identities can remain admitted without being current update targets. Unsupported architectures, missing/ambiguous pins and unavailable assets fail without upstream fallback.
+
+An explicit custom install requires an admitted compressed runtime or no installed engine, and no package ownership of the destination executable. Package state is untouched. Archive destination and checksum, executable checksum/capability, the pinned memory requirement and exact reported version are checked before stopping the current service. A verified archive is removed before the memory check. The transaction restores binary, optional library, generated config, sing-box UCI/init, variant/version/source, file modes and absent states on failure. Source selection commits after startup succeeds.
+
+Generic check/install remains on the selected custom source. Explicit official/stable/tiny transitions that would lose record capability are refused before stopping the service. Component result/cache evidence adds `source`; late cross-source results are not cached or displayed. Source-less historical official results remain compatible only when the official source is selected.
+
+`tls.reality.record_fragment_size` accepts an integer 0..16384 only with exact record-capable runtime admission. For admitted Chrome REALITY outbounds, generation adds 256 only if the field is absent. Explicit zero opts out. Official cores receive no new field, and other outbound/TLS settings remain unchanged.
