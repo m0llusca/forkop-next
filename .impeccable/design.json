@@ -1,1 +1,265 @@
-{"mode":"Operate","source":"PRODUCT.md confirmed direction","surface":"Forkop Next overview","tokens":{"light":{"background":"#f6f7f8","foreground":"#17252d","muted":"#455863","line":"#ced7dc","accent":"#14635e","field":"#ffffff"},"dark":{"background":"#16232b","foreground":"#eef4f6","muted":"#b8c8d0","line":"#455963","accent":"#8bd6c8","field":"#21333e"},"spacing":[8,16,24,32],"controlMinHeight":42,"mobileBreakpoint":720,"focus":{"width":2,"offset":3}},"implementation":"fe-app-forkop/src/forkop/next/styles.ts"}
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-24T11:59:52.451783+00:00",
+  "title": "Design System: Forkop",
+  "surface": "Forkop full interface: all six workspace sections and identified native dialogs",
+  "sourcePaths": [
+    "PRODUCT.md",
+    "DESIGN.md",
+    ".impeccable/surfaces/fe-app-forkop-src-forkop-next-render-ts.md",
+    "fe-app-forkop/src/forkop/workspace/styles.ts",
+    "fe-app-forkop/src/forkop/next/styles.ts",
+    "fe-app-forkop/src/forkop/workspace/render.ts",
+    "fe-app-forkop/src/forkop/next/render.ts",
+    "luci-app-forkop/htdocs/luci-static/resources/view/forkop/forkop.js"
+  ],
+  "extensions": {
+    "colorMeta": {
+      "light-background": {
+        "role": "neutral",
+        "displayName": "Light Background"
+      },
+      "light-foreground": {
+        "role": "neutral",
+        "displayName": "Light Foreground"
+      },
+      "light-muted": {
+        "role": "neutral",
+        "displayName": "Light Muted"
+      },
+      "light-line": {
+        "role": "neutral",
+        "displayName": "Light Line"
+      },
+      "light-accent": {
+        "role": "primary",
+        "displayName": "Light Accent"
+      },
+      "light-field": {
+        "role": "neutral",
+        "displayName": "Light Field"
+      },
+      "light-hover": {
+        "role": "neutral",
+        "displayName": "Light Hover"
+      },
+      "light-selected": {
+        "role": "neutral",
+        "displayName": "Light Selected"
+      },
+      "light-danger": {
+        "role": "semantic",
+        "displayName": "Light Danger"
+      },
+      "light-warning": {
+        "role": "semantic",
+        "displayName": "Light Warning"
+      },
+      "dark-background": {
+        "role": "neutral",
+        "displayName": "Dark Background"
+      },
+      "dark-foreground": {
+        "role": "neutral",
+        "displayName": "Dark Foreground"
+      },
+      "dark-muted": {
+        "role": "neutral",
+        "displayName": "Dark Muted"
+      },
+      "dark-line": {
+        "role": "neutral",
+        "displayName": "Dark Line"
+      },
+      "dark-accent": {
+        "role": "primary",
+        "displayName": "Dark Accent"
+      },
+      "dark-field": {
+        "role": "neutral",
+        "displayName": "Dark Field"
+      },
+      "dark-hover": {
+        "role": "neutral",
+        "displayName": "Dark Hover"
+      },
+      "dark-selected": {
+        "role": "neutral",
+        "displayName": "Dark Selected"
+      },
+      "dark-danger": {
+        "role": "semantic",
+        "displayName": "Dark Danger"
+      },
+      "dark-warning": {
+        "role": "semantic",
+        "displayName": "Dark Warning"
+      }
+    },
+    "shadows": [
+      {
+        "name": "identified-modal",
+        "value": "0 16px 48px rgba(0,0,0,.22)",
+        "purpose": "Forkop dialogs only."
+      }
+    ],
+    "motion": [
+      {
+        "name": "workspace-control",
+        "value": "background-color 140ms ease-out",
+        "purpose": "Workspace buttons."
+      },
+      {
+        "name": "next-control",
+        "value": "background-color .15s ease-out",
+        "purpose": "Standalone Next buttons."
+      },
+      {
+        "name": "reduced-motion",
+        "value": "transition:none;animation:none",
+        "purpose": "Workspace/modal descendants; Next buttons also remove transition."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "sidebar-compact",
+        "value": "1050px"
+      },
+      {
+        "name": "metrics-compact",
+        "value": "900px"
+      },
+      {
+        "name": "mobile",
+        "value": "720px"
+      }
+    ],
+    "focus": {
+      "outline": "2px solid var(--next-accent)",
+      "offset": "3px"
+    },
+    "layout": {
+      "sidebar": "184px",
+      "compactSidebar": "160px",
+      "mainPadding": "24px 32px 32px",
+      "compactMainPadding": "24px",
+      "mobileMainPadding": "24px 16px",
+      "formLabelWidth": "200px",
+      "formGap": "24px",
+      "fieldMaxWidth": "42rem",
+      "wideNativeTableMinWidth": "520px",
+      "mobileTables": "Rule/server rows stack with data-title labels; other wide native tables scroll locally.",
+      "spacingSource": "DESIGN.md spacing primitives; workspace/styles.ts and next/styles.ts"
+    },
+    "controls": {
+      "minHeight": "42px",
+      "navigationMinHeight": "44px",
+      "mobileInputFontSize": "16px",
+      "checkboxRadioSize": "20px",
+      "disabledOpacity": ".55",
+      "workspaceButtonPadding": "9px 14px",
+      "nextButtonPadding": "8px 12px",
+      "nextInputPadding": "9px 10px",
+      "primaryHoverFilter": "brightness(.93)"
+    },
+    "theme": {
+      "default": "surrounding LuCI, then OS preference",
+      "controlCount": 1,
+      "embeddedNext": "inherits workspace tokens",
+      "strongOverrideScopes": [
+        "#cbi-forkop.fkp-workspace[data-theme]",
+        "#modal_overlay .fkp-workspace-modal[data-theme]"
+      ]
+    },
+    "review": {
+      "path": ".superpowers/sdd/2026-10-24-full-interface/impeccable-finish-review.md",
+      "disposition": "ship",
+      "evidence": "18 supplied implementation captures; static finish review only.",
+      "limits": "No live installation or measured performance claim."
+    }
+  },
+  "components": [
+    {
+      "name": "Primary check",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Primary check from the implemented workspace.",
+      "html": "<div class=\"ds-surface\"><button class=\"ds-button ds-primary\">Проверить соединение</button></div>",
+      "css": ".ds-surface{--next-bg:#f6f7f8;--next-fg:#17252d;--next-muted:#455863;--next-line:#ced7dc;--next-accent:#14635e;--next-field:#fff;--fkp-hover:#e6eeed;--fkp-selected:#dceee9;color:var(--next-fg);background:var(--next-bg);font:inherit;line-height:1.5}.ds-surface[data-theme=dark]{--next-bg:#16232b;--next-fg:#eef4f6;--next-muted:#b8c8d0;--next-line:#455963;--next-accent:#8bd6c8;--next-field:#21333e;--fkp-hover:#29423f;--fkp-selected:#29473f}.ds-surface :focus-visible{outline:2px solid var(--next-accent);outline-offset:3px}.ds-button{min-height:42px;border:1px solid var(--next-line);border-radius:6px;padding:9px 14px;background:var(--next-field);color:var(--next-fg);font:inherit;font-weight:550;line-height:1.5;cursor:pointer;transition:background-color 140ms ease-out}.ds-button:hover:not(:disabled){background:var(--fkp-hover);color:var(--next-accent)}.ds-button:disabled{opacity:.55;cursor:not-allowed}@media(prefers-reduced-motion:reduce){.ds-button{transition:none}}.ds-primary{background:var(--next-accent);border-color:var(--next-accent);color:var(--next-bg)}.ds-primary:hover:not(:disabled){background:var(--next-accent);color:var(--next-bg);filter:brightness(.93)}"
+    },
+    {
+      "name": "Secondary action",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Secondary action from the implemented workspace.",
+      "html": "<div class=\"ds-surface\"><button class=\"ds-button\">Изменить сервер</button></div>",
+      "css": ".ds-surface{--next-bg:#f6f7f8;--next-fg:#17252d;--next-muted:#455863;--next-line:#ced7dc;--next-accent:#14635e;--next-field:#fff;--fkp-hover:#e6eeed;--fkp-selected:#dceee9;color:var(--next-fg);background:var(--next-bg);font:inherit;line-height:1.5}.ds-surface[data-theme=dark]{--next-bg:#16232b;--next-fg:#eef4f6;--next-muted:#b8c8d0;--next-line:#455963;--next-accent:#8bd6c8;--next-field:#21333e;--fkp-hover:#29423f;--fkp-selected:#29473f}.ds-surface :focus-visible{outline:2px solid var(--next-accent);outline-offset:3px}.ds-button{min-height:42px;border:1px solid var(--next-line);border-radius:6px;padding:9px 14px;background:var(--next-field);color:var(--next-fg);font:inherit;font-weight:550;line-height:1.5;cursor:pointer;transition:background-color 140ms ease-out}.ds-button:hover:not(:disabled){background:var(--fkp-hover);color:var(--next-accent)}.ds-button:disabled{opacity:.55;cursor:not-allowed}@media(prefers-reduced-motion:reduce){.ds-button{transition:none}}"
+    },
+    {
+      "name": "Native text field",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Native text field from the implemented workspace.",
+      "html": "<div class=\"ds-surface\"><label>Адрес<input class=\"ds-input\" placeholder=\"Адрес\" /></label></div>",
+      "css": ".ds-surface{--next-bg:#f6f7f8;--next-fg:#17252d;--next-muted:#455863;--next-line:#ced7dc;--next-accent:#14635e;--next-field:#fff;--fkp-hover:#e6eeed;--fkp-selected:#dceee9;color:var(--next-fg);background:var(--next-bg);font:inherit;line-height:1.5}.ds-surface[data-theme=dark]{--next-bg:#16232b;--next-fg:#eef4f6;--next-muted:#b8c8d0;--next-line:#455963;--next-accent:#8bd6c8;--next-field:#21333e;--fkp-hover:#29423f;--fkp-selected:#29473f}.ds-surface :focus-visible{outline:2px solid var(--next-accent);outline-offset:3px}.ds-input{min-height:42px;max-width:100%;border:1px solid var(--next-line);border-radius:6px;padding:9px 12px;background:var(--next-field);color:var(--next-fg);font:inherit;line-height:1.5;caret-color:var(--next-accent)}.ds-input::placeholder{color:var(--next-muted);opacity:1}@media(max-width:720px){.ds-input{font-size:16px}}"
+    },
+    {
+      "name": "Current navigation",
+      "kind": "nav",
+      "refersTo": "navigation-current",
+      "description": "Current navigation from the implemented workspace.",
+      "html": "<div class=\"ds-surface\"><nav><button class=\"ds-nav\" aria-current=\"page\">Главная</button></nav></div>",
+      "css": ".ds-surface{--next-bg:#f6f7f8;--next-fg:#17252d;--next-muted:#455863;--next-line:#ced7dc;--next-accent:#14635e;--next-field:#fff;--fkp-hover:#e6eeed;--fkp-selected:#dceee9;color:var(--next-fg);background:var(--next-bg);font:inherit;line-height:1.5}.ds-surface[data-theme=dark]{--next-bg:#16232b;--next-fg:#eef4f6;--next-muted:#b8c8d0;--next-line:#455963;--next-accent:#8bd6c8;--next-field:#21333e;--fkp-hover:#29423f;--fkp-selected:#29473f}.ds-surface :focus-visible{outline:2px solid var(--next-accent);outline-offset:3px}.ds-nav{border:0;background:var(--fkp-selected);color:var(--next-accent);font:inherit;font-weight:650;min-height:44px;padding:10px 12px;text-align:left;border-radius:6px;cursor:pointer;white-space:nowrap}"
+    },
+    {
+      "name": "Selected server choice",
+      "kind": "card",
+      "refersTo": "server-choice",
+      "description": "Selected server choice from the implemented workspace.",
+      "html": "<div class=\"ds-surface\"><section class=\"ds-choice\"><strong>Исходящий сервер</strong><p>Выбран</p></section></div>",
+      "css": ".ds-surface{--next-bg:#f6f7f8;--next-fg:#17252d;--next-muted:#455863;--next-line:#ced7dc;--next-accent:#14635e;--next-field:#fff;--fkp-hover:#e6eeed;--fkp-selected:#dceee9;color:var(--next-fg);background:var(--next-bg);font:inherit;line-height:1.5}.ds-surface[data-theme=dark]{--next-bg:#16232b;--next-fg:#eef4f6;--next-muted:#b8c8d0;--next-line:#455963;--next-accent:#8bd6c8;--next-field:#21333e;--fkp-hover:#29423f;--fkp-selected:#29473f}.ds-surface :focus-visible{outline:2px solid var(--next-accent);outline-offset:3px}.ds-choice{border:1px solid var(--next-accent);border-radius:8px;padding:16px;background:var(--fkp-selected)}"
+    },
+    {
+      "name": "Validation count",
+      "kind": "chip",
+      "description": "Validation count from the implemented workspace.",
+      "html": "<div class=\"ds-surface\"><span class=\"ds-count\">2</span></div>",
+      "css": ".ds-surface{--next-bg:#f6f7f8;--next-fg:#17252d;--next-muted:#455863;--next-line:#ced7dc;--next-accent:#14635e;--next-field:#fff;--fkp-hover:#e6eeed;--fkp-selected:#dceee9;color:var(--next-fg);background:var(--next-bg);font:inherit;line-height:1.5}.ds-surface[data-theme=dark]{--next-bg:#16232b;--next-fg:#eef4f6;--next-muted:#b8c8d0;--next-line:#455963;--next-accent:#8bd6c8;--next-field:#21333e;--fkp-hover:#29423f;--fkp-selected:#29473f}.ds-surface :focus-visible{outline:2px solid var(--next-accent);outline-offset:3px}.ds-count{display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;padding:0 4px;border:1px solid currentColor;border-radius:4px;font-size:12px;font-variant-numeric:tabular-nums;line-height:1;color:#a02b32}.ds-surface[data-theme=dark] .ds-count{color:#ffb4b8}"
+    }
+  ],
+  "narrative": {
+    "overview": "Forkop is a Russian-first operating interface inside LuCI. Its approved direction combines a connection-first home with a persistent six-section workspace: Главная, Серверы, Правила, Устройства, Диагностика, Настройки. Local secondary navigation keeps related tools within their task.\n\nThe visual system uses slate surfaces, a restrained mint/teal accent, local inherited typography, open divisions and explicit native controls. The same hierarchy serves desktop and phone; status text distinguishes evidence from assumptions. No ornamental imagery is part of this system.",
+    "keyCharacteristics": [
+      "Connection state, selected outgoing server and deliberate checking remain distinct.",
+      "Open sections and thin separators organize dense operational content.",
+      "Native LuCI forms retain their behavior and draft state.",
+      "Light and dark themes share hierarchy, readable states and labeled controls."
+    ],
+    "rules": [
+      {
+        "name": "The Evidence Rule",
+        "body": "A running service, selected outbound, previous latency and an explicit network probe are separate evidence. Color never substitutes for their labels.",
+        "section": "colors"
+      },
+      {
+        "name": "The Scoped Host Rule",
+        "body": "Scope new CSS to `.fkp-workspace`, `.fkp-next` or positively identified `.fkp-workspace-modal`. Strong host-theme overrides are bounded by `#cbi-forkop.fkp-workspace[data-theme]` and `#modal_overlay .fkp-workspace-modal[data-theme]`; never style generic LuCI headers or other applications.",
+        "section": "components"
+      }
+    ],
+    "dos": [
+      "Do preserve native fields, activation authorities and validation-location feedback.",
+      "Do use the active theme consistently inside the workspace and identified dialogs.",
+      "Do keep status meaning explicit and unknown measurements distinct from zero.",
+      "Do retain the mobile navigation, stacked form labels and targeted table adaptation.",
+      "Do respect reduced motion and visible keyboard focus."
+    ],
+    "donts": [
+      "Don't infer connection success from a running process, selected server or version check.",
+      "Don't invent live metrics or expose deployment credentials and private endpoint metadata.",
+      "Don't let Forkop styling escape into surrounding LuCI applications.",
+      "Don't introduce remote fonts, ornamental imagery or a new token palette.",
+      "Don't treat static screenshot review as proof of router installation or performance."
+    ]
+  }
+}
