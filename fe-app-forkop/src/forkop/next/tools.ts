@@ -289,34 +289,40 @@ export function renderDeviceProfileTools(
       });
   }
   let routesGeneration = 0;
-  const loadRoutes = (read = request) => {
+  const loadRoutes = (read = request, announce = false) => {
     const generation = ++routesGeneration;
-    return call('status', {}, read).then((raw) => {
-      if (generation !== routesGeneration) return;
-      const data = raw as { sections: Array<{ name: string; label?: string }> };
-      const items = data.sections.map((section) => ({
-        value: section.name,
-        label: section.label || section.name,
-      }));
-      for (const item of items) routeLabels.set(item.value, item.label);
-      showDevices();
-      options(route, [
-        { value: 'direct', label: 'Напрямую' },
-        ...items.filter((item) => item.value !== 'direct'),
-      ]);
-      options(gamingRoute, items);
-    });
+    return call('status', {}, read)
+      .then((raw) => {
+        if (generation !== routesGeneration) return;
+        const data = raw as {
+          sections: Array<{ name: string; label?: string }>;
+        };
+        const items = data.sections.map((section) => ({
+          value: section.name,
+          label: section.label || section.name,
+        }));
+        for (const item of items) routeLabels.set(item.value, item.label);
+        showDevices();
+        options(route, [
+          { value: 'direct', label: 'Напрямую' },
+          ...items.filter((item) => item.value !== 'direct'),
+        ]);
+        options(gamingRoute, items);
+        if (announce) gamingResult.textContent = 'Маршруты обновлены.';
+      })
+      .catch(() => {
+        if (generation === routesGeneration) routeError();
+      });
   };
   const routeError = () =>
     (gamingResult.textContent =
       'Не удалось загрузить маршруты. Нажмите «Обновить маршруты».');
   if (area !== 'profiles') {
-    void loadRoutes(initialRequest).catch(routeError);
+    void loadRoutes(initialRequest);
     // Keep entered addresses when route loading fails; retry only the read.
     group = route.closest('section')!;
     button('Обновить маршруты', gamingResult, async () => {
-      await loadRoutes();
-      gamingResult.textContent = 'Маршруты обновлены.';
+      await loadRoutes(request, true);
     });
   }
   root.addEventListener('forkop:refresh-tools', (event) => {
@@ -328,7 +334,7 @@ export function renderDeviceProfileTools(
           (deviceResult.textContent =
             'Не удалось загрузить устройства. Нажмите «Обновить устройства».'),
       );
-      void loadRoutes(read).catch(routeError);
+      void loadRoutes(read, true);
     }
     if (area !== 'devices')
       void loadProfiles(read).catch(

@@ -72,3 +72,32 @@ the package script's exact stages were executed directly: TypeScript, tsup and
 unchanged. Generated native `main.js` is refreshed and intentionally left
 uncommitted for controller consolidation. No router/browser/Atlas operations or
 deployment were performed; final visual inspection belongs to the controller.
+
+## Accepted review fix — stale device-route failures
+
+The Task 3 reviewer reproduced P2: the generation guard protected successful
+route reads, but unconditional caller catches let an older failed read overwrite
+a successful retry. The button also displayed success outside the guard, allowing
+an older successful read to overwrite a newer refresh failure.
+
+Added `tools.refresh.test.ts` before the fix. All **4/4 tests failed** for the
+expected displayed-state races: an initial unsuccessful response/rejected promise
+after a successful button retry, an older button success after a newer event
+failure, and an older event failure after a newer event success. Assertions cover
+the retained input value, newest route options, and result text. Moving success
+and error display inside `loadRoutes` generation ownership made all cases pass.
+Explicit button/event refreshes announce their guarded result; initial loading
+retains its existing quiet-success behavior.
+
+Final verification commands on 2026-10-24:
+
+- `vitest run src/forkop/next/tests/tools.refresh.test.ts
+  src/forkop/next/tests/focusedTools.test.ts src/forkop/next/tests/tools.test.ts`:
+  **20/20 passed in 3 files** before the final event-status assertion. Final full
+  suite includes that assertion and passed **711/711 tests in 70 files**.
+- `tsc --noEmit`, whole-src ESLint zero warnings and whole-src Prettier: passed.
+- Production tsup and native bundle smoke check: passed; **565.27 KB / 58 ms**.
+- `git diff --check`: passed. Generated `main.js` refreshed, left uncommitted.
+
+Only tools.ts, its new regression file and this evidence changed for the fix.
+No stylesheet, translation, API, native lifecycle or creation changes were made.
