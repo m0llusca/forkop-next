@@ -1,0 +1,33 @@
+name: OpenWrt maintenance integration
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - test/maintenance-upgrade-integration
+
+permissions:
+  contents: read
+
+jobs:
+  real-openwrt:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v5.0.0
+      - name: Install disposable VM tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-system-x86 e2fsprogs openssh-client
+      - name: Verify and prepare published artifacts
+        run: python3 tests/integration/prepare.py
+      - name: Exercise actual OpenWrt APK upgrade with 512 MiB RAM
+        run: timeout --signal=TERM --kill-after=30s 18m bash tests/integration/run-vm.sh
+      - name: Preserve bounded guest evidence
+        if: always()
+        uses: actions/upload-artifact@v4.6.2
+        with:
+          name: openwrt-maintenance-evidence
+          path: integration-work/evidence/
+          if-no-files-found: warn
+          retention-days: 7

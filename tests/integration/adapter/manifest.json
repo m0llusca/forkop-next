@@ -1,0 +1,32 @@
+[
+  {
+    "path": "usr/bin/forkop",
+    "before_sha256": "67480a599b9669766059499757e34ab30666d591d4c6da6c0c99dace1be13393",
+    "after_sha256": "707aa57d16dd55fcab34b9a335f6129b83fff3cc97262171b2fdde2ccf80ee0f",
+    "mode": "0755"
+  },
+  {
+    "path": "etc/init.d/forkop",
+    "before_sha256": "2ac94e26f695c7d089b96b5116559d1cc42defdfb568c69e2cd989b024dd5781",
+    "after_sha256": "e4e9b2ba8548d4969e93dcbbadce1dfe803ede95ac28dab3a67dbfc80288692b",
+    "mode": "0755"
+  },
+  {
+    "path": "usr/lib/forkop/service/lifecycle.uc",
+    "before_sha256": "de392422b395e7a7fa681edb9d0e187956a56b8fe9627e028fbad1c052da3334",
+    "after_sha256": "0285cbf04d81ded2dba17036e0d960540d4b00675f3da3a68463c9b124d63034",
+    "mode": "0644"
+  },
+  {
+    "path": "usr/lib/forkop/service/initd.uc",
+    "before_sha256": "f75993d4ccefd189c664d5c2c62eb665afea3b9b2807c55f32bcf835625fbb3a",
+    "after_sha256": "98b5ef2cdfa15bb7eb014c4335483fa6701bb1d77e4bc2d31e2dc4af0ea28209",
+    "mode": "0644"
+  },
+  {
+    "path": "usr/lib/forkop/service/package.uc",
+    "before_sha256": "f1f1b5c0dec38fee1a0a5bfdc1593c7bae62f276804ec655c4e34d7d485adf9f",
+    "after_sha256": "b2a74c8c75230d54a5711ed16a5e30a7fe45e53c53768f0c907939f9e5f0ccb5",
+    "mode": "0644"
+  }
+]
