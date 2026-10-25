@@ -10,6 +10,19 @@ replacement with durable recovery. Existing `/etc/config/forkop` remains authori
 Manual server choices persist; automatic health decisions do not cause flash churn.
 Smart Detect only proposes rules until the user explicitly accepts a recommendation.
 
+## Reload failure handling
+
+The CLI and lifecycle use a private per-invocation completion acknowledgement
+for `reload`. The caller provides `FORKOP_RELOAD_RESULT_FILE` inside a temporary
+directory owned by the current user with mode 0700. After a normal dispatcher
+return and lock cleanup, lifecycle exclusively creates the mode-0600 result file
+containing the numeric status. A matching result delegates DNS recovery to the
+lifecycle, preserving the active forwarder on validation/preflight rejection.
+Missing or mismatched acknowledgement retains CLI recovery for abnormal failure;
+errors after runtime cleanup also retain the caller's final recovery attempt.
+The caller removes the temporary result. This is internal IPC, not a UCI option
+or a persistent checkpoint. The command's original exit status is preserved.
+
 ## HTTPS domain routing setting
 
 `forkop.settings.https_domain_routing` is a scalar UCI flag, `0` or `1`, with

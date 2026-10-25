@@ -43,7 +43,7 @@ jobs:
         shell: bash
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential cmake git libjson-c-dev pkg-config openssl
+          sudo apt-get install -y build-essential cmake git libjson-c-dev libmd-dev pkg-config openssl
           git clone https://github.com/openwrt/libubox.git /tmp/libubox
           git -C /tmp/libubox checkout da2d205a5cf3e877c45a2eec488218cbaf452e7d
           cmake -S /tmp/libubox -B /tmp/libubox/build -DBUILD_LUA=OFF
@@ -59,12 +59,14 @@ jobs:
           cmake -S /tmp/ucode -B /tmp/ucode/build \
             -DUBUS_SUPPORT=OFF \
             -DUCI_SUPPORT=ON \
+            -DDIGEST_SUPPORT=ON \
             -DULOOP_SUPPORT=OFF
           cmake --build /tmp/ucode/build --parallel
           sudo cmake --install /tmp/ucode/build
           sudo ldconfig
           command -v ucode
           ucode -e 'print("ucode ready\n")'
+          ucode -e 'let sha=require("digest").sha256; assert(type(sha)=="function"); assert(sha("abc")=="ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"); print("native SHA256 ready\n");'
 
       - name: Component impact behavioral contract
         run: python3 -m unittest discover -s tests/backend -p test_component_impact.py -v
