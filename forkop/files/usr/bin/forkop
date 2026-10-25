@@ -220,7 +220,16 @@ function run_spec(command, spec, user_args) {
     for (let i = 0; i < count; i++)
         push(args, user_args[i] || "");
 
-    let result_dir = command == "reload" ? fs.mkdtemp("/tmp/.forkop-reload-XXXXXX") : null;
+    let result_dir = null;
+    if (command == "reload") {
+        // Older supported ucode fs modules do not provide mkdtemp().
+        let temporary = fs.popen("mktemp -d /tmp/.forkop-reload-XXXXXX", "r");
+        if (temporary) {
+            let directory = trim(temporary.read("all") || "");
+            if (temporary.close() == 0 && directory != "")
+                result_dir = directory;
+        }
+    }
     if (command == "reload" && result_dir == null) {
         warn("Error: unable to prepare reload result acknowledgement\n");
         return 1;

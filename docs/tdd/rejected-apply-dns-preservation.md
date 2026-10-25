@@ -49,6 +49,10 @@ so DNS recovery remains active. The directory and result file are removed by
 the caller. Failure to prepare the private directory rejects the operation
 before invoking the child. No persistent settings or user-facing options are
 introduced. The result file contains only the numeric command status.
+The caller uses the existing `mktemp` utility, also used by lifecycle and the
+test harness. An earlier candidate's `fs.mkdtemp()` passed on a newer native
+runtime but failed on the older pinned CI runtime; the portable path preserves
+support for older fs modules without another package dependency.
 
 Both native commands above passed for the final implementation. The focused
 fixture also confirmed the failed-first-restart recovery retry and rejection of

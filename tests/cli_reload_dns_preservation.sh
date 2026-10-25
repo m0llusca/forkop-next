@@ -54,7 +54,16 @@ SH
 chmod 0755 "$WORK/bin/logger" "$DNSMASQ_INIT"
 export PATH="$WORK/bin:$PATH"
 failed=0
-fail() { printf 'FAIL: %s\n' "$1" >&2; failed=1; }
+diagnosed=0
+fail() {
+  printf 'FAIL: %s\n' "$1" >&2
+  if [ "$diagnosed" = 0 ]; then
+    [ ! -f "$WORK/stderr" ] || head -n 12 "$WORK/stderr" >&2
+    [ ! -f "$WORK/stdout" ] || head -n 8 "$WORK/stdout" >&2
+    diagnosed=1
+  fi
+  failed=1
+}
 
 reset_fixture() {
   cp "$WORK/lifecycle-driver.uc" "$FORKOP_LIB/service/lifecycle.uc"
@@ -96,6 +105,7 @@ UCI
 }
 
 run_cli() {
+  diagnosed=0
   status=0
   ucode "$CLI" "$1" on_config_change > "$WORK/stdout" 2> "$WORK/stderr" || status=$?
 }
