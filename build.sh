@@ -7,7 +7,8 @@ usage() {
   cat <<EOF
 Usage: $(basename "$0") <version> [output-directory]
 
-Build Forkop IPK and APK packages. The version must use x.y.z format.
+Build Forkop IPK and APK packages. The version must use x.y.z or x.y.z-rN format
+(N positive, no leading zeros).
 EOF
 }
 
@@ -24,8 +25,8 @@ fi
 RELEASE_VERSION="$1"
 OUTPUT_DIR="${2:-$ROOT_DIR/dist/release-final}"
 
-if [[ ! "$RELEASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-  echo "Expected release version in the form x.y.z" >&2
+if [[ ! "$RELEASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-r[1-9][0-9]*)?$ ]]; then
+  echo "Expected release version in the form x.y.z or x.y.z-rN (N positive, no leading zeros)" >&2
   exit 2
 fi
 APK_INTERNAL_VERSION="$RELEASE_VERSION"
@@ -46,8 +47,8 @@ APP_DESCRIPTION="Rule-based Forkop LuCI app with hybrid sing-box + zapret orches
 I18N_DESCRIPTION="Translation for luci-app-forkop - Русский (Russian)"
 MAINTAINER="Forkop Next contributors"
 PROJECT_URL="https://github.com/m0llusca/forkop-next"
-BACKEND_DEPENDS_IPK="libc, ca-bundle, kmod-inet-diag, kmod-netlink-diag, kmod-tun, curl, ucode, ucode-mod-fs, ucode-mod-uci, kmod-nft-tproxy, coreutils-base64, bind-dig, nftables, kmod-nft-nat, ip-full"
-BACKEND_DEPENDS_APK="bind-dig ca-bundle coreutils-base64 curl ip-full kmod-inet-diag kmod-netlink-diag kmod-nft-nat kmod-nft-tproxy kmod-tun libc nftables ucode ucode-mod-fs ucode-mod-uci !https-dns-proxy !nextdns !luci-app-passwall !luci-app-passwall2"
+BACKEND_DEPENDS_IPK="libc, ca-bundle, kmod-inet-diag, kmod-netlink-diag, kmod-tun, curl, ucode, ucode-mod-fs, ucode-mod-uci, kmod-nft-tproxy, coreutils-base64, bind-dig, nftables, kmod-nft-nat, kmod-nft-fib, ip-full"
+BACKEND_DEPENDS_APK="bind-dig ca-bundle coreutils-base64 curl ip-full kmod-inet-diag kmod-netlink-diag kmod-nft-fib kmod-nft-nat kmod-nft-tproxy kmod-tun libc nftables ucode ucode-mod-fs ucode-mod-uci !https-dns-proxy !nextdns !luci-app-passwall !luci-app-passwall2"
 BACKEND_CONFLICTS_IPK="https-dns-proxy, nextdns, luci-app-passwall, luci-app-passwall2"
 APP_DEPENDS_IPK="libc, luci-base, forkop"
 APP_DEPENDS_APK="libc luci-base forkop"
@@ -290,15 +291,22 @@ EOF
   cat > "$control_dir/postinst" <<'EOF'
 #!/bin/sh
 [ -n "${IPKG_INSTROOT}" ] && exit 0
-FORKOP_LIB=/usr/lib/forkop ucode -L /usr/lib/forkop /usr/lib/forkop/config/migration.uc migrate || exit $?
-/usr/bin/forkop package_postinst
+fail_postinst() {
+  status="$1"
+  /usr/bin/forkop restore_dnsmasq >/dev/null 2>&1 || ucode -L /usr/lib/forkop /usr/lib/forkop/dns/apply.uc failsafe-restore >/dev/null 2>&1
+  exit "$status"
+}
+FORKOP_LIB=/usr/lib/forkop ucode -L /usr/lib/forkop /usr/lib/forkop/config/migration.uc migrate || fail_postinst "$?"
+/usr/bin/forkop package_postinst || fail_postinst "$?"
 EOF
 
   cat > "$control_dir/prerm" <<'EOF'
 #!/usr/bin/ucode
 
-if (getenv("IPKG_INSTROOT") == null || getenv("IPKG_INSTROOT") == "")
-	system("/usr/bin/forkop package_prerm " + (ARGV[0] || "") + " >/dev/null 2>&1");
+if (getenv("IPKG_INSTROOT") == null || getenv("IPKG_INSTROOT") == "") {
+	let status = system("/usr/bin/forkop package_prerm " + (ARGV[0] || "") + " >/dev/null 2>&1");
+	exit(status > 255 ? int(status / 256) : status);
+}
 
 exit(0);
 EOF
@@ -426,8 +434,14 @@ EOF
 
   cat > "$scripts_dir/backend-post-install.sh" <<'EOF'
 #!/usr/bin/ucode
-if (getenv("IPKG_INSTROOT") == null || getenv("IPKG_INSTROOT") == "")
-    exit(system("FORKOP_LIB=/usr/lib/forkop ucode -L /usr/lib/forkop /usr/lib/forkop/config/migration.uc migrate && /usr/bin/forkop package_postinst"));
+if (getenv("IPKG_INSTROOT") == null || getenv("IPKG_INSTROOT") == "") {
+    let status = system("FORKOP_LIB=/usr/lib/forkop ucode -L /usr/lib/forkop /usr/lib/forkop/config/migration.uc migrate");
+    if (status == 0)
+        status = system("/usr/bin/forkop package_postinst");
+    if (status != 0)
+        system("/usr/bin/forkop restore_dnsmasq >/dev/null 2>&1 || ucode -L /usr/lib/forkop /usr/lib/forkop/dns/apply.uc failsafe-restore >/dev/null 2>&1");
+    exit(status > 255 ? int(status / 256) : status);
+}
 exit(0);
 EOF
 
@@ -449,8 +463,14 @@ EOF
 
   cat > "$scripts_dir/backend-post-upgrade.sh" <<'EOF'
 #!/usr/bin/ucode
-if (getenv("IPKG_INSTROOT") == null || getenv("IPKG_INSTROOT") == "")
-    exit(system("FORKOP_LIB=/usr/lib/forkop ucode -L /usr/lib/forkop /usr/lib/forkop/config/migration.uc migrate && /usr/bin/forkop package_postinst"));
+if (getenv("IPKG_INSTROOT") == null || getenv("IPKG_INSTROOT") == "") {
+    let status = system("FORKOP_LIB=/usr/lib/forkop ucode -L /usr/lib/forkop /usr/lib/forkop/config/migration.uc migrate");
+    if (status == 0)
+        status = system("/usr/bin/forkop package_postinst");
+    if (status != 0)
+        system("/usr/bin/forkop restore_dnsmasq >/dev/null 2>&1 || ucode -L /usr/lib/forkop /usr/lib/forkop/dns/apply.uc failsafe-restore >/dev/null 2>&1");
+    exit(status > 255 ? int(status / 256) : status);
+}
 exit(0);
 EOF
 

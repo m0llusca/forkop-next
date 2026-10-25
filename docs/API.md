@@ -26,6 +26,23 @@ this is not a guarantee for every HTTP/3 or ECH connection. Disable the flag to
 return to the ordinary traffic selection. Enabling it requires an explicit
 user choice; installation and upgrades must preserve the opt-in default.
 
+## Maintenance restart and package handoff
+
+`forkop stop maintenance` and `forkop start maintenance` preserve the configured
+DNS forwarding during a technical stop and avoid the ordinary unclean-start DNS
+reset. Normal Stop retains its existing DNS restoration behavior. Failed or
+unstable maintenance starts restore DNS through the existing failure path.
+`forkop maintenance_snapshot` captures identity-checked selector state; it does
+not change routing. The init script exposes `maintenance_stop` and
+`maintenance_start` explicitly so procd instance arguments remain unambiguous.
+
+A running package upgrade writes a bounded, atomic, owner-private selector
+handoff and resumes through maintenance startup. A stopped service remains
+stopped. Only a valid private handoff authorizes this startup mode; legacy plain
+markers retain ordinary recovery. Package hooks propagate failure status and
+restore DNS when startup or migration fails. This short maintenance contract is
+separate from an independent installation backup and rollback watchdog.
+
 ## Native UI mutation and evidence lifecycle
 
 `nextRequest(action, payload = {})` keeps the existing command envelope. Active

@@ -1366,7 +1366,7 @@ dnsmasq_failsafe_restore = function() {
 };
 
 function release_version_valid(value) {
-    return match(as_string(value), /^[0-9]+[.][0-9]+[.][0-9]+$/) != null;
+    return match(as_string(value), /^[0-9]+[.][0-9]+[.][0-9]+(-r[1-9][0-9]*)?$/) != null;
 }
 
 function asset_matches(name, kind, ext, version) {

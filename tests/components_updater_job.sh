@@ -343,7 +343,9 @@ fi
 
 ucode "$UPDATER" forkop-release-version-valid 1.2.3 ||
   fail "three-part Forkop release version should be valid"
-for invalid_version in v1.2.3 1.2 1.2.3.4 1.2.3-1 1.2.3-r1; do
+ucode "$UPDATER" forkop-release-version-valid 1.2.3-r2 ||
+  fail "canonical Forkop release revision should be valid"
+for invalid_version in v1.2.3 1.2 1.2.3.4 1.2.3-1 1.2.3-r0 1.2.3-r01; do
   if ucode "$UPDATER" forkop-release-version-valid "$invalid_version" >/dev/null 2>&1; then
     fail "invalid Forkop release version was accepted: $invalid_version"
   fi

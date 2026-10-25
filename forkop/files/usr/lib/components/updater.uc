@@ -234,13 +234,22 @@ function release_asset_pair(release, expected_name) {
     return null;
 }
 
+function forkop_normalized_release_version(value) {
+    return as_string(value);
+}
+
+function forkop_release_version_valid(value) {
+    value = forkop_normalized_release_version(value);
+    return match(value, /^[0-9]+[.][0-9]+[.][0-9]+(-r[1-9][0-9]*)?$/) != null;
+}
+
 function forkop_release_plan(latest_version, asset_ext, i18n_required) {
     let release = object_or_empty(read_stdin_json());
 
     if (as_string(release.tag_name || "") != as_string(latest_version))
         exit(1);
 
-    if (match(as_string(latest_version), /^[0-9]+[.][0-9]+[.][0-9]+$/) == null)
+    if (!forkop_release_version_valid(latest_version))
         exit(1);
 
     let backend = release_asset_pair(release, "forkop_" + latest_version + "." + asset_ext);
@@ -402,22 +411,15 @@ function updates_normalize_zapret_version(value) {
     print(first_version_token(value), "\n");
 }
 
-function forkop_normalized_release_version(value) {
-    return as_string(value);
-}
-
-function forkop_release_version_valid(value) {
-    value = forkop_normalized_release_version(value);
-    return match(value, /^[0-9]+[.][0-9]+[.][0-9]+$/) != null;
-}
-
 function forkop_release_version_parts(value) {
     let version = forkop_normalized_release_version(value);
     if (!forkop_release_version_valid(version))
         return null;
 
-    let parts = split(version, ".");
-    return [ int(parts[0]), int(parts[1]), int(parts[2]) ];
+    let revision_parts = split(version, "-r");
+    let parts = split(revision_parts[0], ".");
+    return [ int(parts[0]), int(parts[1]), int(parts[2]),
+        length(revision_parts) > 1 ? int(revision_parts[1]) : 0 ];
 }
 
 function forkop_release_version_compare(lhs, rhs) {

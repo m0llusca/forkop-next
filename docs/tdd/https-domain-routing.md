@@ -96,3 +96,12 @@ The router ownership guard requires the generic nft FIB kernel support
 (`kmod-nft-fib` on OpenWrt); packaging must include it. The rule runs after standard
 dstnat; custom DNAT hooks placed later than `-99` are outside this ordering model.
 The relevant reference is [nftables hook priorities](https://wiki.nftables.org/wiki-nftables/index.php/Netfilter_hooks).
+
+## Native control and localization integration
+
+The native settings tests verify the flag's UCI binding, default and network
+panel placement without adding a Main writer. Three focused assertions first
+failed and then passed; the complete frontend suite passed with 918 tests.
+The integrated backend gate then caught an unsynchronized source Russian
+catalog. `tests/luci_localization.sh` reproduced that failure locally; copying
+the new native strings into the matching source PO/POT restored the gate.

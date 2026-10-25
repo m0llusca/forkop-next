@@ -5,10 +5,10 @@ PKG_NAME:=forkop
 FORKOP_SOURCE_VERSION:=$(or $(FORKOP_PACKAGE_VERSION),$(FORKOP_VERSION))
 FORKOP_HAS_RELEASE_VERSION:=$(if $(filter dev,$(FORKOP_SOURCE_VERSION)),,$(FORKOP_SOURCE_VERSION))
 FORKOP_COMPILED_VERSION:=$(if $(FORKOP_HAS_RELEASE_VERSION),$(FORKOP_SOURCE_VERSION),$(or $(FORKOP_SOURCE_VERSION),dev))
-FORKOP_RELEASE_VERSION_VALID:=$(if $(FORKOP_HAS_RELEASE_VERSION),$(shell printf '%s\n' '$(FORKOP_SOURCE_VERSION)' | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$$' && printf '1'),1)
+FORKOP_RELEASE_VERSION_VALID:=$(if $(FORKOP_HAS_RELEASE_VERSION),$(shell printf '%s\n' '$(subst ','"'"',$(FORKOP_SOURCE_VERSION))' | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-r[1-9][0-9]*)?$$' && printf '1'),1)
 
 ifeq ($(FORKOP_RELEASE_VERSION_VALID),)
-$(error FORKOP_PACKAGE_VERSION and FORKOP_VERSION must use x.y.z format)
+$(error FORKOP_PACKAGE_VERSION and FORKOP_VERSION must use x.y.z or x.y.z-rN format (N positive, no leading zeros))
 endif
 
 PKG_VERSION:=$(or $(FORKOP_HAS_RELEASE_VERSION),0.0.0)
@@ -22,7 +22,7 @@ include $(INCLUDE_DIR)/package.mk
 define Package/forkop
 	SECTION:=net
 	CATEGORY:=Network
-	DEPENDS:=+ca-bundle +kmod-inet-diag +kmod-netlink-diag +kmod-tun +curl +ucode +ucode-mod-fs +ucode-mod-uci +kmod-nft-tproxy +coreutils-base64 +bind-dig +nftables +kmod-nft-nat +ip-full
+	DEPENDS:=+ca-bundle +kmod-inet-diag +kmod-netlink-diag +kmod-tun +curl +ucode +ucode-mod-fs +ucode-mod-uci +kmod-nft-tproxy +coreutils-base64 +bind-dig +nftables +kmod-nft-nat +kmod-nft-fib +ip-full
 	CONFLICTS:=https-dns-proxy nextdns luci-app-passwall luci-app-passwall2
 	TITLE:=Forkop backend service
 	URL:=https://github.com/m0llusca/forkop-next
@@ -42,8 +42,10 @@ endef
 define Package/forkop/prerm
 #!/usr/bin/ucode
 
-if (getenv("IPKG_INSTROOT") == null || getenv("IPKG_INSTROOT") == "")
-	system("/usr/bin/forkop package_prerm " + (ARGV[0] || "") + " >/dev/null 2>&1");
+if (getenv("IPKG_INSTROOT") == null || getenv("IPKG_INSTROOT") == "") {
+	let status = system("/usr/bin/forkop package_prerm " + (ARGV[0] || "") + " >/dev/null 2>&1");
+	exit(status > 255 ? int(status / 256) : status);
+}
 
 exit(0);
 endef
@@ -52,8 +54,13 @@ define Package/forkop/postinst
 #!/bin/sh
 
 [ -n "$${IPKG_INSTROOT}" ] && exit 0
-FORKOP_LIB=/usr/lib/forkop ucode -L /usr/lib/forkop /usr/lib/forkop/config/migration.uc migrate || exit $$?
-/usr/bin/forkop package_postinst
+fail_postinst() {
+	status="$$1"
+	/usr/bin/forkop restore_dnsmasq >/dev/null 2>&1 || ucode -L /usr/lib/forkop /usr/lib/forkop/dns/apply.uc failsafe-restore >/dev/null 2>&1
+	exit "$$status"
+}
+FORKOP_LIB=/usr/lib/forkop ucode -L /usr/lib/forkop /usr/lib/forkop/config/migration.uc migrate || fail_postinst "$$?"
+/usr/bin/forkop package_postinst || fail_postinst "$$?"
 endef
 
 define Package/forkop/conffiles

@@ -109,40 +109,111 @@ function remove_managed_sing_box() {
     unlink_if_exists(SING_BOX_CRONET);
 }
 
+function write_upgrade_state(value) {
+    let data = sprintf("%J\n", value);
+    if (length(data) >= 65536)
+        return false;
+    let stamp = clock();
+    let temporary = PACKAGE_UPGRADE_STATE + "." + stamp[0] + "." + stamp[1];
+    let file = fs.open(temporary, "wex", 384); // 0600; ucode modes are numeric.
+    if (!file)
+        return false;
+    let good = fs.chmod(temporary, 384);
+    let info = fs.lstat(temporary);
+    good = good && info && (info.mode & 511) == 384;
+    good = good && file.write(data) == length(data);
+    file.flush();
+    file.close();
+    good = good && fs.rename(temporary, PACKAGE_UPGRADE_STATE);
+    if (!good)
+        fs.unlink(temporary);
+    return !!good;
+}
+
+function capture_upgrade_selectors() {
+    let pipe = fs.popen(command_from_args([ BIN_PATH, "maintenance_snapshot" ]) + " 2>/dev/null", "r");
+    if (!pipe)
+        return null;
+    let data = pipe.read("all");
+    let status = normalize_status(pipe.close());
+    if (status != 0)
+        return null;
+    try {
+        let snapshot = json(data);
+        return type(snapshot) == "object" && type(snapshot.selections) == "object" ? snapshot : null;
+    }
+    catch (e) {
+        return null;
+    }
+}
+
 function remember_upgrade_state(action) {
-    if (as_string(action) != "upgrade") {
+    if (as_string(action) != "upgrade" || !command_success_from_args([ INIT_PATH, "status" ])) {
         unlink_if_exists(PACKAGE_UPGRADE_STATE);
-        return;
+        return { ok: true, running: false };
     }
 
-    if (command_success_from_args([ INIT_PATH, "status" ]))
-        fs.writefile(PACKAGE_UPGRADE_STATE, "1\n");
-    else
-        unlink_if_exists(PACKAGE_UPGRADE_STATE);
+    let snapshot = capture_upgrade_selectors();
+    if (snapshot == null)
+        return { ok: false, running: true };
+    return {
+        ok: write_upgrade_state({ version: 1, selector_state: snapshot }),
+        running: true
+    };
 }
 
 function prerm_cleanup(action) {
     if (env("IPKG_INSTROOT", "") != "")
         return true;
 
-    remember_upgrade_state(action);
+    let state = remember_upgrade_state(action);
+    if (!state.ok)
+        return false;
     if (!PACKAGE_TEST_MODE) {
-        command_success_from_args([ INIT_PATH, "stop" ]);
-        restore_dnsmasq_if_needed();
+        if (state.running) {
+            if (!command_success_from_args([ INIT_PATH, "maintenance_stop" ])) {
+                restore_dnsmasq_if_needed();
+                unlink_if_exists(PACKAGE_UPGRADE_STATE);
+                return false;
+            }
+        }
+        else {
+            command_success_from_args([ INIT_PATH, "stop" ]);
+            restore_dnsmasq_if_needed();
+        }
         // The core is installed independently of the Forkop package payload.
         // Keep it available for postinst to resume the service after an upgrade.
         if (as_string(action) != "upgrade")
             remove_managed_sing_box();
     }
-    return remove_rt_tables_entry();
+    let success = remove_rt_tables_entry();
+    if (!success && state.running && !PACKAGE_TEST_MODE) {
+        restore_dnsmasq_if_needed();
+        unlink_if_exists(PACKAGE_UPGRADE_STATE);
+    }
+    return success;
 }
 
 function postinst_restore() {
     if (env("IPKG_INSTROOT", "") != "" || !path_exists(PACKAGE_UPGRADE_STATE))
         return true;
 
-    if (!command_success_from_args([ INIT_PATH, "start" ]))
+    let state = null;
+    let info = fs.lstat(PACKAGE_UPGRADE_STATE);
+    let owner = fs.stat("/proc/self");
+    if (info && owner && info.uid == owner.uid && info.type == "file" && info.size < 65536) {
+        try { state = json(fs.readfile(PACKAGE_UPGRADE_STATE)); }
+        catch (e) { state = null; }
+    }
+    // Legacy plain markers select ordinary recovery. Only a private handoff
+    // owned by this executor (root for the installed service) permits maintenance.
+    let maintenance = info && (info.mode & 511) == 384 && type(state) == "object" &&
+        state.version == 1 && type(state.selector_state) == "object";
+    if ((!maintenance && state !== 1) ||
+        !command_success_from_args([ INIT_PATH, maintenance ? "maintenance_start" : "start" ])) {
+        restore_dnsmasq_if_needed();
         return false;
+    }
 
     unlink_if_exists(PACKAGE_UPGRADE_STATE);
     return true;
