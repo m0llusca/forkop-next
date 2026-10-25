@@ -1,0 +1,5 @@
+707aa57d16dd55fcab34b9a335f6129b83fff3cc97262171b2fdde2ccf80ee0f  usr/bin/forkop
+e4e9b2ba8548d4969e93dcbbadce1dfe803ede95ac28dab3a67dbfc80288692b  etc/init.d/forkop
+0285cbf04d81ded2dba17036e0d960540d4b00675f3da3a68463c9b124d63034  usr/lib/forkop/service/lifecycle.uc
+98b5ef2cdfa15bb7eb014c4335483fa6701bb1d77e4bc2d31e2dc4af0ea28209  usr/lib/forkop/service/initd.uc
+b2a74c8c75230d54a5711ed16a5e30a7fe45e53c53768f0c907939f9e5f0ccb5  usr/lib/forkop/service/package.uc
