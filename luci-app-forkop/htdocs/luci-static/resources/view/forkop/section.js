@@ -7136,13 +7136,15 @@ function addTextConditionField(section, config) {
       const textarea = node.querySelector("textarea");
       if (textarea) {
         const rows = uci.sections(UCI_PACKAGE, "section");
-        node.prepend(
+        // LuCI ui.Textarea reads its first child; keep its bound root intact.
+        return E("div", { class: "fkp-domain-editor" }, [
           main.renderQuickSite(
             textarea,
             uci.get(UCI_PACKAGE, section_id, "label") || section_id,
             rows.findIndex((row) => row[".name"] === section_id) + 1,
           ),
-        );
+          node,
+        ]);
       }
       return node;
     };
