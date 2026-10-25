@@ -69,8 +69,8 @@ setup)
     # OpenWrt authenticates these packages through its signed repository index;
     # a standalone local APK does not carry that repository trust context.
     apk add 'sing-box=1.13.21-r1'
-    apk info -v sing-box | tee "$EVIDENCE/core-package.txt"
-    grep -qx 'sing-box-1.13.21-r1' "$EVIDENCE/core-package.txt" || fail 'wrong installed core package'
+    apk list --installed sing-box | tee "$EVIDENCE/core-package.txt"
+    apk info --exists 'sing-box=1.13.21-r1' >/dev/null || fail 'wrong installed core package'
     apk add --allow-untrusted "$PAYLOAD/forkop_1.2.0.apk"
     /etc/init.d/forkop disable
     /etc/init.d/sing-box stop || true
@@ -126,8 +126,8 @@ upgrade)
     kill "$sample_pid" 2>/dev/null || true
     wait "$sample_pid" 2>/dev/null || true
     trap - EXIT
-    apk info -v forkop | tee "$EVIDENCE/package-after.txt"
-    grep -qx 'forkop-1.2.1-r2' "$EVIDENCE/package-after.txt" || fail 'wrong installed package version'
+    apk list --installed forkop | tee "$EVIDENCE/package-after.txt"
+    apk info --exists 'forkop=1.2.1-r2' >/dev/null || fail 'wrong installed package version'
     [ ! -e /tmp/forkop-package-was-running ] || fail 'postinst did not consume handoff'
     running
     warm_preserved
