@@ -16,7 +16,16 @@ cleanup() {
     timeout 20s "${SSH[@]}" 'sh /root/integration/guest.sh diagnostics' > evidence/final-diagnostics.log 2>&1 || true
     timeout 15s "${SSH[@]}" 'tar -C /tmp -czf - integration-evidence' > evidence/guest-evidence.tar.gz 2>/dev/null || true
     kill "$VM_PID" 2>/dev/null || true
-    wait "$VM_PID" 2>/dev/null || true
+    # Never let a QEMU process that ignores TERM hold cleanup indefinitely.
+    for _ in $(seq 1 20); do
+      kill -0 "$VM_PID" 2>/dev/null || break
+      sleep 0.25
+    done
+    if kill -0 "$VM_PID" 2>/dev/null; then
+      kill -KILL "$VM_PID" 2>/dev/null || true
+    else
+      wait "$VM_PID" 2>/dev/null || true
+    fi
   fi
   if [[ "$MOUNTED" = 1 ]]; then sudo umount "$WORK/mount"; fi
   # Never upload the disk image, generated SSH private key, or whole filesystem.

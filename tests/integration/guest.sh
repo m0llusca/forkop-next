@@ -13,14 +13,22 @@ boot_unchanged() {
 diagnostics() {
     date -u
     cat /proc/sys/kernel/random/boot_id /proc/uptime /proc/meminfo
-    ubus call service list '{"name":"forkop"}' || true
-    ubus call service list '{"name":"sing-box"}' || true
+    printf '\nKernel locks:\n'
+    cat /proc/locks
     for proc in /proc/[0-9]*; do
         [ -r "$proc/status" ] || continue
         awk '/^(Name|Pid|PPid|VmRSS|VmPeak|Threads):/ {printf "%s ", $0} END {print ""}' "$proc/status" 2>/dev/null || true
         tr '\000' ' ' < "$proc/cmdline" 2>/dev/null || true
         echo
+        printf 'wchan: '
+        cat "$proc/wchan" 2>/dev/null || true
+        printf '\nfd1000: '
+        readlink "$proc/fd/1000" 2>/dev/null || true
+        if [ -r "$proc/fdinfo/1000" ]; then cat "$proc/fdinfo/1000" 2>/dev/null || true; fi
+        echo
     done
+    ubus -t 2 call service list '{"name":"forkop"}' || true
+    ubus -t 2 call service list '{"name":"sing-box"}' || true
     logread | tail -160
     dmesg | tail -80
 }
@@ -28,10 +36,20 @@ sampler() {
     # Disk use is bounded to the final 120 snapshots, at 2-second intervals.
     n=0
     while [ "$n" -lt 120 ]; do
-        diagnostics > "$EVIDENCE/process-$n.log" 2>&1
+        diagnostics > "$EVIDENCE/process-$1-$n.log" 2>&1
         n=$((n + 1))
         sleep 2
     done
+}
+start_sampler() {
+    sampler "$1" &
+    sample_pid=$!
+    trap 'kill "$sample_pid" 2>/dev/null || true' EXIT
+}
+stop_sampler() {
+    kill "$sample_pid" 2>/dev/null || true
+    wait "$sample_pid" 2>/dev/null || true
+    trap - EXIT
 }
 running() {
     /etc/init.d/forkop status
@@ -96,22 +114,29 @@ setup)
     uci add_list forkop.integration.outbound_jsons='{"type":"direct","tag":"Integration direct"}'
     uci add_list forkop.integration.domain_suffix='integration.invalid'
     uci commit forkop
+    start_sampler setup
     stage 'setup: start legacy payload with five-file adapter'
     /etc/init.d/forkop start
     running
     warm
-    stage 'setup: real snapshot and deterministic maintenance handoff'
+    stage 'setup: snapshot-start'
     /usr/bin/forkop maintenance_snapshot > "$EVIDENCE/snapshot.json"
+    stage 'setup: snapshot-done'
     before=$(dns_state)
+    stage 'setup: prerm-start'
     /usr/bin/forkop package_prerm upgrade
+    stage 'setup: prerm-done'
     [ -f /tmp/forkop-package-was-running ] || fail 'handoff not created'
     [ "$before" = "$(dns_state)" ] || fail 'DNS restored during maintenance stop'
     if pidof sing-box >/dev/null; then fail 'maintenance stop left core running'; fi
     [ -s /tmp/sing-box/cache.db ] || fail 'warm cache removed during maintenance'
+    stage 'setup: postinst-start'
     /usr/bin/forkop package_postinst
+    stage 'setup: postinst-done'
     running
     warm_preserved
     boot_unchanged
+    stop_sampler
     stage 'PASS setup and explicit real maintenance cycle'
     ;;
 upgrade)
@@ -119,13 +144,9 @@ upgrade)
     running
     warm
     stage 'upgrade: actual apk pre-upgrade, replacement, post-upgrade'
-    sampler &
-    sample_pid=$!
-    trap 'kill "$sample_pid" 2>/dev/null || true' EXIT
+    start_sampler upgrade
     apk add --allow-untrusted --upgrade "$PAYLOAD/forkop_1.2.1-r2.apk"
-    kill "$sample_pid" 2>/dev/null || true
-    wait "$sample_pid" 2>/dev/null || true
-    trap - EXIT
+    stop_sampler
     apk list --installed forkop | tee "$EVIDENCE/package-after.txt"
     apk info --exists 'forkop=1.2.1-r2' >/dev/null || fail 'wrong installed package version'
     [ ! -e /tmp/forkop-package-was-running ] || fail 'postinst did not consume handoff'
