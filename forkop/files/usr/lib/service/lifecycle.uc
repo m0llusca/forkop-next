@@ -119,6 +119,7 @@ let subscription_deferred_sections = "";
 let nft_populate_enabled = NFT_POPULATE_ENABLED_DEFAULT;
 let rule_condition_cache_enabled = 0;
 let startup_config_fingerprint = "";
+let reload_cleanup_attempted = false;
 
 function shell_quote(value) {
     return "'" + replace(as_string(value), /'/g, "'\\''") + "'";
@@ -849,6 +850,7 @@ function stop_main() {
 }
 
 function cleanup_failed_runtime() {
+    reload_cleanup_attempted = true;
     let status = 0;
 
     log_message("Cleaning up Forkop runtime after failed start/reload", "info");
@@ -1469,6 +1471,25 @@ function disable_service() {
     return command_status_from_args([ SERVICE_INIT, "disable" ]);
 }
 
+function acknowledge_reload_result(status) {
+    // Keep the caller's final recovery attempt after any failed runtime cleanup.
+    if (int(status) != 0 && reload_cleanup_attempted)
+        return;
+    let path = getenv("FORKOP_RELOAD_RESULT_FILE");
+    if (path == null || path == "")
+        return;
+    let directory = fs.lstat(fs.dirname(path));
+    let owner = fs.stat("/proc/self");
+    if (!directory || !owner || directory.type != "directory" ||
+        directory.uid != owner.uid || (directory.mode & 511) != 448)
+        return;
+    let file = fs.open(path, "wex", 384);
+    if (file) {
+        file.write(as_string(status));
+        file.close();
+    }
+}
+
 let mode = ARGV[0] || "";
 let status = 1;
 
@@ -1510,4 +1531,6 @@ else {
 }
 
 release_start_subscription_update_lock();
+if (mode == "reload")
+    acknowledge_reload_result(status);
 exit(status);

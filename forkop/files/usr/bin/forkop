@@ -220,8 +220,24 @@ function run_spec(command, spec, user_args) {
     for (let i = 0; i < count; i++)
         push(args, user_args[i] || "");
 
-    let status = normalize_status(system(command_from_args(args)));
-    if (status != 0)
+    let result_dir = command == "reload" ? fs.mkdtemp("/tmp/.forkop-reload-XXXXXX") : null;
+    if (command == "reload" && result_dir == null) {
+        warn("Error: unable to prepare reload result acknowledgement\n");
+        return 1;
+    }
+    let result_file = result_dir != null ? result_dir + "/result" : "";
+    let invocation = command_from_args(args);
+    if (result_dir != null)
+        invocation = "FORKOP_RELOAD_RESULT_FILE=" + shell_quote(result_file) + " " + invocation;
+    let status = normalize_status(system(invocation));
+    // A normally returned reload owns rollback. Missing acknowledgement means
+    // its loader crashed or execution stopped before cleanup could complete.
+    let handled_reload = result_dir != null && fs.readfile(result_file) == as_string(status);
+    if (result_dir != null) {
+        fs.unlink(result_file);
+        fs.rmdir(result_dir);
+    }
+    if (status != 0 && !handled_reload)
         restore_dnsmasq_failsafe_on_command_failure(command);
     return status;
 }
