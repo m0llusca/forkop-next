@@ -301,6 +301,17 @@ function createSettingsContent(section, capabilities) {
 
   o = section.option(
     form.Flag,
+    "https_domain_routing",
+    _("Inspect HTTPS domains"),
+    _(
+      "Check HTTPS domains using existing routing rules even when an app uses a saved IP. Applies to the configured source LAN; does not force all traffic to Main. TLS is not decrypted. May increase CPU load.",
+    ),
+  );
+  o.default = "0";
+  o.rmempty = false;
+
+  o = section.option(
+    form.Flag,
     "enable_output_network_interface",
     _("Enable Output Network Interface"),
     _("You can select Output Network Interface, by default autodetect"),

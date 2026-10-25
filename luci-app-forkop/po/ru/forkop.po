@@ -2231,6 +2231,12 @@ msgstr "VLESS flow"
 msgid "vless://, vmess://, ss://, trojan://, socks4/5://, hy2/hysteria2:// links"
 msgstr "ссылки vless://, vmess://, ss://, trojan://, socks4/5://, hy2/hysteria2://"
 
+msgid "Inspect HTTPS domains"
+msgstr "Проверять домены HTTPS"
+
+msgid "Check HTTPS domains using existing routing rules even when an app uses a saved IP. Applies to the configured source LAN; does not force all traffic to Main. TLS is not decrypted. May increase CPU load."
+msgstr "Проверять домены HTTPS по существующим правилам, даже если приложение использует сохранённый IP. Действует для настроенной исходной локальной сети; не направляет весь трафик в Main. TLS не расшифровывается. Может увеличить нагрузку на процессор."
+
 msgid "WAN"
 msgstr "WAN"
 

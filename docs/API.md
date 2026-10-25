@@ -10,6 +10,39 @@ replacement with durable recovery. Existing `/etc/config/forkop` remains authori
 Manual server choices persist; automatic health decisions do not cause flash churn.
 Smart Detect only proposes rules until the user explicitly accepts a recommendation.
 
+## HTTPS domain routing setting
+
+`forkop.settings.https_domain_routing` is a scalar UCI flag, `0` or `1`, with
+default `0`. The native Settings page exposes it as **Inspect HTTPS domains**
+beside the source network controls. Saving the flag only changes this setting;
+it does not edit Main or add a fully routed device rule.
+
+When enabled, TCP traffic to port 443 from the configured source LAN is sent
+through the existing HTTPS domain inspection and routing rules, even when an
+app uses a saved IP. Existing bypass and priority rules still take precedence.
+The setting does not force all traffic through Main. TLS is not decrypted, and
+inspection may increase CPU load. Domain visibility depends on the connection;
+this is not a guarantee for every HTTP/3 or ECH connection. Disable the flag to
+return to the ordinary traffic selection. Enabling it requires an explicit
+user choice; installation and upgrades must preserve the opt-in default.
+
+## Maintenance restart and package handoff
+
+`forkop stop maintenance` and `forkop start maintenance` preserve the configured
+DNS forwarding during a technical stop and avoid the ordinary unclean-start DNS
+reset. Normal Stop retains its existing DNS restoration behavior. Failed or
+unstable maintenance starts restore DNS through the existing failure path.
+`forkop maintenance_snapshot` captures identity-checked selector state; it does
+not change routing. The init script exposes `maintenance_stop` and
+`maintenance_start` explicitly so procd instance arguments remain unambiguous.
+
+A running package upgrade writes a bounded, atomic, owner-private selector
+handoff and resumes through maintenance startup. A stopped service remains
+stopped. Only a valid private handoff authorizes this startup mode; legacy plain
+markers retain ordinary recovery. Package hooks propagate failure status and
+restore DNS when startup or migration fails. This short maintenance contract is
+separate from an independent installation backup and rollback watchdog.
+
 ## Native UI mutation and evidence lifecycle
 
 `nextRequest(action, payload = {})` keeps the existing command envelope. Active

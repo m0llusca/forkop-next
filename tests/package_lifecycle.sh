@@ -10,6 +10,9 @@ LUCI_UCI_DEFAULTS="$ROOT_DIR/luci-app-forkop/root/etc/uci-defaults/50_luci-forko
 BUILD_SCRIPT="$ROOT_DIR/build.sh"
 WORK_DIR="$(mktemp -d)"
 export FORKOP_PACKAGE_UPGRADE_STATE="$WORK_DIR/package-was-running"
+export FORKOP_INIT="$WORK_DIR/noop-init"
+printf '#!/bin/sh\nexit 0\n' > "$FORKOP_INIT"
+chmod 0755 "$FORKOP_INIT"
 
 cleanup() {
   rm -rf "$WORK_DIR"
@@ -157,10 +160,16 @@ cat >"$WORK_DIR/upgrade-init" <<'SH'
 #!/usr/bin/env bash
 case "$1" in
   status) exit "${FORKOP_FAKE_STATUS:-0}" ;;
-  start) printf '%s\n' start >>"${FORKOP_START_LOG:?}" ;;
+  start|maintenance_start) printf '%s\n' start >>"${FORKOP_START_LOG:?}" ;;
 esac
 SH
 chmod 0755 "$WORK_DIR/upgrade-init"
+export FORKOP_BIN="$WORK_DIR/upgrade-bin"
+cat > "$FORKOP_BIN" <<'SH'
+#!/bin/sh
+printf '%s\n' '{"config_hash":"fixture","selections":{}}'
+SH
+chmod 0755 "$FORKOP_BIN"
 : >"$WORK_DIR/upgrade-start.log"
 : >"$WORK_DIR/rt_tables_upgrade"
 FORKOP_PACKAGE_TEST_MODE=1 \

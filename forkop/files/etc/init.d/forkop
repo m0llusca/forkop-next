@@ -3,8 +3,8 @@
 
 START=99
 USE_PROCD=1
-EXTRA_COMMANDS="retry_start_on_wan_up handle_wan_up"
-EXTRA_HELP="        retry_start_on_wan_up Retry failed cold start after WAN comes up\n        handle_wan_up Reload or retry after monitored WAN comes up\n"
+EXTRA_COMMANDS="retry_start_on_wan_up handle_wan_up maintenance_stop maintenance_start"
+EXTRA_HELP="        retry_start_on_wan_up Retry failed cold start after WAN comes up\n        handle_wan_up Reload or retry after monitored WAN comes up\n        maintenance_stop Stop runtime while preserving DNS for an upgrade\n        maintenance_start Resume runtime after a maintenance stop\n"
 
 script=$(readlink "$initscript")
 NAME="$(basename ${script:-$initscript})"
@@ -30,7 +30,11 @@ sync_service_triggers_payload() {
 }
 
 start_service() {
-    initd_ucode start-service "$1" "$$"
+    if [ "${FORKOP_START_ACTION:-start}" = restart ]; then
+        initd_ucode restart-service "$$"
+    else
+        initd_ucode start-service "${FORKOP_START_REASON:-${1:-}}" "$$"
+    fi
     FORKOP_LAST_START_STATUS="$?"
     if [ "$FORKOP_LAST_START_STATUS" = 0 ]; then
         procd_open_instance next-expiry
@@ -46,7 +50,30 @@ service_started() {
 }
 
 stop_service() {
-    initd_ucode stop-service "$$"
+    initd_ucode stop-service "$$" "${FORKOP_STOP_REASON:-}"
+    FORKOP_LAST_STOP_STATUS="$?"
+    return "$FORKOP_LAST_STOP_STATUS"
+}
+
+service_stopped() {
+    return "${FORKOP_LAST_STOP_STATUS:-0}"
+}
+
+# Keep rc.common's complete-service procd registration and cleanup. Positional
+# arguments here would select a procd instance or its incremental add operation.
+maintenance_stop() {
+    local FORKOP_STOP_REASON=maintenance
+    stop
+}
+
+maintenance_start() {
+    local FORKOP_START_REASON=maintenance
+    start
+}
+
+restart() {
+    local FORKOP_START_ACTION=restart
+    start
 }
 
 reload_service() {

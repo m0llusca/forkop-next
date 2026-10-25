@@ -48,6 +48,8 @@ require_file "$BUILD_SCRIPT"
 require_file "$BUILD_WORKFLOW"
 require_file "$FORKOP_LIB"
 
+require_package_dependency "kmod-nft-fib"
+
 bash "$BUILD_SCRIPT" --help >/dev/null ||
   fail "build.sh must provide command-line usage"
 if bash "$BUILD_SCRIPT" 1.2 >/dev/null 2>&1; then
@@ -90,10 +92,10 @@ if grep -Fq 'coreutils-sort' "$FORKOP_MAKEFILE" "$BUILD_SCRIPT"; then
   fail "unused coreutils-sort runtime dependency must not be packaged"
 fi
 
-grep -Fq "must use x.y.z format" "$FORKOP_MAKEFILE" ||
-  fail "forkop/Makefile must enforce the three-part release version contract"
+grep -Fq "must use x.y.z or x.y.z-rN format" "$FORKOP_MAKEFILE" ||
+  fail "forkop/Makefile must enforce the release revision version contract"
 grep -Fq 'APK_INTERNAL_VERSION="$RELEASE_VERSION"' "$BUILD_SCRIPT" ||
-  fail "build.sh must use the exact three-part release version for APK metadata"
+  fail "build.sh must use the exact release version including revision for APK metadata"
 grep -Fq "option component_update_check_enabled '1'" "$FORKOP_CONFIG" ||
   fail "new installations must enable component update checks by default"
 grep -Fq "option config_version '1.0.5'" "$FORKOP_CONFIG" ||

@@ -794,7 +794,26 @@ function nft_add_section_priority_rules_from_sections(sections, table, interface
     return true;
 }
 
-function nft_create_runtime_base(table, localv4_set, common_set, port_set, ip_port_set, interface_set, source_interfaces, fakeip_mark, outbound_mark, fakeip_range, tproxy_port, exclude_ntp, localv6_set, common6_set, ip_port6_set, fakeip6_range, tproxy6_address) {
+function nft_create_https_prerouting(table, interface_set, localv4_set, localv6_set, fakeip_mark, outbound_mark, tproxy_port, tproxy6_address) {
+    // Standard first-packet DNAT completes at -100. Keep legacy hooks intact.
+    return nft_create_chain(table, "https_prerouting", "{ type filter hook prerouting priority -99; policy accept; }") &&
+        nft_add_rule(table, "https_prerouting", [ "iifname", "!=", "@" + as_string(interface_set), "return" ]) &&
+        nft_add_rule(table, "https_prerouting", [ "meta", "l4proto", "!=", "tcp", "return" ]) &&
+        nft_add_rule(table, "https_prerouting", [ "tcp", "dport", "!=", "443", "return" ]) &&
+        nft_add_rule(table, "https_prerouting", [ "ct", "status", "dnat", "return" ]) &&
+        nft_add_rule(table, "https_prerouting", [ "ip", "daddr", "@" + as_string(localv4_set), "return" ]) &&
+        nft_add_rule(table, "https_prerouting", [ "ip6", "daddr", "@" + as_string(localv6_set), "return" ]) &&
+        nft_add_rule(table, "https_prerouting", [ "fib", "daddr", "type", "local", "return" ]) &&
+        nft_add_rule(table, "https_prerouting", [ "meta", "mark", "&", fakeip_mark, "==", fakeip_mark, "return" ]) &&
+        nft_add_rule(table, "https_prerouting", [ "meta", "mark", outbound_mark, "return" ]) &&
+        // An accept in the earlier base hook does not skip this later hook.
+        nft_add_rule(table, "https_prerouting", [ "jump", "priority_rules" ]) &&
+        nft_add_rule(table, "https_prerouting", [ "tcp", "dport", "443", "meta", "mark", "set", fakeip_mark, "counter" ]) &&
+        nft_add_rule(table, "https_prerouting", [ "meta", "l4proto", "tcp", "tproxy", "ip", "to", ":" + as_string(tproxy_port), "counter" ]) &&
+        nft_add_rule(table, "https_prerouting", [ "meta", "l4proto", "tcp", "tproxy", "ip6", "to", core_ip.format_ipv6_tproxy_target(tproxy6_address, tproxy_port), "counter" ]);
+}
+
+function nft_create_runtime_base(table, localv4_set, common_set, port_set, ip_port_set, interface_set, source_interfaces, fakeip_mark, outbound_mark, fakeip_range, tproxy_port, exclude_ntp, localv6_set, common6_set, ip_port6_set, fakeip6_range, tproxy6_address, https_domain_routing) {
     localv6_set = default_arg(localv6_set, "localv6");
     common6_set = default_arg(common6_set, "forkop_subnets6");
     ip_port6_set = default_arg(ip_port6_set, "forkop_ip6_ports");
@@ -864,6 +883,10 @@ function nft_create_runtime_base(table, localv4_set, common_set, port_set, ip_po
     if (arg_bool(exclude_ntp) && !nft_insert_rule(table, "mangle", [ "udp", "dport", "123", "return" ]))
         return false;
 
+    if (arg_bool(https_domain_routing) &&
+        !nft_create_https_prerouting(table, interface_set, localv4_set, localv6_set, fakeip_mark, outbound_mark, tproxy_port, tproxy6_address))
+        return false;
+
     return true;
 }
 
@@ -887,7 +910,8 @@ function nft_create_runtime_base_from_uci(table, localv4_set, common_set, port_s
         common6_set,
         ip_port6_set,
         fakeip6_range,
-        tproxy6_address
+        tproxy6_address,
+        option(settings, "https_domain_routing", "0")
     );
 }
 
@@ -1467,6 +1491,7 @@ function nft_runtime_signature_from_settings_and_sections(settings, sections) {
 
     body = signature_add_value(body, "settings.source_network_interfaces", option(settings, "source_network_interfaces", "br-lan"));
     body = signature_add_value(body, "settings.exclude_ntp", bool_option(settings, "exclude_ntp", false) ? "1" : "0");
+    body = signature_add_value(body, "settings.https_domain_routing", bool_option(settings, "https_domain_routing", false) ? "1" : "0");
 
     for (let section in sections)
         body = nft_rule_signature_body(body, object_or_empty(section));
@@ -1828,7 +1853,7 @@ else if (mode == "rule-ports-csv")
 else if (mode == "csv-to-lines-file")
     csv_to_lines_file(ARGV[1], ARGV[2]);
 else if (mode == "nft-create-runtime-base")
-    exit(nft_create_runtime_base(ARGV[1], ARGV[2], ARGV[3], ARGV[4], ARGV[5], ARGV[6], ARGV[7], ARGV[8], ARGV[9], ARGV[10], ARGV[11], ARGV[12], ARGV[13], ARGV[14], ARGV[15], ARGV[16], ARGV[17]) ? 0 : 1);
+    exit(nft_create_runtime_base(ARGV[1], ARGV[2], ARGV[3], ARGV[4], ARGV[5], ARGV[6], ARGV[7], ARGV[8], ARGV[9], ARGV[10], ARGV[11], ARGV[12], ARGV[13], ARGV[14], ARGV[15], ARGV[16], ARGV[17], ARGV[18]) ? 0 : 1);
 else if (mode == "nft-create-runtime-base-from-uci")
     exit(nft_create_runtime_base_from_uci(ARGV[1], ARGV[2], ARGV[3], ARGV[4], ARGV[5], ARGV[6], ARGV[7], ARGV[8], ARGV[9], ARGV[10], ARGV[11], ARGV[12], ARGV[13], ARGV[14], ARGV[15]) ? 0 : 1);
 else if (mode == "nft-create-runtime-output-rules")

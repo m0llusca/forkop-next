@@ -366,7 +366,7 @@ function initd_should_skip_internal_config_reload(reason, guard_path, config_pat
 }
 
 function initd_should_restore_dnsmasq_on_start_from_value(reason, shutdown_correctly) {
-    if (as_string(reason) == "triggered")
+    if (as_string(reason) == "triggered" || as_string(reason) == "maintenance")
         return false;
 
     shutdown_correctly = as_string(shutdown_correctly);
@@ -566,12 +566,13 @@ function start_service(reason, owner_pid) {
     if (!plan.bin_ok)
         return 1;
 
-    let status = command_status_from_args([ BIN_PATH, "start" ]);
+    let status = command_status_from_args([ BIN_PATH, "start", as_string(reason) ]);
     if (status == 0) {
         clear_start_retry(START_RETRY_FILE);
         cancel_scheduled_start_retry(START_RETRY_PID_FILE);
     }
     else {
+        restore_dnsmasq_failsafe();
         mark_start_retry(START_RETRY_FILE, as_string(reason) == "triggered" ? "wan_retry_failed" : "start_failed");
         schedule_start_retry(START_RETRY_PID_FILE, START_RETRY_DELAY_SECONDS);
         command_success_from_args([ "logger", "-t", SERVICE_NAME, "[warn] Forkop start failed; scheduled an automatic retry" ]);
@@ -601,7 +602,7 @@ function stop_finish(job_id, status) {
     return status;
 }
 
-function stop_service(owner_pid) {
+function stop_service(owner_pid, reason) {
     clear_start_retry(START_RETRY_FILE);
     cancel_scheduled_start_retry(START_RETRY_PID_FILE);
     let job_id = begin_external_service_action("stop", "initd", owner_pid);
@@ -611,8 +612,25 @@ function stop_service(owner_pid) {
         return 1;
     }
 
-    let status = command_status_from_args([ BIN_PATH, "stop" ]);
+    let status = command_status_from_args([ BIN_PATH, "stop", as_string(reason) ]);
     return stop_finish(job_id, status);
+}
+
+function restart_service(owner_pid) {
+    clear_start_retry(START_RETRY_FILE);
+    cancel_scheduled_start_retry(START_RETRY_PID_FILE);
+    let job_id = begin_external_service_action("restart", "initd", owner_pid);
+    let bin_ok = file_executable(BIN_PATH);
+    let status = bin_ok ? command_status_from_args([ BIN_PATH, "restart" ]) : 1;
+    if (status != 0) {
+        restore_dnsmasq_failsafe();
+        if (bin_ok) {
+            mark_start_retry(START_RETRY_FILE, "restart_failed");
+            schedule_start_retry(START_RETRY_PID_FILE, START_RETRY_DELAY_SECONDS);
+        }
+    }
+    finish_external_service_action("restart", job_id, status);
+    return status;
 }
 
 function reload_begin_value(reason, owner_pid, runtime_running_value, service_enabled_value, active_service_action) {
@@ -784,7 +802,9 @@ else if (mode == "stop-plan-fixture")
 else if (mode == "stop-finish")
     exit(stop_finish(ARGV[1], ARGV[2]));
 else if (mode == "stop-service")
-    exit(stop_service(ARGV[1]));
+    exit(stop_service(ARGV[1], ARGV[2]));
+else if (mode == "restart-service")
+    exit(restart_service(ARGV[1]));
 else if (mode == "reload-begin")
     exit(reload_begin(ARGV[1], ARGV[2], null, null));
 else if (mode == "reload-begin-fixture") {

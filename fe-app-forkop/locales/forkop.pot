@@ -3240,6 +3240,14 @@ msgstr ""
 msgid "vless://, vmess://, ss://, trojan://, socks4/5://, hy2/hysteria2:// links"
 msgstr ""
 
+#: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/settings.js
+msgid "Inspect HTTPS domains"
+msgstr ""
+
+#: ../luci-app-forkop/htdocs/luci-static/resources/view/forkop/settings.js
+msgid "Check HTTPS domains using existing routing rules even when an app uses a saved IP. Applies to the configured source LAN; does not force all traffic to Main. TLS is not decrypted. May increase CPU load."
+msgstr ""
+
 #: src/forkop/tabs/diagnostic/checks/runInboundsCheck.ts:70
 msgid "WAN"
 msgstr ""

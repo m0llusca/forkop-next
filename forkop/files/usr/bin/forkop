@@ -42,11 +42,11 @@ function restore_dnsmasq_failsafe() {
     system(command_from_args([ "ucode", "-L", LIB_DIR, module, "failsafe-restore" ]) + " >/dev/null 2>&1");
 }
 
-function restore_dnsmasq_failsafe_on_loader_failure(command) {
+function restore_dnsmasq_failsafe_on_command_failure(command) {
     command = as_string(command);
     if (command == "start" || command == "stop" || command == "restart" ||
         command == "reload" || command == "uninstall" ||
-        command == "dnsmasq_restore" || command == "restore_dnsmasq")
+        command == "dnsmasq_restore" || command == "restore_dnsmasq" || command == "package_postinst")
         restore_dnsmasq_failsafe();
 }
 
@@ -132,8 +132,9 @@ function command_spec(command) {
         route_explain: [ "service/route_explain.uc", "explain", 1 ],
         extended_preview: [ "service/extended_preview.uc", "preview", 1 ],
         source_evidence: [ "subscription/evidence.uc", "read-section", 1 ],
-        start: [ "service/lifecycle.uc", "start", 0 ],
-        stop: [ "service/lifecycle.uc", "stop", 0 ],
+        start: [ "service/lifecycle.uc", "start", 1 ],
+        stop: [ "service/lifecycle.uc", "stop", 1 ],
+        maintenance_snapshot: [ "service/lifecycle.uc", "maintenance-snapshot", 0 ],
         reload: [ "service/lifecycle.uc", "reload", 1 ],
         dns_failover_apply: [ "service/lifecycle.uc", "dns-failover-apply", 1 ],
         restart: [ "service/lifecycle.uc", "restart", 0 ],
@@ -208,7 +209,7 @@ function run_spec(command, spec, user_args) {
     let module = module_path(spec[0]);
     if (!file_readable(module)) {
         warn("Error: required file '", module, "' is missing or not readable\n");
-        restore_dnsmasq_failsafe_on_loader_failure(command);
+        restore_dnsmasq_failsafe_on_command_failure(command);
         return 1;
     }
 
@@ -219,7 +220,10 @@ function run_spec(command, spec, user_args) {
     for (let i = 0; i < count; i++)
         push(args, user_args[i] || "");
 
-    return normalize_status(system(command_from_args(args)));
+    let status = normalize_status(system(command_from_args(args)));
+    if (status != 0)
+        restore_dnsmasq_failsafe_on_command_failure(command);
+    return status;
 }
 
 function main() {

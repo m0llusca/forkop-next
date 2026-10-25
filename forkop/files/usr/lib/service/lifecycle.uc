@@ -41,6 +41,7 @@ const PERSISTENT_SUBSCRIPTION_CACHE_FORMAT = getenv("FORKOP_PERSISTENT_SUBSCRIPT
 const SUBSCRIPTION_BOOTSTRAP_RETRY_PID_FILE = getenv("FORKOP_SUBSCRIPTION_BOOTSTRAP_RETRY_PID_FILE") || RUNTIME_STATE_DIR + "/subscription-bootstrap-retry.pid";
 const DNS_FAILOVER_STATE_FILE = getenv("FORKOP_DNS_FAILOVER_STATE_FILE") || RUNTIME_STATE_DIR + "/dns-failover.json";
 const DNS_FAILOVER_PID_FILE = getenv("FORKOP_DNS_FAILOVER_PID_FILE") || RUNTIME_STATE_DIR + "/dns-failover.pid";
+const PACKAGE_UPGRADE_STATE = getenv("FORKOP_PACKAGE_UPGRADE_STATE") || "/tmp/forkop-package-was-running";
 const SUBSCRIPTION_UPDATE_LOCK_DIR = getenv("FORKOP_SUBSCRIPTION_UPDATE_LOCK_DIR") || RUNTIME_STATE_DIR + "/subscription-update.lock";
 const RELOAD_LOCK_DIR = getenv("FORKOP_RELOAD_LOCK_DIR") || "/var/run/forkop.reload.lock";
 const INTERNAL_CONFIG_TRIGGER_GUARD = getenv("FORKOP_INTERNAL_CONFIG_TRIGGER_GUARD") || "/var/run/forkop.internal-config-change";
@@ -821,7 +822,7 @@ function stop_main() {
     module_success(SUBSCRIPTION_CACHE_UC, [ "stop-deferred-bootstrap-worker" ]);
     module_success(UPDATES_UC, [ "stop-list-update" ]);
     remove_cron_jobs();
-    command_success_from_args([ "find", TMP_RULESET_FOLDER, "-mindepth", "1", "-maxdepth", "1", "-type", "f", "-delete" ]);
+    command_success_from_args([ "find", TMP_RULESET_FOLDER, "-mindepth", "1", "-maxdepth", "1", "-type", "f", "-exec", "rm", "-f", "{}", ";" ]);
 
     module_success(ZAPRET_UC, [ "stop-runtime" ]);
     module_success(ZAPRET2_UC, [ "stop-runtime" ]);
@@ -883,7 +884,16 @@ function abort_reload(status, runtime_changed) {
     return status;
 }
 
-function start() {
+function start(reason) {
+    // Only an explicit maintenance caller may consume the package handoff.
+    let handoff = null;
+    if (as_string(reason) == "maintenance") {
+        let info = fs.lstat(PACKAGE_UPGRADE_STATE);
+        let owner = fs.stat("/proc/self");
+        if (info && owner && info.uid == owner.uid && info.type == "file" &&
+            info.size < 65536 && (info.mode & 511) == 384)
+            handoff = read_json_file(PACKAGE_UPGRADE_STATE);
+    }
     let status = start_impl();
     release_start_subscription_update_lock();
 
@@ -908,6 +918,8 @@ function start() {
         return status;
     }
 
+    if (type(handoff) == "object" && handoff.version == 1)
+        restore_selector_state(handoff.selector_state);
     return 0;
 }
 
@@ -945,8 +957,16 @@ function stop_impl() {
     return status;
 }
 
-function stop() {
-    return stop_impl();
+function stop(reason) {
+    if (as_string(reason) != "maintenance") {
+        remove_file(PACKAGE_UPGRADE_STATE);
+        return stop_impl();
+    }
+
+    let status = stop_main();
+    if (status != 0)
+        cleanup_failed_runtime();
+    return status;
 }
 
 function restart_runtime_for_reload() {
@@ -956,8 +976,10 @@ function restart_runtime_for_reload() {
     log_message("Reload requires a full Forkop runtime restart", "info");
 
     status = stop_main();
-    if (status != 0)
+    if (status != 0) {
+        cleanup_failed_runtime();
         return status;
+    }
 
     status = start_impl();
     if (status != 0) {
@@ -1356,9 +1378,11 @@ function restart() {
     log_message("Restarting Forkop", "info");
 
     let selector_state = capture_selector_state();
-    let status = stop_impl();
-    if (status != 0)
+    let status = stop_main();
+    if (status != 0) {
+        cleanup_failed_runtime();
         return status;
+    }
 
     status = start_impl();
     if (status != 0) {
@@ -1367,11 +1391,12 @@ function restart() {
     }
 
     if (module_success(STATE_UC, [
-        "forkop-stably-running",
+        "wait-forkop-stable-start",
         RT_TABLE_NAME,
         NFT_TABLE_NAME,
         NFT_FAKEIP_MARK,
-        as_string(RUNTIME_STABLE_MIN_AGE)
+        as_string(RUNTIME_STABLE_MIN_AGE),
+        "8"
     ])) {
         restore_selector_state(selector_state);
         return 0;
@@ -1425,7 +1450,7 @@ function uninstall() {
     remove_file("/usr/share/luci/menu.d/luci-app-forkop.json");
     remove_file("/usr/share/rpcd/acl.d/luci-app-forkop.json");
     remove_file("/etc/uci-defaults/50_luci-forkop");
-    command_success_from_args([ "find", "/usr/lib/lua/luci/i18n", "-maxdepth", "1", "-type", "f", "-name", LUCI_I18N_DOMAIN + ".*.lmo", "-delete" ]);
+    command_success_from_args([ "find", "/usr/lib/lua/luci/i18n", "-maxdepth", "1", "-type", "f", "-name", LUCI_I18N_DOMAIN + ".*.lmo", "-exec", "rm", "-f", "{}", ";" ]);
     remove_file("/usr/lib/lua/luci/i18n/" + LUCI_I18N_DOMAIN + ".ru.lua");
     remove_file("/usr/lib/lua/luci/i18n/" + LUCI_I18N_DOMAIN + ".en.lua");
     command_success("rm -f /var/luci-indexcache* /tmp/luci-indexcache* 2>/dev/null");
@@ -1450,9 +1475,13 @@ let status = 1;
 if (mode == "main")
     status = start_main();
 else if (mode == "start")
-    status = start();
+    status = start(ARGV[1]);
 else if (mode == "stop")
-    status = stop();
+    status = stop(ARGV[1]);
+else if (mode == "maintenance-snapshot") {
+    write_json(capture_selector_state());
+    status = 0;
+}
 else if (mode == "reload")
     status = reload_tracked(ARGV[1] || "");
 else if (mode == "dns-failover-apply")

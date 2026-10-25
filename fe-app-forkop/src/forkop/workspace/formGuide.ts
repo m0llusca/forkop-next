@@ -73,7 +73,7 @@ function keyOf(field: HTMLElement): string {
 function settingsGroup(key: string): string {
   if (/^(dns_|bootstrap_dns)/.test(key)) return 'dns';
   if (
-    /^(source_network|enable_output|output_network|enable_badwan|badwan)/.test(
+    /^(source_network|https_domain_routing|enable_output|output_network|enable_badwan|badwan)/.test(
       key,
     )
   )
