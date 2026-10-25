@@ -17815,7 +17815,7 @@ function keyOf(field) {
 }
 function settingsGroup(key) {
   if (/^(dns_|bootstrap_dns)/.test(key)) return "dns";
-  if (/^(source_network|enable_output|output_network|enable_badwan|badwan)/.test(
+  if (/^(source_network|https_domain_routing|enable_output|output_network|enable_badwan|badwan)/.test(
     key
   ))
     return "network";
