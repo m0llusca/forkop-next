@@ -109,6 +109,11 @@ function fixture(rule: Rule, neighbours = false) {
   nativeActions.append(edit);
   // This boundary records real native option registrations, without replacing
   // the section's field construction, choice loading or presentation logic.
+  const nativeTextareas: Array<{
+    node: HTMLElement;
+    getValue: () => string;
+    setValue: (value: string) => void;
+  }> = [];
   class NativeOption {
     static extend(properties: object) {
       class Child extends this {}
@@ -132,6 +137,17 @@ function fixture(rule: Rule, neighbours = false) {
       const textarea = document.createElement('textarea');
       textarea.value = value;
       wrapper.append(textarea);
+      // LuCI ui.Textarea reads/writes its first element, not querySelector().
+      // Capture the original native root before Forkop decorates the widget.
+      nativeTextareas.push({
+        node: wrapper,
+        getValue() {
+          return (this.node.firstElementChild as HTMLTextAreaElement).value;
+        },
+        setValue(value) {
+          (this.node.firstElementChild as HTMLTextAreaElement).value = value;
+        },
+      });
       return wrapper;
     }
   }
@@ -183,6 +199,7 @@ function fixture(rule: Rule, neighbours = false) {
     'main',
     'localDevices',
     '_',
+    'E',
     source,
   )(
     { extend: (value: unknown) => value },
@@ -202,6 +219,7 @@ function fixture(rule: Rule, neighbours = false) {
     { ...publicHelpers, DOMAIN_LIST_OPTIONS: {} },
     {},
     (text: string) => text,
+    E,
   );
   module.configureSectionSection(section, {
     loadActionProvidersAvailability: async () => ({
@@ -236,6 +254,7 @@ function fixture(rule: Rule, neighbours = false) {
     nativeActions,
     reorder,
     data,
+    nativeTextareas,
   };
 }
 
@@ -630,4 +649,56 @@ it('uses the actual native domain widget and write cleanup for a quick URL addit
   expect(entries.example.subscription_url).toEqual(['child_subscription']);
   expect(Object.keys(entries)).toEqual(['example']);
   expect(entries.example.domain_suffix).toBeUndefined();
+});
+
+it('preserves all saved domains through the native textarea getter and save/reopen without an edit', () => {
+  const originalDomains = Array.from(
+    { length: 120 },
+    (_, index) => `site${index}.example`,
+  ).join('\n');
+  const { section, entries, nativeTextareas } = fixture({
+    domain: originalDomains,
+  });
+  const option = section.children.find((o) => o.option === 'domain')!;
+  document.body.append(option.renderWidget('example', 0, originalDomains));
+  const native = nativeTextareas[nativeTextareas.length - 1];
+  expect(native.node.firstElementChild?.tagName).toBe('TEXTAREA');
+  expect(native.getValue()).toBe(originalDomains);
+  option.write('example', native.getValue());
+  expect(entries.example.domain).toBe(originalDomains);
+  expect(option.load!('example')).toBe(originalDomains);
+});
+
+it('persists a quick-added site through native save and reopening while preserving the 120 prior domains', () => {
+  const originalDomains = Array.from(
+    { length: 120 },
+    (_, index) => `site${index}.example`,
+  ).join('\n');
+  const { section, entries, nativeTextareas } = fixture({
+    domain: originalDomains,
+  });
+  const option = section.children.find((o) => o.option === 'domain')!;
+  const rendered = option.renderWidget('example', 0, originalDomains);
+  document.body.append(rendered);
+  rendered.querySelector<HTMLInputElement>(
+    '[aria-label="Сайт или адрес страницы"]',
+  )!.value = 'added.example';
+  rendered.querySelector('button')!.click();
+  const native = nativeTextareas[nativeTextareas.length - 1];
+  const expected = `${originalDomains}\nadded.example`;
+  expect(native.getValue()).toBe(expected);
+  option.write('example', native.getValue());
+  expect(entries.example.domain).toBe(expected);
+  expect(option.load!('example')).toBe(expected);
+  const reopened = option.renderWidget(
+    'example',
+    0,
+    String(option.load!('example')),
+  );
+  document.body.replaceChildren(reopened);
+  const reopenedNative = nativeTextareas[nativeTextareas.length - 1];
+  expect(reopenedNative.getValue()).toBe(expected);
+  reopenedNative.setValue(originalDomains);
+  option.write('example', reopenedNative.getValue());
+  expect(entries.example.domain).toBe(originalDomains);
 });
