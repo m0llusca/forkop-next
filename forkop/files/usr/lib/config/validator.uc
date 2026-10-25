@@ -1719,6 +1719,11 @@ function validate_runtime_config(context) {
     let settings = settings_section();
     let sections = sections_by_type("section");
 
+    let https_domain_routing = option(settings, "https_domain_routing", "0");
+    if (type(settings.https_domain_routing) == "array" ||
+        (https_domain_routing != "0" && https_domain_routing != "1"))
+        fail_validation("Invalid boolean in settings.https_domain_routing: expected 0 or 1. Aborted.");
+
     validate_runtime_mark_ranges_context(context);
     validate_dns_settings(settings, sections, context);
     validate_list_update_settings(settings);
