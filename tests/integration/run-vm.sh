@@ -27,7 +27,11 @@ trap 'exit 124' TERM INT
 ssh-keygen -q -t ed25519 -N '' -f guest-key
 gzip -dc rootfs.img.gz > guest.img
 truncate -s 768M guest.img
-e2fsck -pf guest.img
+fsck_status=0
+e2fsck -pf guest.img || fsck_status=$?
+# e2fsck returns 1 for a successfully repaired, unmounted image.
+# The published rootfs needs an inode-bitmap padding repair before resizing.
+[[ "$fsck_status" = 0 || "$fsck_status" = 1 ]] || exit "$fsck_status"
 resize2fs guest.img
 sudo mount -o loop guest.img "$WORK/mount"
 MOUNTED=1
