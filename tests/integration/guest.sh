@@ -66,7 +66,9 @@ setup)
     apk --version
     apk update
     # Dependencies are installed by apk with signed official OpenWrt repository indexes.
-    apk add "$PAYLOAD/sing-box-1.13.21-r1.apk"
+    # OpenWrt authenticates these packages through its signed repository index;
+    # a standalone local APK does not carry that repository trust context.
+    apk add 'sing-box=1.13.21-r1'
     apk info -v sing-box | tee "$EVIDENCE/core-package.txt"
     grep -qx 'sing-box-1.13.21-r1' "$EVIDENCE/core-package.txt" || fail 'wrong installed core package'
     apk add --allow-untrusted "$PAYLOAD/forkop_1.2.0.apk"

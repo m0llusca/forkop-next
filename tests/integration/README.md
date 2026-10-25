@@ -24,6 +24,8 @@ Its SHA256, computed from that official HTTPS artifact on 2026-10-25, is
 The host checks that pin, then the guest installs the APK with normal OpenWrt
 signature verification. The guest records the installed package version, core
 version output and executable SHA256. Dependency indexes retain their normal signature verification.
+The guest installs that exact core version through its signed repository index;
+standalone OpenWrt APKs do not inherit index trust when installed by local path.
 `--allow-untrusted` is confined to the separately checksum-verified Forkop APKs.
 If this rolling feed removes the pinned APK, preparation deliberately fails;
 updating the pin requires verifying another official target package.
