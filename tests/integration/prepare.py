@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Fetch immutable, checksum-pinned inputs, never router backups or credentials."""
 import hashlib
-import importlib.util
 import json
 import pathlib
 import shutil
@@ -10,8 +9,11 @@ import urllib.request
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 WORK = ROOT / 'integration-work'
 OPENWRT = 'https://downloads.openwrt.org/releases/25.12.6/targets/x86/64/'
+OPENWRT_PACKAGES = 'https://downloads.openwrt.org/releases/packages-25.12/x86_64/packages/'
 RELEASES = 'https://github.com/m0llusca/forkop-next/releases/download/'
 ARTIFACTS = {
+    'sing-box-1.13.21-r1.apk': (OPENWRT_PACKAGES + 'sing-box-1.13.21-r1.apk',
+                              'afba690111db21f4f6650ce38b0a1af2711bec311cf51642861dc92c4256af2e'),
     'rootfs.img.gz': (OPENWRT + 'openwrt-25.12.6-x86-64-generic-ext4-rootfs.img.gz',
                       '8c243392d09b960a9f0edbfd996153bec213435b0034e6b2db9437115c5178ec'),
     'kernel.bin': (OPENWRT + 'openwrt-25.12.6-x86-64-generic-kernel.bin',
@@ -35,13 +37,6 @@ def main():
             raise ValueError('Checksum/size mismatch: ' + name)
         (payload if name.endswith('.apk') else WORK).joinpath(name).write_bytes(data)
         print('Verified', name, digest, flush=True)
-    spec = importlib.util.spec_from_file_location('cores', ROOT / 'tools/provision-test-cores.py')
-    cores = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(cores)
-    version = '1.14.3'
-    url = f'https://github.com/SagerNet/sing-box/releases/download/v{version}/sing-box-{version}-linux-amd64.tar.gz'
-    binary = cores.install_sing_box_archive(cores.download(url), cores.CORES[version], WORK, version)
-    shutil.copy2(binary, payload / 'sing-box')
     shutil.copy2(ROOT / 'tests/integration/guest.sh', payload / 'guest.sh')
     shutil.copytree(ROOT / 'tests/integration/adapter', payload / 'adapter', dirs_exist_ok=True)
     # Every adapter file is generic shipped code; manifest binds the exact five-file overlay.
@@ -54,7 +49,8 @@ def main():
         item['before_sha256'] + '  ' + item['path'] + '\n' for item in manifest))
     (evidence / 'inputs.json').write_text(json.dumps({
         'artifacts': ARTIFACTS, 'adapter': manifest,
-        'core': {'version': version, 'archive_sha256': cores.CORES[version]},
+        'core': {'package_version': '1.13.21-r1', 'target': 'OpenWrt x86_64 musl',
+                 'signature_verification': 'normal apk add; no allow-untrusted'},
         'ram_mib': 512,
     }, indent=2) + '\n')
 

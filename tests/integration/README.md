@@ -17,11 +17,16 @@ digests. The pins were checked against:
 - https://api.github.com/repos/m0llusca/forkop-next/releases/tags/1.2.0
 - https://api.github.com/repos/m0llusca/forkop-next/releases/tags/1.2.1-r2
 
-The stock sing-box 1.14.3 archive uses the repository's existing official checksum
-pin in `tools/provision-test-cores.py`. The official OpenWrt sing-box package
-supplies its real init service before its executable is replaced by that pinned
-binary. OpenWrt dependency indexes retain their normal signature verification.
+The native musl sing-box **1.13.21-r1** package and its real init service come from
+the [official OpenWrt x86_64 feed](https://downloads.openwrt.org/releases/packages-25.12/x86_64/packages/sing-box-1.13.21-r1.apk).
+Its SHA256, computed from that official HTTPS artifact on 2026-10-25, is
+`afba690111db21f4f6650ce38b0a1af2711bec311cf51642861dc92c4256af2e`.
+The host checks that pin, then the guest installs the APK with normal OpenWrt
+signature verification. The guest records the installed package version, core
+version output and executable SHA256. Dependency indexes retain their normal signature verification.
 `--allow-untrusted` is confined to the separately checksum-verified Forkop APKs.
+If this rolling feed removes the pinned APK, preparation deliberately fails;
+updating the pin requires verifying another official target package.
 
 The fixture installs the exact published 1.2.0 backend APK and verifies the five
 original file hashes before applying `adapter/`. This directory contains only
@@ -57,6 +62,12 @@ A passing result cannot establish or exclude a MediaTek driver/watchdog failure,
 the original hardware's memory pressure, or a private installation-specific
 trigger. It tests the exact published backend APKs, not a newly rebuilt checkout
 and not the LuCI/IPK packages. It does not inject concurrent-lock contention.
+
+The first booted VM run exposed a fixture ABI error: the upstream Linux amd64
+1.14.3 executable needs a glibc loader unavailable on OpenWrt musl. That failure
+occurred before Forkop started. Using the signed native target APK fixes this
+fixture boundary without introducing a compatibility loader. This test covers
+maintenance behavior with 1.13.21; it does not claim sing-box 1.14 compatibility.
 
 No production runtime change accompanies this test. Initial local validation is
 limited to shell/Python syntax and fixture hashes; the first real behavioral

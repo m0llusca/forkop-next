@@ -66,13 +66,14 @@ setup)
     apk --version
     apk update
     # Dependencies are installed by apk with signed official OpenWrt repository indexes.
-    apk add sing-box
+    apk add "$PAYLOAD/sing-box-1.13.21-r1.apk"
+    apk info -v sing-box | tee "$EVIDENCE/core-package.txt"
+    grep -qx 'sing-box-1.13.21-r1' "$EVIDENCE/core-package.txt" || fail 'wrong installed core package'
     apk add --allow-untrusted "$PAYLOAD/forkop_1.2.0.apk"
     /etc/init.d/forkop disable
     /etc/init.d/sing-box stop || true
-    cp "$PAYLOAD/sing-box" /usr/bin/sing-box
-    chmod 755 /usr/bin/sing-box
-    /usr/bin/sing-box version
+    /usr/bin/sing-box version | tee "$EVIDENCE/core-version.txt"
+    sha256sum /usr/bin/sing-box | tee "$EVIDENCE/core-binary.sha256"
     # Exact generic adapter used for compatibility; no installed configuration is copied.
     (cd / && sha256sum -c "$PAYLOAD/adapter/SHA256SUMS.before")
     (cd "$PAYLOAD/adapter" && sha256sum -c SHA256SUMS)
