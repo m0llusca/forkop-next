@@ -794,6 +794,25 @@ function nft_add_section_priority_rules_from_sections(sections, table, interface
     return true;
 }
 
+function nft_create_https_prerouting(table, interface_set, localv4_set, localv6_set, fakeip_mark, outbound_mark, tproxy_port, tproxy6_address) {
+    // Standard first-packet DNAT completes at -100. Keep legacy hooks intact.
+    return nft_create_chain(table, "https_prerouting", "{ type filter hook prerouting priority -99; policy accept; }") &&
+        nft_add_rule(table, "https_prerouting", [ "iifname", "!=", "@" + as_string(interface_set), "return" ]) &&
+        nft_add_rule(table, "https_prerouting", [ "meta", "l4proto", "!=", "tcp", "return" ]) &&
+        nft_add_rule(table, "https_prerouting", [ "tcp", "dport", "!=", "443", "return" ]) &&
+        nft_add_rule(table, "https_prerouting", [ "ct", "status", "dnat", "return" ]) &&
+        nft_add_rule(table, "https_prerouting", [ "ip", "daddr", "@" + as_string(localv4_set), "return" ]) &&
+        nft_add_rule(table, "https_prerouting", [ "ip6", "daddr", "@" + as_string(localv6_set), "return" ]) &&
+        nft_add_rule(table, "https_prerouting", [ "fib", "daddr", "type", "local", "return" ]) &&
+        nft_add_rule(table, "https_prerouting", [ "meta", "mark", "&", fakeip_mark, "==", fakeip_mark, "return" ]) &&
+        nft_add_rule(table, "https_prerouting", [ "meta", "mark", outbound_mark, "return" ]) &&
+        // An accept in the earlier base hook does not skip this later hook.
+        nft_add_rule(table, "https_prerouting", [ "jump", "priority_rules" ]) &&
+        nft_add_rule(table, "https_prerouting", [ "tcp", "dport", "443", "meta", "mark", "set", fakeip_mark, "counter" ]) &&
+        nft_add_rule(table, "https_prerouting", [ "meta", "l4proto", "tcp", "tproxy", "ip", "to", ":" + as_string(tproxy_port), "counter" ]) &&
+        nft_add_rule(table, "https_prerouting", [ "meta", "l4proto", "tcp", "tproxy", "ip6", "to", core_ip.format_ipv6_tproxy_target(tproxy6_address, tproxy_port), "counter" ]);
+}
+
 function nft_create_runtime_base(table, localv4_set, common_set, port_set, ip_port_set, interface_set, source_interfaces, fakeip_mark, outbound_mark, fakeip_range, tproxy_port, exclude_ntp, localv6_set, common6_set, ip_port6_set, fakeip6_range, tproxy6_address, https_domain_routing) {
     localv6_set = default_arg(localv6_set, "localv6");
     common6_set = default_arg(common6_set, "forkop_subnets6");
@@ -835,7 +854,6 @@ function nft_create_runtime_base(table, localv4_set, common_set, port_set, ip_po
         !nft_add_rule(table, "mangle", [ "iifname", "@" + as_string(interface_set), "ip", "daddr", "@" + as_string(localv4_set), "return" ]) ||
         !nft_add_rule(table, "mangle", [ "iifname", "@" + as_string(interface_set), "ip6", "daddr", "@" + as_string(localv6_set), "ip6", "daddr", "!=", fakeip6_range, "return" ]) ||
         !nft_add_rule(table, "mangle", [ "jump", "priority_rules" ]) ||
-        (arg_bool(https_domain_routing) && !nft_add_rule(table, "mangle", [ "iifname", "@" + as_string(interface_set), "tcp", "dport", "443", "meta", "mark", "set", fakeip_mark, "counter" ])) ||
         !nft_add_rule(table, "mangle", [ "iifname", "@" + as_string(interface_set), "ip", "daddr", "@" + as_string(common_set), "meta", "l4proto", "tcp", "meta", "mark", "set", fakeip_mark, "counter" ]) ||
         !nft_add_rule(table, "mangle", [ "iifname", "@" + as_string(interface_set), "ip", "daddr", "@" + as_string(common_set), "meta", "l4proto", "udp", "meta", "mark", "set", fakeip_mark, "counter" ]) ||
         !nft_add_rule(table, "mangle", [ "iifname", "@" + as_string(interface_set), "ip6", "daddr", "@" + as_string(common6_set), "meta", "l4proto", "tcp", "meta", "mark", "set", fakeip_mark, "counter" ]) ||
@@ -863,6 +881,10 @@ function nft_create_runtime_base(table, localv4_set, common_set, port_set, ip_po
         return false;
 
     if (arg_bool(exclude_ntp) && !nft_insert_rule(table, "mangle", [ "udp", "dport", "123", "return" ]))
+        return false;
+
+    if (arg_bool(https_domain_routing) &&
+        !nft_create_https_prerouting(table, interface_set, localv4_set, localv6_set, fakeip_mark, outbound_mark, tproxy_port, tproxy6_address))
         return false;
 
     return true;

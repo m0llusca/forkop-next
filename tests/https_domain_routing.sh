@@ -47,19 +47,24 @@ cmp "$NFT_LOG" "$WORK_DIR/default.log" || fail 'omitted flag must equal explicit
 printf 'forkop.settings=settings\nforkop.settings.source_network_interfaces=br-lan\nforkop.settings.https_domain_routing=1\n' > "$FORKOP_UCI_STATE_FILE"
 : > "$NFT_LOG"
 base
-capture='add rule inet ForkopTable mangle iifname @forkop_interfaces tcp dport 443 meta mark set 0x00100000 counter'
+ucode "$ROOT_DIR/tests/helpers/https_packet_path.uc" "$NFT_LOG"
+capture='add rule inet ForkopTable https_prerouting tcp dport 443 meta mark set 0x00100000 counter'
 contains "$NFT_LOG" "$capture" 'enabled LAN TCP443 capture is missing'
-before 'mangle ct status dnat return' "$capture" 'DNAT guard must precede HTTPS capture'
-before 'mangle iifname @forkop_interfaces ip daddr @localv4 return' "$capture" 'IPv4 local guard must precede HTTPS capture'
-before 'mangle iifname @forkop_interfaces ip6 daddr @localv6 ip6 daddr != fc00::/18 return' "$capture" 'IPv6 local guard must precede HTTPS capture'
-before 'mangle jump priority_rules' "$capture" 'explicit priority rules must precede HTTPS capture'
+contains "$NFT_LOG" 'https_prerouting { type filter hook prerouting priority -99; policy accept; }' 'HTTPS hook must run after standard DNAT'
+before 'https_prerouting ct status dnat return' "$capture" 'DNAT guard must precede HTTPS capture'
+before 'https_prerouting ip daddr @localv4 return' "$capture" 'IPv4 local guard must precede HTTPS capture'
+before 'https_prerouting ip6 daddr @localv6 return' "$capture" 'IPv6 local guard must precede HTTPS capture'
+before 'https_prerouting fib daddr type local return' "$capture" 'router-owned addresses must precede HTTPS capture'
+before 'https_prerouting jump priority_rules' "$capture" 'explicit priority rules must be rechecked before HTTPS capture'
 cp "$NFT_LOG" "$WORK_DIR/enabled.log"
 : > "$NFT_LOG"
 nft_apply nft-create-runtime-base ForkopTable localv4 forkop_subnets forkop_ports forkop_ip_ports forkop_interfaces br-lan 0x00100000 0x00200000 198.18.0.0/15 1602 0 localv6 forkop_subnets6 forkop_ip6_ports fc00::/18 ::1 1
 cmp "$NFT_LOG" "$WORK_DIR/enabled.log" || fail 'optional trailing CLI flag must match enabled UCI behavior'
-# Exactly one inet rule is added: no family restriction, UDP, other ports or output changes.
-grep -Fvx "$capture" "$NFT_LOG" > "$WORK_DIR/without-capture.log"
+# The opt-in late chain is the only addition; all legacy commands stay identical.
+awk '$5 != "https_prerouting"' "$NFT_LOG" > "$WORK_DIR/without-capture.log"
 cmp "$WORK_DIR/default.log" "$WORK_DIR/without-capture.log" || fail 'enabled mode changed unrelated runtime rules'
+contains "$NFT_LOG" 'https_prerouting meta l4proto tcp tproxy ip to :1602 counter' 'late IPv4 tproxy consumer missing'
+contains "$NFT_LOG" 'https_prerouting meta l4proto tcp tproxy ip6 to [::1]:1602 counter' 'late IPv6 tproxy consumer missing'
 contains "$NFT_LOG" 'proxy meta mark & 0x00100000 == 0x00100000 meta l4proto tcp tproxy ip to :1602 counter' 'existing IPv4 tproxy consumer missing'
 contains "$NFT_LOG" 'proxy meta mark & 0x00100000 == 0x00100000 meta l4proto tcp tproxy ip6 to [::1]:1602 counter' 'existing IPv6 tproxy consumer missing'
 cat > "$WORK_DIR/priority.json" <<'JSON'
@@ -68,6 +73,7 @@ JSON
 nft_apply nft-add-section-priority-rules-fixture "$WORK_DIR/priority.json" ForkopTable forkop_interfaces localv4 localv6 0x00100000
 contains "$NFT_LOG" 'priority_rules iifname @forkop_interfaces ip daddr != @localv4 ip daddr @forkop_rule_bypass_subnets counter accept' 'IPv4 bypass must terminate before capture'
 contains "$NFT_LOG" 'priority_rules iifname @forkop_interfaces ip6 daddr != @localv6 ip6 daddr @forkop_rule_bypass_subnets6 counter accept' 'IPv6 bypass must terminate before capture'
+ucode "$ROOT_DIR/tests/helpers/https_packet_path.uc" "$NFT_LOG" bypass
 for value in absent 0 1; do
     if [ "$value" = absent ]; then
         printf '{}\n' > "$WORK_DIR/$value.json"
