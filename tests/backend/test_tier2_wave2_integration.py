@@ -16,7 +16,14 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 FORKOP_BIN = REPO_ROOT / 'forkop/files/usr/bin/forkop'
 FORKOP_LIB = REPO_ROOT / 'forkop/files/usr/lib'
-CORES_DIR = Path.home() / '.cache/forkop-dev/forkop-cores'
+CORES_DIR = Path(
+    os.environ.get(
+        'FORKOP_TEST_CORES_DIR',
+        '/tmp/forkop-cores'
+        if Path('/tmp/forkop-cores').exists()
+        else str(Path.home() / '.cache/forkop-dev/forkop-cores'),
+    )
+)
 SB_1137 = CORES_DIR / 'sing-box-1.13.7-linux-amd64/sing-box'
 SB_1143 = CORES_DIR / 'sing-box-1.14.3-linux-amd64/sing-box'
 SB_EXT = CORES_DIR / 'sing-box-1.14.3-extended-2.7.3-linux-amd64/sing-box'

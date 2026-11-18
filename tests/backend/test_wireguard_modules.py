@@ -6,6 +6,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import os
 from pathlib import Path
+import shutil
 import ssl
 import subprocess
 import tempfile
@@ -14,7 +15,14 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
 LIB = ROOT / "forkop/files/usr/lib"
-CORES_DIR = Path("/home/antigravity/.cache/forkop-dev/forkop-cores")
+CORES_DIR = Path(
+    os.environ.get(
+        "FORKOP_TEST_CORES_DIR",
+        "/tmp/forkop-cores"
+        if Path("/tmp/forkop-cores").exists()
+        else str(Path.home() / ".cache/forkop-dev/forkop-cores"),
+    )
+)
 SB_113 = CORES_DIR / "sing-box-1.13.7-linux-amd64/sing-box"
 SB_114 = CORES_DIR / "sing-box-1.14.3-linux-amd64/sing-box"
 SB_EXT = CORES_DIR / "sing-box-1.14.3-extended-2.7.3-linux-amd64/sing-box"
@@ -32,9 +40,7 @@ def run_ucode(expr, *args, env_overrides=None):
     local_lib64 = str(Path.home() / ".local/lib64")
     env["PATH"] = f"{local_bin}:{env.get('PATH', '')}"
     env["LD_LIBRARY_PATH"] = f"{local_lib}:{local_lib64}:{env.get('LD_LIBRARY_PATH', '')}"
-    ucode_bin = str(Path.home() / ".local/bin/ucode")
-    if not Path(ucode_bin).exists():
-        ucode_bin = "ucode"
+    ucode_bin = shutil.which("ucode", path=env.get("PATH")) or "ucode"
     if env_overrides:
         env.update(env_overrides)
     proc = subprocess.run(

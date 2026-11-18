@@ -4,6 +4,7 @@ singbox.group_resolver 3-tier matching, and service.selection endpoint + canonic
 import json
 import os
 from pathlib import Path
+import shutil
 import stat
 import subprocess
 import tempfile
@@ -20,9 +21,7 @@ def run_ucode(expr, *args, env_overrides=None):
     local_lib64 = str(Path.home() / ".local/lib64")
     env["PATH"] = f"{local_bin}:{env.get('PATH', '')}"
     env["LD_LIBRARY_PATH"] = f"{local_lib}:{local_lib64}:{env.get('LD_LIBRARY_PATH', '')}"
-    ucode_bin = str(Path.home() / ".local/bin/ucode")
-    if not Path(ucode_bin).exists():
-        ucode_bin = "ucode"
+    ucode_bin = shutil.which("ucode", path=env.get("PATH")) or "ucode"
     if env_overrides:
         env.update(env_overrides)
     proc = subprocess.run(
