@@ -25,8 +25,8 @@ export const styles = `
 }
 
 .fkp_monitoring-page {
-    --fkp-monitoring-control-height: 34px;
-    --fkp-monitoring-row-action-size: 24px;
+    --fkp-monitoring-control-height: 42px;
+    --fkp-monitoring-row-action-size: 42px;
     --fkp-monitoring-divider-color: rgba(127, 127, 127, 0.22);
     --fkp-monitoring-soft-bg: rgba(127, 127, 127, 0.08);
     --fkp-monitoring-soft-bg-hover: rgba(127, 127, 127, 0.14);
@@ -50,10 +50,10 @@ export const styles = `
 }
 
 .fkp_monitoring-page .btn.fkp_monitoring-page__icon-button {
-    width: 32px;
-    height: 32px;
-    min-width: 32px;
-    min-height: 32px;
+    width: 42px;
+    height: 42px;
+    min-width: 42px;
+    min-height: 42px;
     padding: 0;
     box-sizing: border-box;
     display: flex;
@@ -75,8 +75,8 @@ export const styles = `
 }
 
 .fkp_monitoring-page .btn.fkp_monitoring-page__icon-button--active {
-    background: rgba(25, 118, 210, 0.16) !important;
-    color: var(--primary-color-high, #1976d2) !important;
+    background: var(--fkp-selected, rgba(20, 99, 94, 0.14)) !important;
+    color: var(--next-accent, var(--primary-color-high, #1976d2)) !important;
 }
 
 .fkp_monitoring-page .btn.fkp_monitoring-page__icon-button:disabled {
@@ -97,19 +97,25 @@ export const styles = `
     color: color-mix(in srgb, var(--fkp-monitoring-danger-color) 70%, white) !important;
 }
 
-.fkp_monitoring-page #monitoring-pause-toggle.btn.fkp_monitoring-page__icon-button,
-.fkp_monitoring-page #monitoring-pause-toggle.btn.fkp_monitoring-page__icon-button--active {
+.fkp_monitoring-page #monitoring-pause-toggle.btn.fkp_monitoring-page__icon-button {
     order: 1;
-    border-color: rgba(128, 128, 128, 0.3) !important;
+    border-color: var(--next-line, rgba(128, 128, 128, 0.3)) !important;
     background: transparent !important;
     color: var(--text-color-medium, #888) !important;
 }
 
+.fkp_monitoring-page #monitoring-pause-toggle.btn.fkp_monitoring-page__icon-button--active {
+    order: 1;
+    border-color: var(--next-accent, var(--fkp-monitoring-paused-color)) !important;
+    background: var(--fkp-selected, rgba(20, 99, 94, 0.12)) !important;
+    color: var(--next-accent, var(--fkp-monitoring-paused-color)) !important;
+}
+
 .fkp_monitoring-page #monitoring-pause-toggle.btn.fkp_monitoring-page__icon-button:hover:not(:disabled),
 .fkp_monitoring-page #monitoring-pause-toggle.btn.fkp_monitoring-page__icon-button--active:hover:not(:disabled) {
-    border-color: rgba(128, 128, 128, 0.6) !important;
-    background: transparent !important;
-    color: var(--text-color-high, #eee) !important;
+    border-color: var(--next-accent, rgba(128, 128, 128, 0.6)) !important;
+    background: var(--fkp-hover, transparent) !important;
+    color: var(--next-accent, var(--text-color-high, #eee)) !important;
 }
 
 .fkp_monitoring-page__icon-button svg,
@@ -141,9 +147,10 @@ export const styles = `
 
 .fkp_monitoring-page__tabs {
     display: inline-flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: 2px;
-    width: max-content;
+    max-width: 100%;
     padding: 2px;
     border: 1px solid var(--fkp-monitoring-divider-color);
     border-radius: 6px;
@@ -152,10 +159,10 @@ export const styles = `
 }
 
 .fkp_monitoring-page .btn.fkp_monitoring-page__tab {
-    height: calc(var(--fkp-monitoring-control-height) - 6px);
-    min-height: calc(var(--fkp-monitoring-control-height) - 6px);
+    height: auto;
+    min-height: 42px;
     margin: 0;
-    padding: 0 12px;
+    padding: 6px 12px;
     border: 0 !important;
     border-radius: 4px;
     background: transparent !important;
@@ -166,7 +173,7 @@ export const styles = `
     justify-content: center;
     gap: 8px;
     font-weight: 600;
-    line-height: 1;
+    line-height: 1.2;
 }
 
 .fkp_monitoring-page .btn.fkp_monitoring-page__tab:hover {
@@ -175,8 +182,8 @@ export const styles = `
 }
 
 .fkp_monitoring-page .btn.fkp_monitoring-page__tab--active {
-    background: rgba(25, 118, 210, 0.16) !important;
-    color: var(--primary-color-high, #1976d2) !important;
+    background: var(--fkp-selected, rgba(20, 99, 94, 0.14)) !important;
+    color: var(--next-accent, var(--primary-color-high, #1976d2)) !important;
     font-weight: 700;
 }
 
@@ -201,8 +208,8 @@ export const styles = `
 }
 
 .fkp_monitoring-page__tab--active .fkp_monitoring-page__tab-badge {
-    background: rgba(25, 118, 210, 0.22);
-    color: var(--primary-color-high, #1976d2);
+    background: color-mix(in srgb, var(--next-accent, #14635e) 18%, transparent);
+    color: var(--next-accent, var(--primary-color-high, #1976d2));
 }
 
 .fkp_monitoring-page__filters {
@@ -272,13 +279,15 @@ export const styles = `
 
 .fkp_monitoring-page__table-wrap {
     width: 100%;
+    max-width: 100%;
     overflow-x: auto;
     margin-bottom: 0;
 }
 
 .fkp_monitoring-page__table {
     width: 100%;
-    min-width: 840px;
+    max-width: 100%;
+    min-width: 0;
     table-layout: fixed;
     border-collapse: collapse;
     border-spacing: 0;
@@ -292,7 +301,9 @@ export const styles = `
     box-sizing: border-box;
     text-align: left;
     vertical-align: middle;
+    min-width: 0;
     overflow: hidden;
+    text-overflow: ellipsis;
     white-space: nowrap;
 }
 
@@ -306,7 +317,7 @@ export const styles = `
 }
 
 .fkp_monitoring-page__table th:nth-child(1) {
-    width: 28%;
+    width: 24%;
 }
 
 .fkp_monitoring-page__table th:nth-child(2) {
@@ -314,19 +325,19 @@ export const styles = `
 }
 
 .fkp_monitoring-page__table th:nth-child(3) {
-    width: 16%;
+    width: 15%;
 }
 
 .fkp_monitoring-page__table th:nth-child(4) {
-    width: 8%;
+    width: 7.5%;
 }
 
 .fkp_monitoring-page__table th:nth-child(5) {
-    width: 9.5%;
+    width: 11.5%;
 }
 
 .fkp_monitoring-page__table th:nth-child(6) {
-    width: 8.5%;
+    width: 10.5%;
 }
 
 .fkp_monitoring-page__table th:nth-child(7) {
@@ -334,7 +345,7 @@ export const styles = `
 }
 
 .fkp_monitoring-page__table th:nth-child(8) {
-    width: 8%;
+    width: 9.5%;
 }
 
 .fkp_monitoring-page__table tbody tr:last-child td {
@@ -384,6 +395,7 @@ export const styles = `
     align-items: baseline;
     justify-content: flex-start;
     gap: 5px;
+    min-width: 0;
 }
 
 .fkp_monitoring-page__source-name {
@@ -422,7 +434,9 @@ export const styles = `
 
 .fkp_monitoring-page__route {
     display: inline-block;
-    width: auto;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
     padding: 2px 6px;
     border-radius: 4px;
     background: rgba(128, 128, 128, 0.15);
@@ -491,11 +505,14 @@ export const styles = `
 .fkp_monitoring-page__state {
     min-height: 90px;
     width: 100%;
+    padding: 12px;
     display: flex;
     align-items: center;
     justify-content: center;
     color: var(--text-color-medium);
     text-align: center;
+    white-space: normal;
+    overflow-wrap: anywhere;
     box-sizing: border-box;
 }
 
@@ -539,6 +556,7 @@ export const styles = `
     .fkp_monitoring-page__table td {
         display: block;
         width: 100%;
+        max-width: 100%;
     }
 
     .fkp_monitoring-page__table tr {
@@ -555,18 +573,25 @@ export const styles = `
         gap: 8px;
         border: 0;
         border-bottom: 1px solid var(--fkp-monitoring-divider-color);
-        padding: 4px 0;
+        padding: 6px 0;
         box-sizing: border-box;
         text-align: left;
+        white-space: normal;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+    }
+
+    .fkp_monitoring-page__table td.fkp_monitoring-page__state-cell {
+        display: block;
+        grid-template-columns: none;
     }
 
     .fkp_monitoring-page__table td::before {
         content: attr(data-label);
         color: var(--text-color-medium);
         font-weight: 700;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
+        overflow-wrap: anywhere;
+        white-space: normal;
     }
 
     .fkp_monitoring-page__table td:last-child {
@@ -577,11 +602,21 @@ export const styles = `
         padding: 0;
     }
 
+    .fkp_monitoring-page__value,
+    .fkp_monitoring-page__source-name,
+    .fkp_monitoring-page__source-ip,
+    .fkp_monitoring-page__route {
+        white-space: normal;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+    }
+
     .fkp_monitoring-page__value {
         text-align: right;
     }
 
     .fkp_monitoring-page__source-value {
+        flex-wrap: wrap;
         justify-content: flex-end;
     }
 
@@ -618,12 +653,17 @@ export const styles = `
         width: 100%;
     }
 
-    .fkp_monitoring-page__table td {
-        grid-template-columns: 1fr;
+    .fkp_monitoring-page__table td,
+    .fkp_monitoring-page__table td:last-child {
+        grid-template-columns: minmax(0, 1fr);
         gap: 2px;
+        text-align: left;
     }
 
-    .fkp_monitoring-page__value {
+    .fkp_monitoring-page__value,
+    .fkp_monitoring-page__table td:nth-child(4) .fkp_monitoring-page__value,
+    .fkp_monitoring-page__table td:nth-child(5) .fkp_monitoring-page__value,
+    .fkp_monitoring-page__table td:nth-child(6) .fkp_monitoring-page__value {
         text-align: left;
     }
 

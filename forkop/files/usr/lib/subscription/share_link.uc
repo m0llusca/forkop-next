@@ -211,8 +211,16 @@ function serialize_shadowsocks(outbound) {
         as_string(outbound.server) == "" || outbound.server_port == null)
         return "";
     let userinfo = base64_encode(as_string(outbound.method) + ":" + as_string(outbound.password));
-    return userinfo == "" ? "" :
-        "ss://" + userinfo + "@" + host_port(outbound.server, outbound.server_port) + fragment(outbound);
+    if (userinfo == "")
+        return "";
+    let params = [];
+    let plugin = as_string(outbound.plugin);
+    if (plugin != "") {
+        let plugin_opts = as_string(outbound.plugin_opts);
+        add_query(params, "plugin", plugin_opts != "" ? (plugin + ";" + plugin_opts) : plugin);
+    }
+    return "ss://" + userinfo + "@" + host_port(outbound.server, outbound.server_port) +
+        query_string(params) + fragment(outbound);
 }
 
 function serialize_socks(outbound) {
@@ -311,7 +319,7 @@ function serialize_outbound_link(outbound) {
     if (type(outbound) != "object")
         return "";
 
-    let outbound_type = as_string(outbound.type);
+    let outbound_type = lc(as_string(outbound.type));
     if (outbound_type == "vless")
         return serialize_vless(outbound);
     if (outbound_type == "trojan")
@@ -324,6 +332,10 @@ function serialize_outbound_link(outbound) {
         return serialize_hysteria2(outbound);
     if (outbound_type == "vmess")
         return serialize_vmess(outbound);
+    if (outbound_type == "wireguard" || outbound_type == "wg" ||
+        outbound_type == "awg" || outbound_type == "amneziawg" ||
+        outbound_type == "warp")
+        return require("singbox.wireguard").serialize_share_link(outbound);
     return "";
 }
 
@@ -332,7 +344,8 @@ function is_copyable_link(value) {
     let prefixes = [
         "vless://", "vmess://", "trojan://", "ss://", "ssr://",
         "hysteria2://", "hy2://", "tuic://",
-        "socks4://", "socks4a://", "socks5://"
+        "socks4://", "socks4a://", "socks5://",
+        "wireguard://", "wg://", "awg://", "amneziawg://", "warp://"
     ];
     for (let prefix in prefixes) {
         if (starts_with(value, prefix))

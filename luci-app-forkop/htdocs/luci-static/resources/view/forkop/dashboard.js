@@ -28,6 +28,7 @@ function createDashboardContent(section) {
         ?.click();
     const add = document.createElement("button");
     add.type = "button";
+    add.className = "fkp-next-primary-action";
     add.textContent = "Добавить подключение";
     const status = document.createElement("p");
     status.setAttribute("role", "status");
@@ -41,7 +42,10 @@ function createDashboardContent(section) {
         status.textContent =
           "Не удалось открыть создание подключения. Повторите действие в правилах.";
     };
-    sources.append(add, help, edit, status);
+    const actionsWrap = document.createElement("div");
+    actionsWrap.className = "fkp-workspace-sources-actions";
+    actionsWrap.append(add, edit);
+    sources.append(help, actionsWrap, status);
     root.append(sources, main.DashboardTab.render());
     return root;
   };

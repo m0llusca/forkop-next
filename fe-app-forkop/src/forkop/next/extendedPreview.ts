@@ -77,6 +77,7 @@ export function renderExtendedPreview(
   };
   const invalidate = () => {
     generation++;
+    root.setAttribute('aria-busy', 'false');
     content.replaceChildren();
     status.textContent = 'Черновик изменён. Повторите предпросмотр.';
   };
@@ -95,28 +96,32 @@ export function renderExtendedPreview(
     const requestId = `preview_${current}`;
     status.textContent = 'Читаем снимок и проверяем черновик…';
     root.setAttribute('aria-busy', 'true');
-    const reply = await executeShellCommand({
-      command: '/usr/bin/forkop',
-      args: [
-        'extended_preview',
-        JSON.stringify({
-          schema: 1,
-          section,
-          requestId,
-          expectedCapture,
-          draft: snapshot.draft,
-        }),
-      ],
-      timeout: 15000,
-      operationName: 'Предпросмотр фильтров',
-    });
+    let reply;
+    try {
+      reply = await executeShellCommand({
+        command: '/usr/bin/forkop',
+        args: [
+          'extended_preview',
+          JSON.stringify({
+            schema: 1,
+            section,
+            requestId,
+            expectedCapture,
+            draft: snapshot.draft,
+          }),
+        ],
+        timeout: 15000,
+        operationName: 'Предпросмотр фильтров',
+      });
+    } finally {
+      if (current === generation) root.setAttribute('aria-busy', 'false');
+    }
     if (
       !root.isConnected ||
       current !== generation ||
       capture().revision !== snapshot.revision
     )
       return;
-    root.setAttribute('aria-busy', 'false');
     try {
       const result = JSON.parse(reply.stdout);
       if (!result.success) {
@@ -135,11 +140,19 @@ export function renderExtendedPreview(
       paragraph(
         'Эти настройки ещё не применены. Работающие группы смотрите в разделе «Серверы».',
       );
+      const pluralizeNodes = (n: number) => {
+        const mod100 = Math.abs(n) % 100;
+        const mod10 = mod100 % 10;
+        if (mod100 >= 11 && mod100 <= 19) return 'узлов';
+        if (mod10 === 1) return 'узел';
+        if (mod10 >= 2 && mod10 <= 4) return 'узла';
+        return 'узлов';
+      };
       const names = new Map(data.candidates.map((c) => [c.id, c.name]));
-      names.set('direct', 'Direct');
+      names.set('direct', 'Напрямую');
       for (const group of data.groups) {
         const heading = document.createElement('h4');
-        heading.textContent = `${group.name}: ${group.count} узлов${group.omitted ? ' · пустая группа не создаётся' : ''}`;
+        heading.textContent = `${group.name}: ${group.count} ${pluralizeNodes(group.count)}${group.omitted ? ' · пустая группа не создаётся' : ''}`;
         content.append(heading);
         paragraph(
           group.interrupt

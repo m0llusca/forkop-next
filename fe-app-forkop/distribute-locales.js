@@ -9,30 +9,30 @@ const sourceDir = path.resolve(__dirname, 'locales');
 const targetRoot = path.resolve(__dirname, '../luci-app-forkop/po');
 
 async function main() {
-    const files = await fs.readdir(sourceDir);
+  const files = await fs.readdir(sourceDir);
 
-    for (const file of files) {
-        const filePath = path.join(sourceDir, file);
+  for (const file of files) {
+    const filePath = path.join(sourceDir, file);
 
-        if (file === 'forkop.pot') {
-            const potTarget = path.join(targetRoot, 'templates', 'forkop.pot');
-            await fs.mkdir(path.dirname(potTarget), { recursive: true });
-            await fs.copyFile(filePath, potTarget);
-            console.log(`✅ Copied POT: ${filePath} → ${potTarget}`);
-        }
-
-        const match = file.match(/^forkop\.([a-zA-Z_]+)\.po$/);
-        if (match) {
-            const lang = match[1];
-            const poTarget = path.join(targetRoot, lang, 'forkop.po');
-            await fs.mkdir(path.dirname(poTarget), { recursive: true });
-            await fs.copyFile(filePath, poTarget);
-            console.log(`✅ Copied ${lang.toUpperCase()}: ${filePath} → ${poTarget}`);
-        }
+    if (file === 'forkop.pot') {
+      const potTarget = path.join(targetRoot, 'templates', 'forkop.pot');
+      await fs.mkdir(path.dirname(potTarget), { recursive: true });
+      await fs.copyFile(filePath, potTarget);
+      console.log(`✅ Copied POT: ${filePath} → ${potTarget}`);
     }
+
+    const match = file.match(/^forkop\.([a-zA-Z_]+)\.po$/);
+    if (match) {
+      const lang = match[1];
+      const poTarget = path.join(targetRoot, lang, 'forkop.po');
+      await fs.mkdir(path.dirname(poTarget), { recursive: true });
+      await fs.copyFile(filePath, poTarget);
+      console.log(`✅ Copied ${lang.toUpperCase()}: ${filePath} → ${poTarget}`);
+    }
+  }
 }
 
 main().catch((err) => {
-    console.error('❌ Ошибка при распространении переводов:', err);
-    process.exit(1);
+  console.error('❌ Ошибка при распространении переводов:', err);
+  process.exit(1);
 });

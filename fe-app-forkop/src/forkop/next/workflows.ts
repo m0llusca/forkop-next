@@ -1,3 +1,4 @@
+import { ensureRowOverflowMenu } from '../workspace/actionMenu';
 export type WorkflowTarget = {
   name: string;
   label?: string;
@@ -154,6 +155,7 @@ export type RuleDestination = {
   kind: 'create' | 'edit' | 'site';
   section?: string;
   option?: string;
+  site?: string;
 };
 /** Native section IDs are passed as data, never interpolated into selectors. */
 export function navigateToRule(
@@ -241,17 +243,18 @@ export function renderQuickSite(
   input.setAttribute('aria-label', 'Сайт или адрес страницы');
   field.append(input);
   const scope = document.createElement('label');
-  scope.textContent = 'Включая поддомены';
+  scope.className = 'fkp-next-check';
   const subdomains = document.createElement('input');
   subdomains.type = 'checkbox';
   subdomains.checked = true;
-  scope.append(subdomains);
+  scope.append(subdomains, 'Включая поддомены');
   const context = document.createElement('p');
   context.textContent = `Изменяется правило «${label}», приоритет ${priority}. Правила выше проверяются первыми; остальные условия этого правила сохраняются. Это дополнение к существующим доменам, не отдельное правило.`;
   const preview = document.createElement('output');
   preview.setAttribute('aria-live', 'polite');
   const add = document.createElement('button');
   add.type = 'button';
+  add.className = 'fkp-next-primary-action';
   add.textContent = 'Добавить в черновик правила';
   add.disabled = textarea.disabled || textarea.readOnly;
   input.disabled = add.disabled;
@@ -344,7 +347,9 @@ export function configureRuleWorkflow(section: NativeRuleSection): void {
           (!requested.option ||
             [
               'selector_proxy_links',
+              '_wg_warp_helper',
               'subscription_url',
+              '_subscription_preview',
               'interfaces',
               'outbound_jsons',
               'urltest',
@@ -358,10 +363,11 @@ export function configureRuleWorkflow(section: NativeRuleSection): void {
       const option =
         requested.option ||
         (requested.kind === 'site' ? 'domain' : 'selector_proxy_links');
+      const cfg = this.uciconfig || this.map.config;
       const field = [...root.querySelectorAll<HTMLElement>('[id]')].find(
         (node) =>
-          node.id ===
-          `cbid.${this.uciconfig || this.map.config}.${name}.${option}`,
+          node.id === `cbid.${cfg}.${name}.${option}` ||
+          node.id === `cbi-${cfg}-${name}-${option}`,
       );
       const tab =
         option === 'domain' || option === 'fully_routed_ips'
@@ -375,9 +381,21 @@ export function configureRuleWorkflow(section: NativeRuleSection): void {
         if (parent instanceof HTMLDetailsElement) parent.open = true;
         parent = parent.parentElement;
       }
-      const input = field?.matches('input,textarea,select')
+      if (requested.kind === 'site' && requested.site) {
+        const quickInput = root.querySelector<HTMLInputElement>(
+          '[aria-label="Сайт или адрес страницы"]',
+        );
+        if (quickInput && !quickInput.disabled) {
+          quickInput.value = requested.site;
+          quickInput.dispatchEvent(new Event('input', { bubbles: true }));
+          quickInput.focus();
+          quickInput.scrollIntoView?.({ block: 'center' });
+          return result;
+        }
+      }
+      const input = field?.matches('input,textarea,select,button')
         ? field
-        : field?.querySelector<HTMLElement>('input,textarea,select');
+        : field?.querySelector<HTMLElement>('input,textarea,select,button');
       input?.focus();
       field?.scrollIntoView?.({ block: 'center' });
       return result;
@@ -421,12 +439,27 @@ export function configureRuleWorkflow(section: NativeRuleSection): void {
     for (const row of table.querySelectorAll<HTMLElement>('tr[data-sid]')) {
       const button = document.createElement('button');
       button.type = 'button';
+      button.className = 'cbi-button fkp-rule-add-site';
       button.textContent = 'Добавить сайт';
       button.onclick = () =>
         navigateToRule(table, { kind: 'site', section: row.dataset.sid });
-      (
-        row.querySelector('.cbi-section-actions') || row.lastElementChild
-      )?.append(button);
+      const actions =
+        row.querySelector('.cbi-section-actions') || row.lastElementChild;
+      if (actions) {
+        const bar =
+          actions.querySelector<HTMLElement>(
+            ':scope > .fkp-rule-actions-bar, :scope > div:not(.cbi-dropdown):not(.fkp-rule-order)',
+          ) || actions;
+        const editBtn = bar.querySelector(':scope > .cbi-button-edit');
+        if (editBtn) bar.insertBefore(button, editBtn);
+        else bar.append(button);
+        const rowName =
+          row.querySelector('.fkp-rule-name')?.textContent?.trim() ||
+          row.getAttribute('data-title') ||
+          row.dataset.sid ||
+          '';
+        ensureRowOverflowMenu(bar as HTMLElement, rowName);
+      }
     }
     return table;
   };

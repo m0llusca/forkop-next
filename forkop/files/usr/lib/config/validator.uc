@@ -396,7 +396,8 @@ function plain_domain_ip_list_reference_valid(reference) {
 
     return reference == "" ||
         remote_reference(reference) ||
-        absolute_reference_with_extension(reference, ".lst", null);
+        absolute_reference_with_extension(reference, ".lst", ".yaml") ||
+        absolute_reference_with_extension(reference, ".yml", null);
 }
 
 function valid_outbound() {
@@ -1061,11 +1062,11 @@ function validate_proxy_parameter_value(value, allowed, parameter, section) {
 function validate_proxy_parameter_filters(protocols, transports, securities, section) {
     for (let value in protocols)
         validate_proxy_parameter_value(value,
-            [ "direct", "http", "hysteria2", "shadowsocks", "socks", "trojan", "vless", "vmess" ],
+            [ "direct", "http", "hysteria2", "shadowsocks", "socks", "trojan", "vless", "vmess", "wireguard", "amneziawg", "warp" ],
             "protocol", section);
     for (let value in transports)
         validate_proxy_parameter_value(value,
-            [ "tcp", "ws", "grpc", "http", "httpupgrade", "xhttp" ],
+            [ "tcp", "udp", "ws", "grpc", "http", "httpupgrade", "xhttp" ],
             "transport", section);
     for (let value in securities)
         validate_proxy_parameter_value(value, [ "none", "tls", "reality" ], "security", section);
@@ -1297,7 +1298,59 @@ function validate_outbound_record_fragment(outbound, section) {
         fail_validation("Invalid JSON outbound in rule '" + section + "': " + error + ". Aborted.");
 }
 
-function validate_outbound_json_rule(section) {
+function validator_is_extended_core(_context) {
+    let env_version = getenv("FORKOP_SING_BOX_VERSION") || "";
+    if (env_version != "")
+        return index(lc(env_version), "extended") >= 0;
+    if (fixture_uci_data != null && !command_exists("sing-box"))
+        return true;
+    let sb_rt = require("singbox.runtime");
+    return sb_rt.sing_box_is_extended(sb_rt.get_sing_box_version());
+}
+
+function validate_endpoint_outbound_json(outbound, section, context) {
+    let outbound_type = lc(trim(as_string(object_or_empty(outbound).type || "")));
+    if (outbound_type != "wireguard" && outbound_type != "warp")
+        return;
+
+    let probe = {};
+    for (let k, v in outbound)
+        probe[k] = v;
+    if (trim(as_string(probe.tag || "")) == "")
+        probe.tag = "validator-probe";
+
+    let conv = require("singbox.wireguard").to_singbox_endpoint(probe, validator_is_extended_core(context));
+    if (conv.endpoint == null)
+        fail_validation("Invalid " + outbound_type + " JSON endpoint in rule '" + section + "': " + as_string(conv.unsupported_reason || "invalid configuration") + ". Aborted.");
+}
+
+function validate_manual_proxy_links(section, context) {
+    let name = section_name(section);
+    let wg_mod = null;
+    let is_extended = null;
+
+    for (let link in connections.connection_urls(section)) {
+        let scheme = lc(core_url.scheme(as_string(link)));
+        if (!contains([ "wireguard", "wg", "awg", "amneziawg", "warp" ], scheme))
+            continue;
+
+        if (wg_mod == null)
+            wg_mod = require("singbox.wireguard");
+        if (is_extended == null)
+            is_extended = validator_is_extended_core(context);
+
+        let parsed = wg_mod.parse_share_link(link, "validator-link");
+        if (parsed == null)
+            fail_validation("Invalid " + scheme + ":// proxy link in rule '" + name + "'. Aborted.");
+
+        parsed.tag = "validator-link";
+        let conv = wg_mod.to_singbox_endpoint(parsed, is_extended);
+        if (conv.endpoint == null)
+            fail_validation("Invalid " + scheme + ":// proxy link in rule '" + name + "': " + as_string(conv.unsupported_reason || "invalid configuration") + ". Aborted.");
+    }
+}
+
+function validate_outbound_json_rule(section, context) {
     let name = section_name(section);
     let outbound_json = option(section, "outbound_json", "");
 
@@ -1306,10 +1359,12 @@ function validate_outbound_json_rule(section) {
 
     if (!valid_outbound_json(outbound_json))
         fail_validation("JSON outbound rule '" + name + "' must contain a valid sing-box outbound JSON object with a type field. Aborted.");
-    validate_outbound_record_fragment(outbound_json_object(outbound_json), name);
+    let outbound = outbound_json_object(outbound_json);
+    validate_outbound_record_fragment(outbound, name);
+    validate_endpoint_outbound_json(outbound, name, context);
 }
 
-function validate_outbound_json_values(section) {
+function validate_outbound_json_values(section, context) {
     let name = section_name(section);
     let values = connections.outbound_jsons(section);
     let require_user_tag = length(list_option(section, "outbound_jsons")) > 0;
@@ -1324,6 +1379,7 @@ function validate_outbound_json_values(section) {
 
         let outbound = outbound_json_object(value);
         validate_outbound_record_fragment(outbound, name);
+        validate_endpoint_outbound_json(outbound, name, context);
         let tag_name = trim(as_string(outbound.tag || ""));
         if (tag_name == "" && require_user_tag)
             fail_validation("Connection rule '" + name + "' has JSON outbound without a non-empty tag. Aborted.");
@@ -1436,6 +1492,12 @@ function validate_rule(section, sections, context) {
     if (!rule_action_supported(action))
         fail_validation("Enabled rule '" + name + "' uses unsupported action '" + action + "'. Aborted.");
 
+    if (section.console_mode != null && as_string(section.console_mode) != "") {
+        let cm = option(section, "console_mode", "0");
+        if (type(section.console_mode) == "array" || (cm != "0" && cm != "1"))
+            fail_validation("Invalid boolean in rule '" + name + "' option console_mode: expected 0 or 1. Aborted.");
+    }
+
     if (action != "dns")
         for (let value in list_option(section, "ports"))
             validate_port_condition_value(value, name);
@@ -1469,6 +1531,7 @@ function validate_rule(section, sections, context) {
 
     if (connections.is_connections_action(action)) {
         validate_dashboard_filter(section);
+        validate_manual_proxy_links(section, context);
 
         for (let urltest_id in connections.urltests(section)) {
             validate_urltest_identifier_value(urltest_id, name);
@@ -1526,11 +1589,11 @@ function validate_rule(section, sections, context) {
             }
         }
 
-        validate_outbound_json_values(section);
+        validate_outbound_json_values(section, context);
     }
 
     if (action == "outbound")
-        validate_outbound_json_rule(section);
+        validate_outbound_json_rule(section, context);
 
     validate_combined_domain_text_value(option(section, "domain", ""), name);
     for (let value in list_option(section, "domain_suffix"))
@@ -1723,6 +1786,39 @@ function validate_runtime_config(context) {
     if (type(settings.https_domain_routing) == "array" ||
         (https_domain_routing != "0" && https_domain_routing != "1"))
         fail_validation("Invalid boolean in settings.https_domain_routing: expected 0 or 1. Aborted.");
+
+    for (let bool_key in [ "bittorrent_direct", "torrserver_direct" ]) {
+        if (settings[bool_key] != null && as_string(settings[bool_key]) != "") {
+            let bval = option(settings, bool_key, "0");
+            if (type(settings[bool_key]) == "array" || (bval != "0" && bval != "1"))
+                fail_validation("Invalid boolean in settings." + bool_key + ": expected 0 or 1. Aborted.");
+        }
+    }
+
+    let raw_cgroup = option(settings, "torrserver_cgroup", "");
+    if (type(settings.torrserver_cgroup) == "array")
+        fail_validation("Invalid cgroup path in settings.torrserver_cgroup. Aborted.");
+    if (raw_cgroup != "") {
+        let trimmed_cg = trim(raw_cgroup);
+        let stripped_cg = replace(replace(trimmed_cg, /^\/+/, ""), /\/+$/, "");
+        let cg_parts = stripped_cg == "" ? [] : split(stripped_cg, "/");
+        let cg_ok = trimmed_cg == raw_cgroup &&
+            match(trimmed_cg, /^[A-Za-z0-9._\/-]+$/) != null &&
+            index(trimmed_cg, "//") < 0 &&
+            length(cg_parts) >= 2 &&
+            !contains(cg_parts, ".") &&
+            !contains(cg_parts, "..");
+        if (!cg_ok)
+            fail_validation("Invalid relative cgroup v2 path in settings.torrserver_cgroup: " + raw_cgroup + ". Aborted.");
+    }
+
+    for (let path_key in [ "config_path", "cache_path" ]) {
+        let raw_path = option(settings, path_key, "");
+        if (raw_path != "") {
+            if (substr(raw_path, 0, 1) != "/" || match(raw_path, /[\r\n\t\0]/) != null || contains(split(raw_path, "/"), ".."))
+                fail_validation("Invalid filesystem path in settings." + path_key + ": " + raw_path + ". Aborted.");
+        }
+    }
 
     validate_runtime_mark_ranges_context(context);
     validate_dns_settings(settings, sections, context);

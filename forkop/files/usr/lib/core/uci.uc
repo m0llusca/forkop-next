@@ -267,7 +267,8 @@ function cursor() {
         return runtime_cursor;
 
     try {
-        runtime_cursor = require("uci").cursor();
+        let cfg_dir = getenv("FORKOP_UCI_CONFIG_DIR") || "";
+        runtime_cursor = cfg_dir != "" ? require("uci").cursor(cfg_dir) : require("uci").cursor();
     }
     catch (e) {
         runtime_cursor = null;
@@ -316,8 +317,11 @@ function value_to_list(value) {
     return words(value);
 }
 
-function get(path) {
-    path = as_string(path);
+function get(path, section_arg, option_arg) {
+    if (section_arg != null && option_arg != null)
+        path = as_string(path) + "." + as_string(section_arg) + "." + as_string(option_arg);
+    else
+        path = as_string(path);
     if (fixture_enabled())
         return state_get(path);
 

@@ -249,6 +249,11 @@ function acquire_component_lock() {
     let current_owner = trim(read_file(COMPONENT_LOCK_DIR + "/pid"));
     if (current_owner != "" && pid_running(current_owner))
         return false;
+    if (current_owner == "") {
+        let st = fs.stat(COMPONENT_LOCK_DIR);
+        if (st != null && st.mtime != null && time() - st.mtime < 5)
+            return false;
+    }
 
     remove_file(COMPONENT_LOCK_DIR + "/pid");
     command_success_from_args([ "rmdir", COMPONENT_LOCK_DIR ]);
@@ -561,6 +566,11 @@ function download_file_once(url, output_path) {
 }
 
 function download_with_retry(url, output_path, label) {
+    if ((getenv("FORKOP_ALLOW_CUSTOM_DOWNLOAD_ORIGIN") || "") != "1" &&
+        !require("components.updater").allowed_download_url(url)) {
+        updates_log("Refusing download from untrusted URL: " + as_string(url), "error");
+        return false;
+    }
     for (let attempt = 1; attempt <= 3; attempt++) {
         updates_log("Downloading " + as_string(label) + " (" + attempt + "/3)");
         if (download_file_once(url, output_path) && file_nonempty(output_path))
@@ -877,17 +887,22 @@ function resolve_zapret2_release(arch) {
 }
 
 function download_and_extract_zip_package(release, component) {
+    let updater = require("components.updater");
+    if (!updater.safe_asset_name(release.bundle_name))
+        return null;
     let bundle_file = tmp_dir + "/" + release.bundle_name;
     if (!download_with_retry(release.bundle_url, bundle_file, release.bundle_name))
         return null;
 
     let inner_package_path = is_apk() ?
-        select_inner_package_path(bundle_file, component, "", "apk") :
+        select_inner_package_path(bundle_file, component, release.arch, "apk") :
         select_inner_package_path(bundle_file, component, release.arch, "ipk");
     if (inner_package_path == "")
         return null;
 
     let package_name = path_basename(inner_package_path);
+    if (!updater.safe_asset_name(package_name))
+        return null;
     let package_file = tmp_dir + "/" + package_name;
     if (!command_success(command_from_args([ "unzip", "-p", bundle_file, inner_package_path ]) + " >" + shell_quote(package_file)) ||
         !file_nonempty(package_file))
@@ -926,6 +941,8 @@ function resolve_byedpi_release(arch) {
 }
 
 function download_byedpi_package(release) {
+    if (!require("components.updater").safe_asset_name(release.package_name))
+        return null;
     let package_file = tmp_dir + "/" + release.package_name;
     if (!download_with_retry(release.package_url, package_file, release.package_name) || !file_nonempty(package_file))
         return null;

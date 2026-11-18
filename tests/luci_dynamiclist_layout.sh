@@ -145,7 +145,7 @@ grep -Fq 'dnsDomainListsOption.depends("action", "dns");' <<<"$create_section" |
   fail "both list views must write the shared domain_ip_lists option"
 grep -Fq 'Add URLs or local paths to .srs / .json lists. Subnets are ignored by default.' <<<"$create_section" ||
   fail "routing rule-set copy must explain the default subnet behavior"
-grep -Fq 'Add URLs or local paths to .lst lists containing domains. IP entries are ignored.' <<<"$create_section" ||
+grep -Fq 'Add URLs or local paths to .lst or Clash .yaml / .yml lists containing domains. IP entries are ignored.' <<<"$create_section" ||
   fail "DNS list copy must explain that IP entries are ignored"
 
 grep -Fq 'background: transparent !important;' <<<"$close_all_styles" ||

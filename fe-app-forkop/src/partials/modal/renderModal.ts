@@ -195,7 +195,6 @@ export function renderModal(
   };
   const downloadButton = renderButton({
     text: _('Download'),
-    classNames: ['cbi-button-apply'],
     onClick: () => {
       if (exportReady) downloadAsTxt(currentText, name);
     },
@@ -225,7 +224,6 @@ export function renderModal(
   footer.push(
     renderButton({
       text: _('Close'),
-      classNames: ['cbi-button-remove'],
       onClick: () => {
         destroy();
         ui.hideModal();

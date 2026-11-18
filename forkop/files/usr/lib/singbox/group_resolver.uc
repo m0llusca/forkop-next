@@ -2,6 +2,7 @@
 let common = require("core.common");
 let runtime_urltest = require("singbox.urltest");
 let runtime_constants = require("singbox.constants");
+let filter_identity = require("singbox.filter_identity");
 let as_string = common.as_string;
 let array_or_empty = common.array_or_empty;
 let object_or_empty = common.object_or_empty;
@@ -70,9 +71,117 @@ function regex_match_set(tags, names, regexes) {
     return object_keys_set(runtime_urltest.regex_matching_tag_array(tags, names, regexes));
 }
 
-function tag_name_filter_matches(tag, names, name_filter, regex_set) {
-    let name = tag_display_name(tag, names);
-    return array_contains(name_filter, name) || regex_set[tag];
+function tags_share_same_filter_id(tags, filter_ids) {
+    if (length(tags) <= 1)
+        return length(tags) == 1;
+    filter_ids = object_or_empty(filter_ids);
+    let shared = "";
+    for (let t in tags) {
+        let fid = as_string(filter_ids[t] || "");
+        if (fid == "")
+            return false;
+        if (shared == "")
+            shared = fid;
+        else if (fid != shared)
+            return false;
+    }
+    return shared != "";
+}
+
+function resolve_name_filter_tag_set(candidate_tags, names, name_filter, metadata) {
+    let matched = {};
+    let selected_list = array_or_empty(name_filter);
+    if (length(selected_list) == 0)
+        return matched;
+
+    let pool = unique_string_array(candidate_tags);
+    names = object_or_empty(names);
+    metadata = object_or_empty(metadata);
+    let filter_names = object_or_empty(metadata.filterNames);
+    let filter_ids = object_or_empty(metadata.filterIds);
+
+    let display_by_tag = {};
+    let trimmed_by_tag = {};
+    let stem_by_tag = {};
+    for (let t in pool) {
+        let disp = tag_display_name(t, names);
+        display_by_tag[t] = disp;
+        trimmed_by_tag[t] = trim(disp);
+    }
+
+    for (let raw_selected in selected_list) {
+        let raw_str = as_string(raw_selected);
+        let sel = trim(raw_str);
+        if (sel == "")
+            continue;
+
+        // Tier 1: Exact match against active candidate display name
+        let tier1 = [];
+        for (let t in pool) {
+            if (trimmed_by_tag[t] == sel || display_by_tag[t] == raw_str)
+                push(tier1, t);
+        }
+        if (length(tier1) > 0) {
+            for (let t in tier1)
+                matched[t] = true;
+            continue;
+        }
+
+        // Tier 2: filterNames alias history (unambiguous single candidate or shared filterIds)
+        let tier2 = [];
+        for (let t in pool) {
+            for (let alias in array_or_empty(filter_names[t])) {
+                if (trim(as_string(alias)) == sel) {
+                    push(tier2, t);
+                    break;
+                }
+            }
+        }
+        if (length(tier2) > 0) {
+            if (tags_share_same_filter_id(tier2, filter_ids)) {
+                for (let t in tier2)
+                    matched[t] = true;
+            }
+            continue;
+        }
+
+        // Tier 3: canonical_label fallback when unique in the active candidate pool
+        let sel_stem = filter_identity.canonical_label(sel);
+        if (sel_stem == "")
+            continue;
+
+        let tier3 = [];
+        for (let t in pool) {
+            if (stem_by_tag[t] == null)
+                stem_by_tag[t] = filter_identity.canonical_label(display_by_tag[t]);
+            if (stem_by_tag[t] == sel_stem)
+                push(tier3, t);
+        }
+        if (tags_share_same_filter_id(tier3, filter_ids)) {
+            for (let t in tier3)
+                matched[t] = true;
+        }
+    }
+
+    return matched;
+}
+
+function tag_name_filter_matches(tag, names, name_filter, regex_set, candidate_tags, metadata, resolved_name_set) {
+    if (object_or_empty(regex_set)[tag])
+        return true;
+    if (type(resolved_name_set) == "object")
+        return !!resolved_name_set[tag];
+
+    let pool = type(candidate_tags) == "array" ? candidate_tags : keys(object_or_empty(names));
+    if (!array_contains(pool, tag)) {
+        let copy = [];
+        for (let item in pool)
+            push(copy, item);
+        push(copy, tag);
+        pool = copy;
+    }
+    let set_for_pool = resolve_name_filter_tag_set(pool, names, name_filter, metadata);
+    return !!set_for_pool[tag];
 }
 
 function tag_country_filter_matches(tag, countries, country_filter) {
@@ -128,12 +237,13 @@ function urltest_matching_candidate_outbounds(urltest_candidate_tags, names, cou
     country_filter = runtime_urltest.normalized_country_list(country_filter);
 
     let regex_set = regex_match_set(urltest_candidate_tags, names, regexes);
+    let resolved_name_set = resolve_name_filter_tag_set(urltest_candidate_tags, names, name_filter, metadata);
     let base_filter_configured = name_or_country_filter_configured(name_filter, regexes, country_filter);
     let additional_set = object_keys_set(additional_matches);
     let result = [];
 
     for (let tag in array_or_empty(urltest_candidate_tags)) {
-        let base_matches = tag_name_filter_matches(tag, names, name_filter, regex_set) ||
+        let base_matches = tag_name_filter_matches(tag, names, name_filter, regex_set, urltest_candidate_tags, metadata, resolved_name_set) ||
             tag_country_filter_matches(tag, countries, country_filter);
         let matches = additional_set[tag] || base_matches;
         if (proxy_parameters_enabled && proxy_parameters_operator == "or") {

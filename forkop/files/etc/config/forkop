@@ -35,6 +35,9 @@ config settings 'settings'
         option cache_path '/tmp/sing-box/cache.db'
         option log_level 'warn'
         option exclude_ntp '0'
+        option bittorrent_direct '0'
+        option torrserver_direct '0'
+        #option torrserver_cgroup '/services/torrserver'
         option shutdown_correctly '0'
 
 #config section 'subscription_example'
@@ -54,6 +57,7 @@ config settings 'settings'
 #        option outbound_detour_enabled '0'
 #        #option outbound_detour_section 'main'
 #        option sort_by_latency '0'
+#        #option console_mode '0'
 #        #list fully_routed_ips '192.168.1.2'
 
 #config section_interface

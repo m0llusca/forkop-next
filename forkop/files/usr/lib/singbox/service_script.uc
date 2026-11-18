@@ -12,12 +12,13 @@ function text(marker) {
         "    [ \"$enabled\" -eq \"1\" ] || return 0\n\n" +
         "    config_get config_file \"main\" \"conffile\" \"/etc/sing-box/config.json\"\n" +
         "    config_get working_directory \"main\" \"workdir\" \"/usr/share/sing-box\"\n" +
-        "    config_get_bool log_stderr \"main\" \"log_stderr\" \"1\"\n\n" +
+        "    config_get_bool log_stderr \"main\" \"log_stderr\" \"1\"\n" +
+        "    mkdir -p \"$working_directory\"\n\n" +
         "    procd_open_instance\n" +
         "    procd_set_param command \"$PROG\" run -c \"$config_file\" -D \"$working_directory\"\n" +
         "    procd_set_param file \"$config_file\"\n" +
         "    procd_set_param stderr \"$log_stderr\"\n" +
-        "    procd_set_param limits core=\"unlimited\"\n" +
+        "    procd_set_param limits core=\"0\"\n" +
         "    procd_set_param limits nofile=\"1000000 1000000\"\n" +
         "    procd_set_param term_timeout 30\n" +
         "    procd_set_param respawn\n" +

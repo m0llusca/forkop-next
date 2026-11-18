@@ -122,6 +122,12 @@ function controlled_option_failure(token, next_token) {
             [ base ]
         );
 
+    if (token == "--cache-dump" || index(token, "--cache-dump=") == 0 || token == "-L" || match(token, /^-L.+/) != null)
+        return validation_failure(
+            "Writing cache dump files is not allowed in Forkop-managed ciadpi strategies.",
+            [ base ]
+        );
+
     if (token == "--help" || token == "-h" || match(token, /^-h.+/) != null ||
         token == "--version" || token == "-v" || match(token, /^-v.+/) != null)
         return validation_failure(
@@ -228,7 +234,8 @@ function module_exports() {
     return {
         normalize_strategy_whitespace,
         strategy_or_default,
-        validate_byedpi_strategy
+        validate_byedpi_strategy,
+        validate_strategy: validate_byedpi_strategy
     };
 }
 

@@ -61,7 +61,7 @@ function remove_rt_tables_entry() {
     let changed = false;
     let lines = [];
     for (let line in split(data, "\n")) {
-        if (index(line, "105 forkop") >= 0) {
+        if (match(line, /^[ \t]*105[ \t]+forkop([ \t#].*)?$/) != null) {
             changed = true;
             continue;
         }

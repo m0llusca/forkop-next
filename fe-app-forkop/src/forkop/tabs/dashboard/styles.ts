@@ -128,6 +128,7 @@ export const styles = `
 
 .fkp_dashboard-page__outbound-section__title-section {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     justify-content: space-between;
     gap: 8px 10px;
@@ -143,15 +144,18 @@ export const styles = `
 
 .fkp_dashboard-page__outbound-section__title-section__actions {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     justify-content: flex-end;
-    gap: 6px;
-    flex: 0 0 auto;
+    gap: 8px;
+    flex: 0 1 auto;
+    min-width: 0;
 }
 
 .fkp_dashboard-page .btn.fkp_dashboard-page__outbound-section__subscription-update {
     min-width: 130px;
-    min-height: 28px;
+    min-height: 42px;
+    max-width: 100%;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -172,7 +176,8 @@ export const styles = `
 
 .fkp_dashboard-page .btn.dashboard-sections-grid-item-test-latency {
     min-width: 99px;
-    min-height: 28px;
+    min-height: 42px;
+    max-width: 100%;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -199,9 +204,10 @@ export const styles = `
 }
 
 .fkp_dashboard-page__subscription-meta {
-    --subscription-meta-action-size: 28px;
-    --subscription-meta-action-gap: 6px;
+    --subscription-meta-action-size: 42px;
+    --subscription-meta-action-gap: 8px;
     grid-column: 1 / -1;
+    min-width: 0;
     border: 2px var(--background-color-low, lightgray) solid;
     border-radius: 4px;
     padding: 8px 10px;
@@ -210,6 +216,7 @@ export const styles = `
 
 .fkp_dashboard-page__subscription-meta__main {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: 6px 10px;
     min-width: 0;
@@ -225,9 +232,9 @@ export const styles = `
 
 .fkp_dashboard-page__subscription-meta__title {
     flex: 0 1 auto;
-    width: max-content;
-    max-width: min(28ch, 30%);
-    min-width: min-content;
+    width: auto;
+    max-width: 100%;
+    min-width: 0;
     color: var(--text-color-high);
     font-weight: 700;
     line-height: 1.25;
@@ -267,6 +274,7 @@ export const styles = `
     flex: 0 0 auto;
     margin-left: auto;
     display: flex;
+    flex-wrap: wrap;
     justify-content: flex-end;
     gap: var(--subscription-meta-action-gap);
 }
@@ -325,7 +333,7 @@ export const styles = `
     }
 
     .fkp_dashboard-page__subscription-meta__title {
-        max-width: calc(100% - 42px);
+        max-width: 100%;
     }
 }
 
@@ -402,11 +410,11 @@ export const styles = `
 }
 
 .fkp_dashboard-page .btn.fkp_dashboard-page__outbound-grid__item__copy-button {
-    width: 22px;
-    height: 22px;
-    min-width: 22px;
-    min-height: 22px;
-    padding: 1px;
+    width: 42px;
+    height: 42px;
+    min-width: 42px;
+    min-height: 42px;
+    padding: 8px;
     box-sizing: border-box;
     display: flex;
     align-items: center;
@@ -416,14 +424,15 @@ export const styles = `
 }
 
 .fkp_dashboard-page__outbound-grid__item__copy-button svg {
-    width: 13px;
-    height: 13px;
+    width: 14px;
+    height: 14px;
     display: block;
     flex: 0 0 auto;
 }
 
 .fkp_dashboard-page__outbound-grid__item__footer {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     justify-content: space-between;
     gap: 8px;
@@ -453,8 +462,9 @@ export const styles = `
 
 .fkp_dashboard-page__urltest-details {
     box-sizing: border-box;
-    width: min(760px, calc(100vw - 56px));
+    width: min(760px, 100%);
     max-width: 100%;
+    min-width: 0;
     padding-top: 10px;
 }
 
@@ -530,18 +540,20 @@ export const styles = `
 .fkp_dashboard-page__urltest-details__table {
     display: grid;
     gap: 6px;
-    width: calc(100% + 14px);
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
     box-sizing: border-box;
     max-height: min(46vh, 460px);
     overflow-x: hidden;
     overflow-y: auto;
-    padding-right: 14px;
+    padding-right: 4px;
     scrollbar-gutter: auto;
 }
 
 .fkp_dashboard-page__urltest-details__row {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(54px, max-content) 20px;
+    grid-template-columns: minmax(0, 1fr) minmax(54px, max-content) 42px;
     align-items: center;
     gap: 8px;
     width: 100%;
@@ -645,23 +657,24 @@ export const styles = `
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    flex: 0 0 20px;
-    width: 20px;
-    min-width: 20px;
-    height: 20px;
+    flex: 0 0 42px;
+    width: 42px;
+    min-width: 42px;
+    height: 42px;
+    min-height: 42px;
     padding: 0;
     box-sizing: border-box;
 }
 
 .fkp_dashboard-page__urltest-details__copy-button svg {
-    width: 12px;
-    height: 12px;
+    width: 14px;
+    height: 14px;
 }
 
 .fkp_dashboard-page__urltest-details__copy-placeholder {
     display: block;
-    width: 20px;
-    min-width: 20px;
+    width: 42px;
+    min-width: 42px;
     height: 1px;
 }
 
@@ -688,12 +701,14 @@ export const styles = `
     }
 
     .fkp_dashboard-page__urltest-details__row {
-        grid-template-columns: minmax(0, 1fr) 20px;
+        grid-template-columns: minmax(0, 1fr) 42px;
     }
 
     .fkp_dashboard-page__urltest-details__row-meta {
         grid-column: 1 / -1;
         justify-content: flex-start;
+        flex-wrap: wrap;
+        white-space: normal;
     }
 }
 

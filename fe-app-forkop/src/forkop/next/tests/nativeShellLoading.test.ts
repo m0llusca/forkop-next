@@ -342,20 +342,19 @@ it.each(['DOM draft', 'saved UCI', 'local UCI', 'reordered UCI'])(
     if (kind === 'DOM draft') expect(draft.value).toBe('unsaved DNS');
   },
 );
-it('keeps local theme preferences outside UCI drafts so immediate route actions remain available', async () => {
+it('follows host LuCI theme updates without marking UCI drafts dirty so immediate route actions remain available', async () => {
   const state = setup({ getUiCapabilities: () => new Promise(() => {}) });
   const root: HTMLElement = await state.controller.render();
   document.body.append(root);
   root
     .querySelector<HTMLButtonElement>('[data-workspace-section=settings]')!
     .click();
-  const theme = root.querySelector<HTMLSelectElement>(
-    '[data-workspace-preferences] select',
-  );
-  expect(theme).not.toBeNull();
-  theme!.value = 'dark';
-  theme!.dispatchEvent(new Event('input', { bubbles: true }));
-  theme!.dispatchEvent(new Event('change', { bubbles: true }));
+  expect(root.querySelector('[data-workspace-preferences]')).toBeNull();
+  expect(root.querySelector('.fkp-workspace-theme-toggle')).toBeNull();
+  document.documentElement.setAttribute('data-darkmode', 'true');
+  await tick();
+  expect(root.dataset.theme).toBe('dark');
+  document.documentElement.removeAttribute('data-darkmode');
   vi.stubGlobal('fs', {
     exec: async () => ({ code: 0, stdout: '{"success":true}', stderr: '' }),
   });

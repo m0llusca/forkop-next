@@ -60,25 +60,62 @@ function getHeader(lang) {
 }
 
 function parsePo(content) {
-  const lines = content.split('\n');
+  const lines = content.split(/\r?\n/);
   const translations = new Map();
+  let mode = null;
   let msgid = null;
   let msgstr = null;
-  for (const line of lines) {
+
+  const flush = () => {
+    if (msgid !== null && msgid !== '' && msgstr !== null) {
+      translations.set(msgid, msgstr);
+    }
+    mode = null;
+    msgid = null;
+    msgstr = null;
+  };
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith('#')) {
+      flush();
+      continue;
+    }
     if (line.startsWith('msgid ')) {
+      flush();
       msgid = JSON.parse(line.slice(6));
+      mode = 'msgid';
     } else if (line.startsWith('msgstr ') && msgid !== null) {
       msgstr = JSON.parse(line.slice(7));
-      translations.set(msgid, msgstr);
-      msgid = null;
-      msgstr = null;
+      mode = 'msgstr';
+    } else if (line.startsWith('"') && line.endsWith('"')) {
+      const part = JSON.parse(line);
+      if (mode === 'msgid' && msgid !== null) {
+        msgid += part;
+      } else if (mode === 'msgstr' && msgstr !== null) {
+        msgstr += part;
+      }
     }
   }
+  flush();
   return translations;
 }
 
 function escapePoString(str) {
-  return str.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  return str
+    .replace(/\\/g, '\\\\')
+    .replace(/"/g, '\\"')
+    .replace(/\r/g, '\\r')
+    .replace(/\n/g, '\\n')
+    .replace(/\t/g, '\\t');
+}
+
+function extractExistingHeader(raw) {
+  if (!raw) return null;
+  const normalized = raw.replace(/\r\n/g, '\n');
+  const idx = normalized.indexOf('\n\n');
+  if (idx === -1 || !normalized.includes('msgid ""')) return null;
+  return normalized.slice(0, idx + 1);
 }
 
 async function generatePo() {
@@ -89,7 +126,7 @@ async function generatePo() {
 
   const calls = JSON.parse(callsRaw);
   const oldTranslations = parsePo(oldPoRaw);
-  const header = getHeader(lang);
+  const header = extractExistingHeader(oldPoRaw) ?? getHeader(lang).join('\n');
 
   const body = calls
     .map(({ key }) => {
@@ -103,11 +140,14 @@ async function generatePo() {
     })
     .join('\n');
 
-  const finalPo = header.join('\n') + '\n' + body;
+  const finalPo = header + '\n' + body;
 
   await fs.writeFile(poPath, finalPo, 'utf8');
+  const translatedCount = calls.filter(({ key }) =>
+    Boolean(oldTranslations.get(key)),
+  ).length;
   console.log(
-    `✅ Файл ${poPath} успешно сгенерирован. Переведено ${[...oldTranslations.keys()].length}/${calls.length}`,
+    `✅ Файл ${poPath} успешно сгенерирован. Переведено ${translatedCount}/${calls.length}`,
   );
 }
 

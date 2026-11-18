@@ -12,10 +12,23 @@ the original package metadata; see LICENSE for the supplied GPL version 2 text.
   adapted from the same Trafira revision (generator functions), with new behavioral
   tests before integration. The 1.14 schema adapter is a new implementation based
   on official migration documentation and the studied source-aware bypass shape.
-- Design and behavior references studied: rock12/FlowGate, Gavr1024/forkop-mod,
-  Screamshow/forkop-x and petrouspetr-pixel/trafira. Their branding and installation
-  defaults are not adopted wholesale. Exact additional code ports are recorded
-  in the corresponding test modules.
+- Design and behavior references studied: itdoginfo/podkop,
+  podkop-net/podkop-experimental, ushan0v/forkop, yandexru45/netshift,
+  rock12/FlowGate, Gavr1024/forkop-mod, Screamshow/forkop-x,
+  m-bezrukoff/AnticheburNET and petrouspetr-pixel/trafira. Their branding,
+  installation defaults, remote support keys, closed binaries (`podkop-engine`,
+  `rust-x`), custom core lock-ins and GPL-3.0 components (`ByeByeDPI`) are not
+  imported. Clean-room behavioral parity fixes and native Tier-2 implementations
+  (`nfqws2` `/opt/zapret2/lua` validation, SIP002/Clash `obfs-local` normalization,
+  Hysteria2 `server_ports`, RFC-3986 manual-link component decoding, router
+  `mangle_output` NTP exclusion, RFC 5180 `2001:2::/112` FakeIPv6, `priority 104`
+  `src_valid_mark` policy rule, `@timeserver` bootstrap DNS, 3-strike DNS/Pin Guard
+  debounce with `start_ticks` PID verification, `<50%` subscription shrink guard,
+  3-tier `filter_identity` continuity, pre-save `editor_preview`, Clash YAML
+  `rule-provider` lists, Console TCP/UDP split, `bittorrent_direct` and cgroupv2
+  `torrserver_direct`, 4-stage `tspu_classify`, and dual-core `wireguard` /
+  `amnezia` / Cloudflare `warp` endpoints) are new GPL-2.0-or-later code covered
+  by dedicated behavioral regression tests.
 - Regression specifications include Forkop pull requests #68, #80, #90, #103,
   #109, #112, #138, #139 and #142. Implementation provenance is recorded with
   the corresponding modules/tests rather than treating unmerged patches as proven.

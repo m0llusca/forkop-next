@@ -892,6 +892,10 @@ function nft_runtime_signature_body(settings, sections) {
     body = signature_add_value(body, "settings.source_network_interfaces", option(settings, "source_network_interfaces", "br-lan"));
     body = signature_add_value(body, "settings.exclude_ntp", bool_option(settings, "exclude_ntp", false) ? "1" : "0");
     body = signature_add_value(body, "settings.https_domain_routing", bool_option(settings, "https_domain_routing", false) ? "1" : "0");
+    if (bool_option(settings, "torrserver_direct", false)) {
+        body = signature_add_value(body, "settings.torrserver_direct", "1");
+        body = signature_add_value(body, "settings.torrserver_cgroup", trim(as_string(option(settings, "torrserver_cgroup", ""))));
+    }
 
     for (let section in sections) {
         section = object_or_empty(section);
@@ -916,6 +920,8 @@ function nft_runtime_signature_body(settings, sections) {
         body = signature_add_value(body, "rule." + name + ".remote_subnet_lists", option(section, "remote_subnet_lists", ""));
         body = signature_add_value(body, "rule." + name + ".rule_set_with_subnets", connections.rule_sets_with_subnets_value(section));
         body = signature_add_value(body, "rule." + name + ".domain_ip_lists", option(section, "domain_ip_lists", ""));
+        if (bool_option(section, "console_mode", false))
+            body = signature_add_value(body, "rule." + name + ".console_mode", "1");
     }
 
     return body;
@@ -1298,6 +1304,12 @@ function append_sing_box_rule_signature_body(body, section, sections) {
     if (action != "dns")
         body = signature_add_value(body, prefix + ".rule_set_with_subnets", connections.rule_sets_with_subnets_value(section));
     body = signature_add_value(body, prefix + ".domain_ip_lists", option(section, "domain_ip_lists", ""));
+    if (bool_option(section, "console_mode", false))
+        body = signature_add_value(body, prefix + ".console_mode", "1");
+    if (option(section, "next_target", "") != "")
+        body = signature_add_value(body, prefix + ".next_target", option(section, "next_target", ""));
+    if (option(section, "next_expires", "") != "")
+        body = signature_add_value(body, prefix + ".next_expires", option(section, "next_expires", ""));
 
     return body;
 }
@@ -1402,6 +1414,8 @@ function sing_box_signature_body(settings, sections, servers, mwan3_active) {
     body = signature_add_value(body, "settings.dns_rewrite_ttl", option(settings, "dns_rewrite_ttl", "60"));
     body = signature_add_value(body, "settings.output_network_interface", option(settings, "output_network_interface", ""));
     body = signature_add_value(body, "settings.disable_quic", bool_option_value(settings, "disable_quic", false));
+    if (bool_option(settings, "bittorrent_direct", false))
+        body = signature_add_value(body, "settings.bittorrent_direct", "1");
     if (sing_box_signature_has_remote_ruleset_sources(sections))
         body = signature_add_value(body, "settings.update_interval", settings_update_interval(settings));
     body = signature_add_value(body, "settings.cache_path", option(settings, "cache_path", "/tmp/sing-box/cache.db"));

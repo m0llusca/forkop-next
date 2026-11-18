@@ -40,6 +40,8 @@ export async function copyToClipboard(
       if (!document.execCommand('copy')) throw new Error('Clipboard refused');
     }
     textarea?.remove();
+    globalFallback?.remove();
+    globalFallback = undefined;
     announce(_('Copied'), false);
     return true;
   } catch {
@@ -59,8 +61,13 @@ export async function copyToClipboard(
         textarea?.remove();
         textarea = manual;
       }
-      if (!host.isConnected)
-        (previousFocus?.parentElement ?? document.body).append(host);
+      if (!host.isConnected) {
+        const mountTarget =
+          previousFocus?.closest(
+            '.fkp-workspace-modal, .fkp-workspace-main, .fkp-workspace',
+          ) ?? document.body;
+        mountTarget.append(host);
+      }
     }
     const select =
       host.querySelector('button') ?? document.createElement('button');

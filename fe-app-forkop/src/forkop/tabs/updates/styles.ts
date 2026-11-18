@@ -12,6 +12,7 @@ export const styles = `
 
 .fkp_updates-page {
     width: 100%;
+    min-width: 0;
 }
 
 .fkp_updates-page__components {
@@ -19,23 +20,26 @@ export const styles = `
     align-items: flex-start;
     gap: 10px;
     width: 100%;
+    min-width: 0;
     flex-wrap: wrap;
 }
 
 .fkp_updates-page__components-column {
     display: flex;
-    flex: 1 1 auto;
+    flex: 1 1 280px;
     flex-direction: column;
     gap: 10px;
-    min-width: max-content;
+    min-width: 0;
+    max-width: 100%;
 }
 
-@media (max-width: 760px) {
+@media (max-width: 960px) {
     .fkp_updates-page__components {
         flex-direction: column;
     }
 
     .fkp_updates-page__components-column {
+        flex-basis: auto;
         width: 100%;
         min-width: 0;
     }
@@ -48,7 +52,8 @@ export const styles = `
     display: flex;
     flex-direction: column;
     gap: 10px;
-    min-width: max-content;
+    min-width: 0;
+    max-width: 100%;
 }
 
 .fkp_updates-page__component__header {
@@ -56,6 +61,7 @@ export const styles = `
     align-items: center;
     flex-wrap: wrap;
     gap: 8px;
+    min-width: 0;
     border-bottom: 1px var(--background-color-low, lightgray) solid;
     padding-bottom: 8px;
     margin-bottom: 2px;
@@ -66,27 +72,34 @@ export const styles = `
     font-size: 16px;
     font-weight: bold;
     line-height: 1.2;
+    min-width: 0;
+    overflow-wrap: anywhere;
 }
 
 .fkp_updates-page__component__header-version {
     color: var(--text-color-medium, #888);
     font-size: 13px;
     font-weight: normal;
+    min-width: 0;
+    overflow-wrap: anywhere;
 }
 
 .fkp_updates-page__component__details {
     display: flex;
     flex-direction: column;
     gap: 6px;
+    min-width: 0;
 }
 
 .fkp_updates-page__component__info-row {
     display: flex;
     justify-content: flex-start;
     align-items: center;
+    flex-wrap: wrap;
     min-height: 24px;
     gap: 8px;
-    white-space: nowrap;
+    min-width: 0;
+    white-space: normal;
 }
 
 .fkp_updates-page__component__info-label {
@@ -100,6 +113,7 @@ export const styles = `
     font-size: 13px;
     text-align: left;
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: 6px;
     min-width: 0;
@@ -115,6 +129,7 @@ export const styles = `
     color: var(--link-color, #3498db) !important;
     text-decoration: underline;
     font-weight: bold;
+    overflow-wrap: anywhere;
 }
 
 .fkp_updates-page__component__release-version-link:hover {
@@ -126,6 +141,7 @@ export const styles = `
     flex-direction: column;
     gap: 10px;
     margin-top: auto;
+    min-width: 0;
 }
 
 .fkp_updates-page__component__actions--with-details {
@@ -137,8 +153,9 @@ export const styles = `
     display: flex;
     justify-content: flex-start;
     align-items: center;
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
     gap: 6px;
+    min-width: 0;
 }
 
 .fkp_updates-page__component__variants {
@@ -146,6 +163,7 @@ export const styles = `
     flex-direction: column;
     gap: 6px;
     margin-top: 4px;
+    min-width: 0;
 }
 
 .fkp_updates-page__component__variants-title {
@@ -156,7 +174,8 @@ export const styles = `
 
 .fkp_updates-page__component__variants-buttons {
     display: flex;
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
     gap: 6px;
+    min-width: 0;
 }
 `;

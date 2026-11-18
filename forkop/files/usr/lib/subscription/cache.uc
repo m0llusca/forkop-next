@@ -4,6 +4,7 @@ let fs = require("fs");
 let uci_core = require("core.uci");
 let connections = require("config.connections");
 let subscription_share_link = require("subscription.share_link");
+let filter_identity = require("singbox.filter_identity");
 
 const CONFIG_NAME = getenv("FORKOP_CONFIG_NAME") || "forkop";
 const LIB_DIR = getenv("FORKOP_LIB") || "/usr/lib/forkop";
@@ -613,11 +614,15 @@ function ensure_runtime_dirs() {
     ensure_dir(TMP_SING_BOX_FOLDER);
     ensure_dir(TMP_RULESET_FOLDER);
     ensure_dir(TMP_SUBSCRIPTION_FOLDER);
+    chmod_path(TMP_SUBSCRIPTION_FOLDER, "700");
     ensure_dir(FORKOP_RUNTIME_STATE_DIR);
     ensure_dir(FORKOP_SUBSCRIPTION_UPDATE_STATE_DIR);
     ensure_dir(FORKOP_SUBSCRIPTION_METADATA_DIR);
+    chmod_path(FORKOP_SUBSCRIPTION_METADATA_DIR, "700");
     ensure_dir(FORKOP_OUTBOUND_METADATA_DIR);
+    chmod_path(FORKOP_OUTBOUND_METADATA_DIR, "700");
     ensure_dir(FORKOP_SECTION_CACHE_DIR);
+    chmod_path(FORKOP_SECTION_CACHE_DIR, "700");
 }
 
 function clear_subscription_runtime_cache() {
@@ -1093,11 +1098,29 @@ function normalize_cache(cache, section, format_version) {
     cache.outboundMetadata = object_or_empty(cache.outboundMetadata);
     cache.outboundMetadata.names = object_or_empty(cache.outboundMetadata.names);
     cache.outboundMetadata.countries = object_or_empty(cache.outboundMetadata.countries);
+    if (cache.outboundMetadata.protocols != null)
+        cache.outboundMetadata.protocols = object_or_empty(cache.outboundMetadata.protocols);
+    if (cache.outboundMetadata.transports != null)
+        cache.outboundMetadata.transports = object_or_empty(cache.outboundMetadata.transports);
+    if (cache.outboundMetadata.securities != null)
+        cache.outboundMetadata.securities = object_or_empty(cache.outboundMetadata.securities);
+    if (cache.outboundMetadata.filterIds != null)
+        cache.outboundMetadata.filterIds = object_or_empty(cache.outboundMetadata.filterIds);
+    if (cache.outboundMetadata.filterNames != null)
+        cache.outboundMetadata.filterNames = object_or_empty(cache.outboundMetadata.filterNames);
     cache.servers = object_or_empty(cache.servers);
     cache.urltestCandidateTags = array_or_empty(cache.urltestCandidateTags);
     cache.urltestGroups = object_or_empty(cache.urltestGroups);
     cache.priorityGroups = object_or_empty(cache.priorityGroups);
     cache.subscriptionMetadata = array_or_empty(cache.subscriptionMetadata);
+    if (cache.selectorTag != null)
+        cache.selectorTag = as_string(cache.selectorTag);
+    if (cache.selectorOutbounds != null)
+        cache.selectorOutbounds = array_or_empty(cache.selectorOutbounds);
+    if (cache.urltestTags != null)
+        cache.urltestTags = array_or_empty(cache.urltestTags);
+    if (cache.priorityTags != null)
+        cache.priorityTags = array_or_empty(cache.priorityTags);
     return cache;
 }
 
@@ -1117,10 +1140,9 @@ function save_cache(cache_dir, section, format_version, cache) {
 
 function write_outbound_metadata(cache_dir, format_version, section, names_path, countries_path, servers_path) {
     let cache = load_cache(cache_dir, section);
-    cache.outboundMetadata = {
-        names: object_or_empty(read_json(names_path)),
-        countries: object_or_empty(read_json(countries_path))
-    };
+    cache.outboundMetadata = object_or_empty(cache.outboundMetadata);
+    cache.outboundMetadata.names = object_or_empty(read_json(names_path));
+    cache.outboundMetadata.countries = object_or_empty(read_json(countries_path));
     cache.servers = object_or_empty(read_json(servers_path));
     save_cache(cache_dir, section, format_version, cache);
 }
@@ -1481,6 +1503,8 @@ function download_subscription(url, filepath, http_proxy_address, headers_filepa
         let args = [
             "curl", "-fL", "-sS",
             "--connect-timeout", timeout,
+            "--max-time", "45",
+            "--max-filesize", "10485760",
             "--speed-time", timeout,
             "--speed-limit", "1"
         ];
@@ -1574,16 +1598,90 @@ function subscription_config_is_current(section_name_value, subscription_url, su
     return false;
 }
 
+function count_leaf_proxy_items(doc) {
+    doc = object_or_empty(doc);
+    let count = 0;
+    let non_leaf = {
+        selector: true,
+        urltest: true,
+        direct: true,
+        dns: true,
+        block: true
+    };
+    for (let item in array_or_empty(doc.outbounds)) {
+        if (type(item) != "object")
+            continue;
+        let t = lc(trim(as_string(item.type || "")));
+        if (t != "" && !non_leaf[t])
+            count++;
+    }
+    for (let ep in array_or_empty(doc.endpoints)) {
+        if (type(ep) != "object")
+            continue;
+        let t = lc(trim(as_string(ep.type || "")));
+        if (t != "" && !non_leaf[t])
+            count++;
+    }
+    return count;
+}
+
+function annotate_subscription_filter_identity(normalized_path, previous_json_path) {
+    let doc = read_json(normalized_path);
+    if (type(doc) != "object" || type(doc.outbounds) != "array")
+        return false;
+
+    let prev_by_cid = {};
+    let prev_cid_counts = {};
+    if (as_string(previous_json_path) != "" && file_nonempty(previous_json_path)) {
+        let prev_doc = object_or_empty(read_json(previous_json_path));
+        for (let prev_item in array_or_empty(prev_doc.outbounds)) {
+            if (type(prev_item) != "object")
+                continue;
+            let prev_cid = as_string(prev_item.__forkop_filter_id || filter_identity.connection_id(prev_item));
+            if (prev_cid == "")
+                continue;
+            prev_cid_counts[prev_cid] = (prev_cid_counts[prev_cid] || 0) + 1;
+            prev_by_cid[prev_cid] = prev_item;
+        }
+    }
+
+    let changed = false;
+    for (let item in doc.outbounds) {
+        if (type(item) != "object")
+            continue;
+        let cid = filter_identity.connection_id(item);
+        if (cid == "")
+            continue;
+        item.__forkop_filter_id = cid;
+        changed = true;
+        if (prev_cid_counts[cid] == 1) {
+            let prev = prev_by_cid[cid];
+            let prev_label = as_string(prev.remark != null ? prev.remark : prev.tag);
+            let cur_label = as_string(item.remark != null ? item.remark : item.tag);
+            let merged = filter_identity.merge_alias_history(prev.__forkop_filter_names, prev_label, cur_label, 16);
+            if (length(merged) > 0)
+                item.__forkop_filter_names = merged;
+        }
+    }
+
+    return changed ? write_json(normalized_path, doc) : true;
+}
+
 function get_subscription_download_proxy_address(section_name_value, sections, parsed, phase) {
     let download_section = as_string(object_or_empty(parsed).download_section);
-    if (download_section == "" || download_section == as_string(section_name_value))
+    if (download_section == "")
         return "";
+
+    if (download_section == as_string(section_name_value))
+        return phase == "preview" ? null : "";
 
     let port = connections.subscription_download_target_port(sections, download_section, int(SB_SERVICE_MIXED_INBOUND_PORT));
     if (port <= 0)
-        return "";
+        return phase == "preview" ? null : "";
 
     if (!sing_box_service_running()) {
+        if (phase == "preview")
+            return null;
         if (phase == "startup")
             log_message("Subscription source for rule '" + section_name_value + "' is configured to download via rule '" + download_section + "', but sing-box is not running yet; downloading it directly during startup", "warn");
         else
@@ -1596,7 +1694,7 @@ function get_subscription_download_proxy_address(section_name_value, sections, p
     return address;
 }
 
-function download_subscription_into_cache(section_name_value, subscription_url, subscription_json_path, subscription_url_cache_path, service_proxy_address_value, subscription_user_agent, subscription_hwid, source_index, cache_section, metadata_output_path, sections) {
+function download_subscription_into_cache(section_name_value, subscription_url, subscription_json_path, subscription_url_cache_path, service_proxy_address_value, subscription_user_agent, subscription_hwid, source_index, cache_section, metadata_output_path, sections, mode) {
     ensure_dir(TMP_SUBSCRIPTION_FOLDER);
     let subscription_user_agent_cache_path = source_user_agent_path(TMP_SUBSCRIPTION_FOLDER, cache_section);
     let subscription_hwid_cache_path = source_hwid_path(TMP_SUBSCRIPTION_FOLDER, cache_section);
@@ -1661,6 +1759,25 @@ function download_subscription_into_cache(section_name_value, subscription_url, 
             unlink_path(metadata_tmpfile);
             return 4;
         }
+
+        if (file_nonempty(subscription_json_path) &&
+            as_string(getenv("FORKOP_ALLOW_SUBSCRIPTION_SHRINK") || "") != "1" &&
+            as_string(mode || "") != "force_shrink") {
+            let old_count = count_leaf_proxy_items(read_json(subscription_json_path));
+            let new_count = count_leaf_proxy_items(read_json(normalized_tmpfile));
+            if (old_count >= 4 && new_count * 2 < old_count) {
+                log_message("Subscription source for rule '" + section_name_value + "' shrunk from " + old_count + " to " + new_count + " proxy entries (<50%); keeping cached subscription", "warn");
+                if (metadata_output_path != "")
+                    unlink_path(metadata_output_path);
+                unlink_path(raw_tmpfile);
+                unlink_path(headers_tmpfile);
+                unlink_path(normalized_tmpfile);
+                unlink_path(metadata_tmpfile);
+                return 5;
+            }
+        }
+
+        annotate_subscription_filter_identity(normalized_tmpfile, subscription_json_path);
 
         if (files_equal(normalized_tmpfile, subscription_json_path)) {
             write_text(subscription_url_cache_path, subscription_url);
@@ -1736,6 +1853,114 @@ function download_subscription_into_cache(section_name_value, subscription_url, 
     else
         log_message("No compatible subscription request profile produced valid proxy entries for rule '" + section_name_value + "'", "error");
     return 1;
+}
+
+function editor_download_source(entry, source_section, dest_dir) {
+    entry = object_or_empty(entry);
+    ensure_dir(dest_dir);
+    let url = trim(as_string(entry.url || ""));
+    if (url == "" || match(url, /^https?:\/\//i) == null)
+        return { ok: false, error: "invalid_source_url", message: "Subscription source URL must use http:// or https://" };
+
+    let proxy_enabled = entry.download_via_proxy_enabled === true || as_string(entry.download_via_proxy_enabled) == "1";
+    let proxy_section = trim(as_string(entry.download_via_proxy_section || ""));
+    let proxy_address = "";
+    if (proxy_enabled) {
+        if (proxy_section == "")
+            return { ok: false, error: "download_proxy_unavailable", message: "No download proxy rule selected" };
+        let sections = uci_sections();
+        let resolved_proxy = get_subscription_download_proxy_address(
+            as_string(entry.section_id || ""),
+            sections,
+            { download_section: proxy_section },
+            "preview"
+        );
+        if (resolved_proxy == null || resolved_proxy == "")
+            return { ok: false, error: "download_proxy_unavailable", message: "Configured download proxy section '" + proxy_section + "' is not active" };
+        proxy_address = resolved_proxy;
+    }
+
+    let user_agent = trim(as_string(entry.user_agent || ""));
+    let hwid_auto = entry.hwid_auto === true || as_string(entry.hwid_auto) == "1";
+    let configured_hwid = hwid_auto ? "auto" : trim(as_string(entry.hwid || ""));
+    let default_user_agent = get_subscription_user_agent("");
+    let parser = subscription_parser();
+    let raw_tmpfile = temp_path(dest_dir, source_section, "preview-raw");
+    let normalized_tmpfile = temp_path(dest_dir, source_section, "preview-norm");
+    let json_path = source_json_path(dest_dir, source_section);
+    let url_path = source_url_path(dest_dir, source_section);
+    let ua_path = source_user_agent_path(dest_dir, source_section);
+    let hwid_path = source_hwid_path(dest_dir, source_section);
+
+    for (let effective_user_agent in user_agent_candidates(user_agent, "", default_user_agent)) {
+        unlink_path(raw_tmpfile);
+        unlink_path(normalized_tmpfile);
+        let effective_hwid = configured_hwid != "" ? (configured_hwid == "auto" ? generate_hwid() : configured_hwid) : generate_hwid();
+        let args = [
+            "curl", "-fL", "-sS",
+            "--connect-timeout", "8",
+            "--max-time", "12",
+            "--max-filesize", "4194304",
+            "--speed-time", "8",
+            "--speed-limit", "1"
+        ];
+        if (proxy_address != "") {
+            push(args, "-x");
+            push(args, "http://" + proxy_address);
+        }
+        push(args, "-o");
+        push(args, raw_tmpfile);
+        for (let header in [
+            "User-Agent: " + get_subscription_user_agent(effective_user_agent),
+            "X-HWID: " + effective_hwid,
+            "X-Device-OS: OpenWrt Linux",
+            "X-Device-Model: " + get_device_model(),
+            "X-Ver-OS: " + get_kernel_version(),
+            "Accept-Language: ru-RU,en,*",
+            "X-Device-Locale: EN"
+        ]) {
+            push(args, "-H");
+            push(args, header);
+        }
+        push(args, url);
+
+        let status = command_status_from_args(args);
+        if (status != 0 || !file_nonempty(raw_tmpfile)) {
+            unlink_path(raw_tmpfile);
+            if (status == 5 || status == 6)
+                break;
+            continue;
+        }
+
+        parser.try_decode_gzip_content_file(raw_tmpfile);
+        if (!parser.normalize_content_validated(raw_tmpfile, normalized_tmpfile)) {
+            unlink_path(raw_tmpfile);
+            unlink_path(normalized_tmpfile);
+            continue;
+        }
+
+        subscription_share_link.populate_subscription_file(normalized_tmpfile);
+        annotate_subscription_filter_identity(normalized_tmpfile, "");
+        if (!move_file(normalized_tmpfile, json_path)) {
+            unlink_path(raw_tmpfile);
+            unlink_path(normalized_tmpfile);
+            return { ok: false, error: "cache_write_failed", message: "Failed to write preview subscription cache" };
+        }
+        write_text(url_path, url);
+        write_text(ua_path, effective_user_agent);
+        write_text(hwid_path, configured_hwid == "auto" ? effective_hwid : configured_hwid);
+        unlink_path(raw_tmpfile);
+        return {
+            ok: true,
+            json_path,
+            effective_user_agent,
+            effective_hwid
+        };
+    }
+
+    unlink_path(raw_tmpfile);
+    unlink_path(normalized_tmpfile);
+    return { ok: false, error: "download_or_import_failed", message: "Failed to download or parse subscription source" };
 }
 
 function cached_source_status(source_section, parsed) {
@@ -1815,18 +2040,24 @@ function update_subscription_source(section_name_value, index_value, entry, phas
         index,
         source_section,
         as_string(metadata_output_path),
-        sections
+        sections,
+        phase || "runtime"
     );
     let succeeded = result == 0 || result == 2;
     let current = succeeded ? object_or_empty(read_json(source_json_path(TMP_SUBSCRIPTION_FOLDER, source_section))) : {};
     let old = {}, added = 0;
     for (let outbound in array_or_empty(previous.outbounds)) old[sprintf("%J", outbound)] = true;
     for (let outbound in array_or_empty(current.outbounds)) if (!old[sprintf("%J", outbound)]) added++;
+    let failure_reason = "download_or_import_failed";
+    if (result == 4)
+        failure_reason = "source_changed";
+    else if (result == 5)
+        failure_reason = "subscription_shrunk";
     evidence.record(source_section, evidence.identity(section, entry), {attemptedAt,succeeded,
-        reason:result == 4 ? "source_changed" : "download_or_import_failed",added,
+        reason:failure_reason,added,
         accepted:succeeded ? length(array_or_empty(current.outbounds)) : null,
         skipped:succeeded && current.skipped != null ? int(current.skipped) : null});
-    return result;
+    return result == 5 ? 1 : result;
 }
 
 function subscription_update_timestamp_path(section_name_value) {
@@ -2444,6 +2675,15 @@ function deferred_subscription_bootstrap_retry_worker(remaining_sections) {
     }
 
     unlink_path(FORKOP_SUBSCRIPTION_BOOTSTRAP_RETRY_PID_FILE);
+}
+
+if ((sourcepath(1) != null && sourcepath(1) != "") || SCRIPT_NAME != sourcepath(0)) {
+    return {
+        editor_download_source,
+        get_subscription_download_proxy_address,
+        count_leaf_proxy_items,
+        annotate_subscription_filter_identity
+    };
 }
 
 let mode = ARGV[0] || "";

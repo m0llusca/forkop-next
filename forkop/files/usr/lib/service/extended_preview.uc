@@ -32,21 +32,36 @@ function label_context(saved,state) {
         if(type(value)!='object') {context.certain=false;return;}
         // Only the outbound's display fields are labels. All other string values,
         // including unknown protocol options and nested headers, are private context.
-        for(let key,item in value)if(index(['tag','remark'],key)<0)strings(item);
+        for(let key,item in value)if(index(['tag','remark'],key)<0&&substr(common.as_string(key),0,9)!='__forkop_')strings(item);
     }
     function source_url(value,manual) {
         value=common.as_string(value);
         if(value=='')return;
-        // Match manual_link_outbound's single preprocessing step before the
-        // shared URL component helpers decode userinfo/query. Do not recurse or
-        // apply this manual-link interpretation to subscription request URLs.
-        if(manual&&url.scheme(value)!='vmess')value=url.strip_fragment(url.decode(value));
-        let scheme=url.scheme(value);
+        // Match manual_link_outbound's fragment-stripping step while letting
+        // shared URL component helpers decode userinfo/query once per RFC 3986.
+        // Do not apply manual-link fragment handling to subscription request URLs.
+        if(manual&&url.scheme(value)!='vmess')value=url.strip_fragment(value);
+        let scheme=lc(url.scheme(value));
+        if(index(['wireguard','wg','awg','amneziawg','warp'],scheme)>=0) {
+            add(value);
+            let rest=substr(value,index(value,'://')+3);
+            let qpos=index(rest,'?');
+            let auth_part=qpos>=0?substr(rest,0,qpos):rest;
+            let at=rindex(auth_part,'@');
+            if(at>0) {
+                let raw_u=substr(auth_part,0,at);
+                add(raw_u);add(url.decode(raw_u));
+                for(let part in split(raw_u,':')) {add(part);add(url.decode(part));}
+            }
+            for(let key,item in url.query_params(value))add(item);
+            return;
+        }
         if(index(['http','https','vless','trojan','hysteria2','hy2','socks','socks4','socks5'],scheme)<0) {
             context.certain=false;return;
         }
         add(value);
         let user=url.userinfo(value);add(user);
+        let colon=index(user,':');if(colon>=0)add(substr(user,colon+1));
         for(let part in split(user,':'))add(part);
         for(let key,item in url.query_params(value))add(item);
         for(let part in split(url.path(url.strip_fragment(value)),'/'))add(url.decode(part));
@@ -54,7 +69,7 @@ function label_context(saved,state) {
     function credential_fields(value) {
         if(type(value)!='object'&&type(value)!='array')return;
         for(let key,item in value) {
-            if(match(common.as_string(key),/password|passwd|uuid|private_key|preshared_key|token|secret|auth|username|hwid|user_agent|cookie|headers/i))strings(item);
+            if(match(common.as_string(key),/password|passwd|uuid|private_key|preshared_key|pre_shared_key|auth_token|license_key|header_protection_key|token|secret|auth|username|hwid|user_agent|cookie|headers/i))strings(item);
             else credential_fields(item);
         }
     }
@@ -75,7 +90,11 @@ function label_context(saved,state) {
         if(basis.digest(raw)!=record.digest)die('source_changed');
         if(raw==null)continue;
         if(match(record.path,/\.json$/)) {
-            try {for(let item in arr(obj(json(raw)).outbounds))outbound(item);}
+            try {
+                let parsed_json=obj(json(raw));
+                for(let item in arr(parsed_json.outbounds))outbound(item);
+                for(let item in arr(parsed_json.endpoints))outbound(item);
+            }
             catch(e){context.certain=false;}
         }
         else if(match(record.path,/\.url$/))source_url(split(raw,'\n')[0]);

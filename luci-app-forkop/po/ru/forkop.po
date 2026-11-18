@@ -38,24 +38,6 @@ msgstr "✔ Работает"
 msgid "✘ Stopped"
 msgstr "✘ Остановлен"
 
-msgid "Выбран"
-msgstr "Выбран"
-
-msgid "Выбрать"
-msgstr "Выбрать"
-
-msgid "Выбрать сервер"
-msgstr "Выбрать сервер"
-
-msgid "Недоступен"
-msgstr "Недоступен"
-
-msgid "Переключаем…"
-msgstr "Переключаем…"
-
-msgid "Состав URLTest и Priority"
-msgstr "Состав URLTest и Priority"
-
 msgid "A secret key is required for YACD access from LAN or WAN. Without remote access, the controller stays private and LuCI uses its authenticated connection."
 msgstr "Для доступа к YACD из локальной сети или интернета нужен секретный ключ. Если этот доступ отключён, контроллер остаётся закрытым, а LuCI использует собственное защищённое подключение."
 
@@ -86,14 +68,17 @@ msgstr "Добавить серверный inbound"
 msgid "Add at least one DNS server"
 msgstr "Добавьте хотя бы один DNS-сервер"
 
+msgid "Add at least one subscription URL or connection source first"
+msgstr "Сначала добавьте хотя бы один URL подписки или источник подключения"
+
 msgid "Add prefix to nodes"
 msgstr "Добавлять префикс к узлам"
 
-msgid "Add URLs or local paths to .lst lists containing domains and subnets."
-msgstr "Добавьте URL или локальные пути к спискам .lst с доменами и подсетями."
+msgid "Add URLs or local paths to .lst or Clash .yaml / .yml lists containing domains and subnets."
+msgstr "Добавьте URL-адреса или локальные пути к спискам .lst или Clash .yaml / .yml с доменами и подсетями."
 
-msgid "Add URLs or local paths to .lst lists containing domains. IP entries are ignored."
-msgstr "Добавьте URL или локальные пути к спискам .lst с доменами. IP игнорируются."
+msgid "Add URLs or local paths to .lst or Clash .yaml / .yml lists containing domains. IP entries are ignored."
+msgstr "Добавьте URL-адреса или локальные пути к спискам .lst или Clash .yaml / .yml с доменами. IP-записи игнорируются."
 
 msgid "Add URLs or local paths to .srs / .json lists. Only domain rules are supported."
 msgstr "Добавьте URL или локальные пути к спискам .srs / .json. Поддерживаются только доменные правила."
@@ -164,6 +149,33 @@ msgstr "ALPN"
 msgid "Alter ID"
 msgstr "Alter ID"
 
+msgid "AmneziaWG h1-h4 header ranges must not overlap"
+msgstr "Диапазоны заголовков AmneziaWG h1–h4 не должны пересекаться"
+
+msgid "AmneziaWG h1-h4 headers must be valid 32-bit integers or min-max ranges"
+msgstr "Заголовки AmneziaWG h1–h4 должны быть 32-битными целыми числами или диапазонами min-max"
+
+msgid "AmneziaWG i1-i5 signature packets must be non-empty single-line strings"
+msgstr "Пакеты сигнатур AmneziaWG i1–i5 должны быть непустыми однострочными строками"
+
+msgid "AmneziaWG jc is required when jmin or jmax is set"
+msgstr "Параметр AmneziaWG jc обязателен при указании jmin или jmax"
+
+msgid "AmneziaWG jc must be an integer between 1 and 128"
+msgstr "Параметр AmneziaWG jc должен быть целым числом от 1 до 128"
+
+msgid "AmneziaWG jmax must be an integer between 0 and 1280"
+msgstr "Параметр AmneziaWG jmax должен быть целым числом от 0 до 1280"
+
+msgid "AmneziaWG jmin must be an integer between 0 and 1280"
+msgstr "Параметр AmneziaWG jmin должен быть целым числом от 0 до 1280"
+
+msgid "AmneziaWG jmin must be less than or equal to jmax (max 1280)"
+msgstr "Параметр AmneziaWG jmin должен быть не больше jmax (максимум 1280)"
+
+msgid "AmneziaWG s1-s4 padding values must be integers between 0 and 1280"
+msgstr "Значения выравнивания AmneziaWG s1–s4 должны быть целыми числами от 0 до 1280"
+
 msgid "Apply section rules only to the specified local IP addresses"
 msgstr "Применять правила секции только к указанным локальным IP-адресам"
 
@@ -206,6 +218,9 @@ msgstr "Автовыбор самого быстрого узла уровня"
 msgid "Available actions"
 msgstr "Доступные действия"
 
+msgid "Back"
+msgstr "Назад"
+
 msgid "Backend validation failed: %s"
 msgstr "Backend-проверка завершилась ошибкой: %s"
 
@@ -214,6 +229,9 @@ msgstr "Bootstrap DNS"
 
 msgid "Bootstrap DNS Servers"
 msgstr "Bootstrap DNS-серверы"
+
+msgid "Bootstrap registration via active Mixed inbound section (optional)"
+msgstr "Регистрация через активное правило с портом Mixed inbound (необязательно)"
 
 msgid "Browser FakeIP check could not be completed"
 msgstr "Не удалось выполнить проверку FakeIP в браузере"
@@ -290,6 +308,9 @@ msgstr "Путь к сертификату"
 msgid "Certificate pin is unavailable. Apply or restart the server to generate the default certificate, then open this dialog again."
 msgstr "Пин сертификата недоступен. Примените или перезапустите сервер, чтобы сгенерировать дефолтный сертификат, затем откройте это окно снова."
 
+msgid "Check HTTPS domains using existing routing rules even when an app uses a saved IP. Applies to the configured source LAN; does not force all traffic to Main. TLS is not decrypted. May increase CPU load."
+msgstr "Проверять домены HTTPS по существующим правилам, даже если приложение использует сохранённый IP. Действует для настроенной исходной локальной сети; не направляет весь трафик в Main. TLS не расшифровывается. Может увеличить нагрузку на процессор."
+
 msgid "Check interval"
 msgstr "Интервал проверки"
 
@@ -344,6 +365,15 @@ msgstr "Закрыть подключение"
 msgid "Closed"
 msgstr "Закрытые"
 
+msgid "Cloudflare WARP generator"
+msgstr "Генератор профиля Cloudflare WARP"
+
+msgid "Cloudflare WARP profile generated and added"
+msgstr "Профиль Cloudflare WARP создан и добавлен"
+
+msgid "Cloudflare WARP supports only 1-sided AmneziaWG parameters (jc, jmin, jmax, i1-i5)"
+msgstr "Cloudflare WARP поддерживает только односторонние параметры AmneziaWG (jc, jmin, jmax, i1–i5)"
+
 msgid "Component update available"
 msgstr "Доступно обновление компонента"
 
@@ -382,6 +412,9 @@ msgstr "Подключения недоступны"
 
 msgid "Connectivity probe failed"
 msgstr "Проверка соединения не прошла"
+
+msgid "Console gaming mode (TCP proxy, UDP direct)"
+msgstr "Консольный игровой режим (TCP через прокси, UDP напрямую)"
 
 msgid "Copied"
 msgstr "Скопировано"
@@ -422,8 +455,17 @@ msgstr "Удалить"
 msgid "Detect server country"
 msgstr "Определять страну сервера"
 
+msgid "Detected format: AmneziaWG (awg:// with packet obfuscation)"
+msgstr "Определён формат: AmneziaWG (awg:// с обфускацией пакетов)"
+
+msgid "Detected format: Standard WireGuard (wireguard://)"
+msgstr "Определён формат: стандартный WireGuard (wireguard://)"
+
 msgid "detour must be a non-empty string"
 msgstr "detour должен быть непустой строкой"
+
+msgid "Device"
+msgstr "Устройство"
 
 msgid "Device filter"
 msgstr "Фильтр по устройствам"
@@ -443,8 +485,17 @@ msgstr "Диагностика"
 msgid "Direct"
 msgstr "Напрямую"
 
+msgid "Direct BitTorrent bypass"
+msgstr "Прямой обход BitTorrent"
+
 msgid "Direct connection"
 msgstr "Прямое подключение"
+
+msgid "Direct connection (from router)"
+msgstr "Прямое подключение (с роутера)"
+
+msgid "Direct router TorrServer bypass"
+msgstr "Прямой обход локального TorrServer на роутере"
 
 msgid "Disable autostart"
 msgstr "Отключить автостарт"
@@ -599,11 +650,26 @@ msgstr "Такой тег JSON outbound уже используется"
 msgid "Duplicate value"
 msgstr "Дублирующееся значение"
 
+msgid "Each WireGuard peer must be a JSON object"
+msgstr "Каждый пир WireGuard должен быть JSON-объектом"
+
+msgid "Each WireGuard peer requires a numeric port from 1 to 65535"
+msgstr "Для каждого пира WireGuard требуется числовой порт от 1 до 65535"
+
+msgid "Each WireGuard peer requires a valid address"
+msgstr "Для каждого пира WireGuard требуется корректный адрес"
+
+msgid "Each WireGuard peer requires a valid Curve25519 public_key"
+msgstr "Для каждого пира WireGuard требуется корректный Curve25519 public_key"
+
 msgid "Edit rule action"
 msgstr "Изменить"
 
 msgid "Enable"
 msgstr "Включить"
+
+msgid "Enable 1-sided AmneziaWG obfuscation (Jc=4, Jmin=40, Jmax=70)"
+msgstr "Включить одностороннюю обфускацию AmneziaWG (Jc=4, Jmin=40, Jmax=70)"
 
 msgid "Enable authentication"
 msgstr "Включить авторизацию"
@@ -719,6 +785,12 @@ msgstr "Не удалось скопировать. Выделите текст 
 msgid "Failed to execute"
 msgstr "Не удалось выполнить"
 
+msgid "Failed to read .conf file"
+msgstr "Не удалось прочитать файл .conf"
+
+msgid "Failed to register Cloudflare WARP profile"
+msgstr "Не удалось зарегистрировать профиль Cloudflare WARP"
+
 msgid "Failed to update subscriptions"
 msgstr "Не удалось обновить подписки"
 
@@ -743,6 +815,12 @@ msgstr "Интервал поиска более быстрого сервера
 msgid "Fastest"
 msgstr "Самый быстрый"
 
+msgid "Fetching subscription preview..."
+msgstr "Загружаем предпросмотр подписки..."
+
+msgid "Filter previewed servers by name or country..."
+msgstr "Поиск сервера по названию или стране..."
+
 msgid "Filter the servers that will be displayed on the dashboard."
 msgstr "Отфильтровать серверы, которые будут отображаться в дашборде."
 
@@ -757,6 +835,9 @@ msgstr "Принудительная маршрутизация устройст
 
 msgid "Forkop Error"
 msgstr "Ошибка Forkop"
+
+msgid "Forkop has been installed"
+msgstr "Forkop установлен"
 
 msgid "Forkop manages ciadpi pid files itself, so pidfile options are not allowed here."
 msgstr "Forkop сам управляет pid-файлами ciadpi, поэтому параметры pidfile здесь запрещены."
@@ -823,6 +904,9 @@ msgstr "Proxy protocol для фронтинга"
 
 msgid "Fuzzing is not supported here because Forkop needs deterministic runtime validation."
 msgstr "Fuzzing здесь не поддерживается, потому что Forkop нужна предсказуемая runtime-валидация."
+
+msgid "Generate Cloudflare WARP profile"
+msgstr "Создать профиль Cloudflare WARP"
 
 msgid "Generate HWID from router hardware information for this subscription"
 msgstr "Генерировать HWID из аппаратной информации роутера для этой подписки"
@@ -911,11 +995,20 @@ msgstr "HWID"
 msgid "Idle timeout"
 msgstr "Таймаут простоя"
 
+msgid "Import .conf as Connection URL"
+msgstr "Импортировать .conf в URL подключения"
+
 msgid "Import subscription URLTest groups"
 msgstr "Добавлять URLTest группы из подписки"
 
 msgid "Import URLTest groups returned by this subscription provider"
 msgstr "Импортировать URLTest группы, если провайдер подписки возвращает их"
+
+msgid "Import WireGuard / AmneziaWG / Generate WARP"
+msgstr "Импорт WireGuard / AmneziaWG / Генератор WARP"
+
+msgid "Import WireGuard or AmneziaWG .conf"
+msgstr "Импорт файла .conf WireGuard или AmneziaWG"
 
 msgid "Inbound JSON"
 msgstr "Inbound JSON"
@@ -943,6 +1036,9 @@ msgstr "Включить серверы"
 
 msgid "Information"
 msgstr "Информация"
+
+msgid "Inspect HTTPS domains"
+msgstr "Проверять домены HTTPS"
 
 msgid "Install"
 msgstr "Установить"
@@ -1043,6 +1139,12 @@ msgstr "Неверный формат JSON"
 msgid "Invalid NFQWS2 strategy"
 msgstr "Некорректная стратегия NFQWS2"
 
+msgid "Invalid or missing WireGuard peer public key"
+msgstr "Отсутствует или некорректен публичный ключ пира WireGuard"
+
+msgid "Invalid or missing WireGuard private key"
+msgstr "Отсутствует или некорректен приватный ключ WireGuard"
+
 msgid "Invalid path format. Path must start with \"/\" and contain valid characters"
 msgstr "Неверный формат пути. Путь должен начинаться с \"/\" и содержать допустимые символы"
 
@@ -1054,6 +1156,9 @@ msgstr "Неверный порт или диапазон. Используйт�
 
 msgid "Invalid regular expression"
 msgstr "Неверное регулярное выражение"
+
+msgid "Invalid server host or port in WARP URL"
+msgstr "Некорректный адрес сервера или порт в ссылке WARP"
 
 msgid "Invalid Shadowsocks URL: decoded credentials must contain method:password"
 msgstr "Неверный URL Shadowsocks: декодированные данные должны содержать method:password"
@@ -1112,6 +1217,27 @@ msgstr "Неверный URL-адрес SOCKS: должен начинаться
 msgid "Invalid SOCKS URL: parsing failed"
 msgstr "Неверный URL SOCKS: парсинг не удался"
 
+msgid "Invalid Trojan URL: invalid host and port"
+msgstr "Неверный URL Trojan: некорректные хост и порт"
+
+msgid "Invalid Trojan URL: invalid port number"
+msgstr "Неверный URL Trojan: неверный номер порта"
+
+msgid "Invalid Trojan URL: missing credentials and host"
+msgstr "Неверный URL Trojan: отсутствуют учетные данные и хост"
+
+msgid "Invalid Trojan URL: missing hostname"
+msgstr "Неверный URL Trojan: отсутствует имя хоста"
+
+msgid "Invalid Trojan URL: missing hostname and port"
+msgstr "Неверный URL Trojan: отсутствуют имя хоста и порт"
+
+msgid "Invalid Trojan URL: missing password"
+msgstr "Неверный URL Trojan: отсутствует пароль"
+
+msgid "Invalid Trojan URL: missing port"
+msgstr "Неверный URL Trojan: отсутствует порт"
+
 msgid "Invalid Trojan URL: must not contain spaces"
 msgstr "Неверный URL Trojan: не должен содержать пробелов"
 
@@ -1124,11 +1250,95 @@ msgstr "Неверный URL Trojan: ошибка разбора"
 msgid "Invalid URL format"
 msgstr "Неверный формат URL"
 
+msgid "Invalid VLESS URL: flow xtls-rprx-vision-udp443 is not supported"
+msgstr "Неверный URL VLESS: flow xtls-rprx-vision-udp443 не поддерживается"
+
+msgid "Invalid VLESS URL: invalid host and port"
+msgstr "Неверный URL VLESS: некорректные хост и порт"
+
+msgid "Invalid VLESS URL: invalid port number"
+msgstr "Неверный URL VLESS: неверный номер порта"
+
+msgid "Invalid VLESS URL: missing fp for reality"
+msgstr "Неверный URL VLESS: отсутствует параметр fp для reality"
+
+msgid "Invalid VLESS URL: missing host and UUID"
+msgstr "Неверный URL VLESS: отсутствуют хост и UUID"
+
+msgid "Invalid VLESS URL: missing hostname"
+msgstr "Неверный URL VLESS: отсутствует имя хоста"
+
+msgid "Invalid VLESS URL: missing pbk for reality"
+msgstr "Неверный URL VLESS: отсутствует параметр pbk для reality"
+
+msgid "Invalid VLESS URL: missing port"
+msgstr "Неверный URL VLESS: отсутствует порт"
+
+msgid "Invalid VLESS URL: missing query parameters"
+msgstr "Неверный URL VLESS: отсутствуют параметры запроса"
+
+msgid "Invalid VLESS URL: missing server"
+msgstr "Неверный URL VLESS: отсутствует сервер"
+
+msgid "Invalid VLESS URL: missing UUID"
+msgstr "Неверный URL VLESS: отсутствует UUID"
+
+msgid "Invalid VLESS URL: must not contain spaces"
+msgstr "Неверный URL VLESS: не должен содержать пробелов"
+
+msgid "Invalid VLESS URL: must start with vless://"
+msgstr "Неверный URL VLESS: должен начинаться с vless://"
+
 msgid "Invalid VLESS URL: parsing failed"
 msgstr "Неверный URL VLESS: ошибка разбора"
 
+msgid "Invalid VLESS URL: unsupported or missing security"
+msgstr "Неверный URL VLESS: неподдерживаемый или отсутствующий параметр security"
+
+msgid "Invalid VLESS URL: unsupported or missing type"
+msgstr "Неверный URL VLESS: неподдерживаемый или отсутствующий параметр type"
+
+msgid "Invalid VMess URL: invalid config"
+msgstr "Неверный URL VMess: некорректная конфигурация"
+
+msgid "Invalid VMess URL: invalid port number"
+msgstr "Неверный URL VMess: неверный номер порта"
+
+msgid "Invalid VMess URL: invalid server"
+msgstr "Неверный URL VMess: некорректный сервер"
+
+msgid "Invalid VMess URL: missing encoded config"
+msgstr "Неверный URL VMess: отсутствует закодированная конфигурация"
+
+msgid "Invalid VMess URL: missing UUID"
+msgstr "Неверный URL VMess: отсутствует UUID"
+
+msgid "Invalid VMess URL: must not contain spaces"
+msgstr "Неверный URL VMess: не должен содержать пробелов"
+
+msgid "Invalid VMess URL: must start with vmess://"
+msgstr "Неверный URL VMess: должен начинаться с vmess://"
+
 msgid "Invalid VMess URL: parsing failed"
 msgstr "Некорректный VMess URL: ошибка разбора"
+
+msgid "Invalid WireGuard AllowedIPs CIDR"
+msgstr "Некорректная подсеть CIDR в AllowedIPs WireGuard"
+
+msgid "Invalid WireGuard interface address or CIDR"
+msgstr "Некорректный адрес интерфейса или CIDR WireGuard"
+
+msgid "Invalid WireGuard peer public key in WARP URL"
+msgstr "Некорректный публичный ключ пира WireGuard в ссылке WARP"
+
+msgid "Invalid WireGuard pre-shared key"
+msgstr "Некорректный общий ключ (PSK) WireGuard"
+
+msgid "Invalid WireGuard private key in WARP URL"
+msgstr "Некорректный приватный ключ WireGuard в ссылке WARP"
+
+msgid "Invalid WireGuard server host or port"
+msgstr "Некорректный адрес сервера или порт WireGuard"
 
 msgid "IPs"
 msgstr "IP-адреса"
@@ -1196,8 +1406,8 @@ msgstr "Уровень"
 msgid "Level name"
 msgstr "Название уровня"
 
-msgid "List must be an HTTP(S) URL or a local .lst path"
-msgstr "Список должен быть HTTP(S) URL или локальным путём .lst"
+msgid "List must be an HTTP(S) URL or a local .lst, .yaml, or .yml path"
+msgstr "Список должен быть HTTP(S)-ссылкой или локальным путём к файлу .lst, .yaml или .yml"
 
 msgid "List Update Frequency"
 msgstr "Частота обновления списков"
@@ -1211,6 +1421,9 @@ msgstr "Порт прослушивания"
 msgid "Listening port"
 msgstr "Слушающий порт"
 
+msgid "Load .conf file from device"
+msgstr "Загрузить файл .conf с устройства"
+
 msgid "Loading client link..."
 msgstr "Загрузка клиентской ссылки..."
 
@@ -1222,6 +1435,9 @@ msgstr "Загрузка..."
 
 msgid "Log Level"
 msgstr "Уровень логов"
+
+msgid "LuCI app"
+msgstr "Интерфейс LuCI"
 
 msgid "Main DNS"
 msgstr "Основной DNS"
@@ -1265,6 +1481,9 @@ msgstr "Наблюдаемые интерфейсы"
 msgid "Monitoring"
 msgstr "Мониторинг"
 
+msgid "More details"
+msgstr "Подробнее"
+
 msgid "Must be a number in the range of 0 - 10000"
 msgstr "Должно быть числом в диапазоне 0 - 10000"
 
@@ -1303,6 +1522,9 @@ msgstr "Стратегия NFQWS2 не может быть пустой"
 
 msgid "No"
 msgstr "Нет"
+
+msgid "No account needed: registers a free Cloudflare WARP keypair directly on the router."
+msgstr "Аккаунт не нужен: роутер сам выпустит бесплатную пару ключей Cloudflare WARP."
 
 msgid "No active connections"
 msgstr "Нет активных подключений"
@@ -1354,6 +1576,9 @@ msgstr "Не установлено"
 
 msgid "Not measured"
 msgstr "Не измерено"
+
+msgid "Not previewed yet"
+msgstr "Предпросмотр ещё не выполнялся"
 
 msgid "Not public"
 msgstr "Не публичный"
@@ -1418,6 +1643,9 @@ msgstr "Необязательное значение здесь нужно пе
 msgid "Optional values must be attached with '=' here; a separate token would be ignored by nfqws2."
 msgstr "Необязательные значения здесь должны задаваться через '='; отдельный токен будет проигнорирован nfqws2."
 
+msgid "Optional WARP+ license key"
+msgstr "Необязательный лицензионный ключ WARP+"
+
 msgid "outbounds must be a non-empty array of strings"
 msgstr "outbounds должен быть непустым массивом строк"
 
@@ -1433,8 +1661,17 @@ msgstr "Пароль"
 msgid "Password cannot be empty"
 msgstr "Пароль не может быть пустым"
 
+msgid "Paste [Interface] and [Peer] configuration"
+msgstr "Вставьте конфигурацию [Interface] и [Peer]"
+
+msgid "Paste or upload a .conf file to detect WireGuard or AmneziaWG parameters"
+msgstr "Вставьте текст или загрузите файл .conf для автоматического определения параметров WireGuard / AmneziaWG"
+
 msgid "Path cannot be empty"
 msgstr "Путь не может быть пустым"
+
+msgid "Path contains invalid segments"
+msgstr "Путь содержит недопустимые сегменты"
 
 msgid "Path must be absolute (start with /)"
 msgstr "Путь должен быть абсолютным (начинаться с /)"
@@ -1466,6 +1703,9 @@ msgstr "Конфликт порта"
 msgid "Port for the local mixed proxy of this section"
 msgstr "Порт локального смешанного прокси для этой секции"
 
+msgid "Port must be a number between 1 and 65535"
+msgstr "Порт должен быть числом от 1 до 65535"
+
 msgid "Port must be between 1 and 65535"
 msgstr "Порт должен быть от 1 до 65535"
 
@@ -1487,6 +1727,15 @@ msgstr "Предпочитаемый IP"
 msgid "Prefix text"
 msgstr "Текст префикса"
 
+msgid "Preview error"
+msgstr "Ошибка предпросмотра"
+
+msgid "Preview subscription servers"
+msgstr "Предпросмотр серверов подписки"
+
+msgid "Previewed servers"
+msgstr "Серверы из предпросмотра"
+
 msgid "Priority"
 msgstr "Приоритет"
 
@@ -1504,6 +1753,12 @@ msgstr "Уровни приоритета"
 
 msgid "Priority settings"
 msgstr "Настройки приоритета"
+
+msgid "Profile"
+msgstr "Профиль"
+
+msgid "Profile display name"
+msgstr "Отображаемое имя профиля"
 
 msgid "Protocol"
 msgstr "Протокол"
@@ -1553,6 +1808,9 @@ msgstr "Не удалось обновить. Сохранён последни�
 msgid "Refreshing…"
 msgstr "Обновляем…"
 
+msgid "Registering Cloudflare WARP..."
+msgstr "Регистрация Cloudflare WARP..."
+
 msgid "Regular expression must not contain spaces or commas"
 msgstr "Регулярное выражение не должно содержать пробелы или запятые"
 
@@ -1570,6 +1828,9 @@ msgstr "Исключить из уровня серверы, имена кото
 
 msgid "Remove the specified servers from this level."
 msgstr "Исключить из уровня указанные серверы."
+
+msgid "Request failed"
+msgstr "Ошибка выполнения запроса"
 
 msgid "Require a username and password for the local mixed proxy"
 msgstr "Требовать логин и пароль для локального смешанного прокси"
@@ -1601,11 +1862,17 @@ msgstr "Продолжить обновление"
 msgid "Route"
 msgstr "Маршрут"
 
+msgid "Route local TorrServer peer swarm sockets directly via cgroupv2 while preserving FakeIP tracker resolution."
+msgstr "Направлять пиринговые сокеты локального TorrServer напрямую через cgroupv2 с сохранением разрешения трекеров через FakeIP."
+
 msgid "Route main DNS requests through the selected section."
 msgstr "Маршрутизировать основные DNS-запросы через выбранную секцию."
 
 msgid "Route requests to this DNS server through another section."
 msgstr "Направлять запросы к этому DNS-серверу через другую секцию."
+
+msgid "Route TCP (store, sign-in, party signaling) through this connection while sending non-FakeIP UDP (voice, P2P/STUN, game ticks) directly for Open NAT and low latency."
+msgstr "Направлять TCP (магазин, вход в аккаунт, сигнализация тусовки) через это подключение, а не-FakeIP UDP (голос, P2P/STUN, игровой трафик) — напрямую для Open NAT и минимальной задержки."
 
 msgid "Routing mode"
 msgstr "Режим маршрутизации"
@@ -1697,6 +1964,9 @@ msgstr "Выберите сетевой интерфейс для VPN-подкл
 msgid "Select or enter a User-Agent"
 msgstr "Выберите или введите User-Agent"
 
+msgid "Select or enter DNS server"
+msgstr "Выберите или введите DNS-сервер"
+
 msgid "Select or enter path for sing-box cache file. Change this ONLY if you know what you are doing"
 msgstr "Выберите или введите путь к файлу кеша sing-box. Изменяйте это, ТОЛЬКО если вы знаете, что делаете"
 
@@ -1730,6 +2000,9 @@ msgstr "Выбранная секция"
 msgid "Selector and URLTest outbounds must contain a non-empty outbounds array"
 msgstr "Selector и URLTest outbound должны содержать непустой массив outbounds"
 
+msgid "Send sniffed BitTorrent peer traffic directly outside tunnels while keeping tracker domain rules intact."
+msgstr "Направлять распознанный пиринговый трафик BitTorrent напрямую в обход туннелей, сохраняя правила для доменов трекеров."
+
 msgid "Server"
 msgstr "Сервер"
 
@@ -1762,6 +2035,9 @@ msgstr "server_port должен быть числом от 1 до 65535"
 
 msgid "Servers"
 msgstr "Серверы"
+
+msgid "Servers available for filtering"
+msgstr "Серверов доступно для фильтрации"
 
 msgid "Servers on dashboard"
 msgstr "Серверы в дашборде"
@@ -1901,6 +2177,9 @@ msgstr "Автообновление подписи"
 msgid "Subscription info:"
 msgstr "Информация о подписке:"
 
+msgid "Subscription preview failed"
+msgstr "Не удалось выполнить предпросмотр подписки"
+
 msgid "Subscription update failed"
 msgstr "Обновление подписки завершилось ошибкой"
 
@@ -1915,6 +2194,12 @@ msgstr "Настройки URL подписки"
 
 msgid "Subscriptions updated"
 msgstr "Подписки обновлены"
+
+msgid "Support"
+msgstr "Поддержка"
+
+msgid "System"
+msgstr "Система"
 
 msgid "System info"
 msgstr "Системная информация"
@@ -2087,6 +2372,9 @@ msgstr "Неожиданный отдельный токен. Используй
 msgid "unknown"
 msgstr "неизвестно"
 
+msgid "Unknown AmneziaWG parameter"
+msgstr "Неизвестный параметр AmneziaWG"
+
 msgid "Unknown ByeDPI option: %s"
 msgstr "Неизвестная опция ByeDPI: %s"
 
@@ -2129,8 +2417,11 @@ msgstr "Исходящий"
 msgid "Uploaded"
 msgstr "Отдано"
 
-msgid "URL must start with vless://, vmess://, ss://, trojan://, socks4://, socks4a://, socks5://, hysteria2://, or hy2://"
-msgstr "URL должен начинаться с vless://, vmess://, ss://, trojan://, socks4://, socks4a://, socks5://, hysteria2:// или hy2://"
+msgid "URL must start with vless://, vmess://, ss://, trojan://, socks4://, socks4a://, socks5://, hysteria2://, hy2://, wireguard://, wg://, awg://, amneziawg://, or warp://"
+msgstr "URL должен начинаться с vless://, vmess://, ss://, trojan://, socks4://, socks4a://, socks5://, hysteria2://, hy2://, wireguard://, wg://, awg://, amneziawg:// или warp://"
+
+msgid "URL must start with wireguard://, wg://, awg://, amneziawg://, or warp://"
+msgstr "URL должен начинаться с wireguard://, wg://, awg://, amneziawg:// или warp://"
 
 msgid "URL must use one of the following protocols:"
 msgstr "URL должен использовать один из следующих протоколов:"
@@ -2167,6 +2458,12 @@ msgstr "Используйте неотрицательное целое чис�
 
 msgid "Use a non-zero secret"
 msgstr "Укажите ненулевой секрет"
+
+msgid "Use a valid UUID"
+msgstr "Укажите корректный UUID"
+
+msgid "Use an existing tunnel config from your provider or self-hosted Amnezia server."
+msgstr "Подойдёт готовый файл конфигурации от VPN-провайдера или личного сервера Amnezia."
 
 msgid "Use an HTTP or HTTPS URL"
 msgstr "Укажите HTTP или HTTPS URL"
@@ -2207,6 +2504,9 @@ msgstr "Имя пользователя"
 msgid "Username cannot be empty"
 msgstr "Логин не может быть пустым"
 
+msgid "UUID"
+msgstr "UUID"
+
 msgid "Valid"
 msgstr "Валидно"
 
@@ -2228,20 +2528,29 @@ msgstr "Посмотреть логи"
 msgid "VLESS flow"
 msgstr "VLESS flow"
 
-msgid "vless://, vmess://, ss://, trojan://, socks4/5://, hy2/hysteria2:// links"
-msgstr "ссылки vless://, vmess://, ss://, trojan://, socks4/5://, hy2/hysteria2://"
-
-msgid "Inspect HTTPS domains"
-msgstr "Проверять домены HTTPS"
-
-msgid "Check HTTPS domains using existing routing rules even when an app uses a saved IP. Applies to the configured source LAN; does not force all traffic to Main. TLS is not decrypted. May increase CPU load."
-msgstr "Проверять домены HTTPS по существующим правилам, даже если приложение использует сохранённый IP. Действует для настроенной исходной локальной сети; не направляет весь трафик в Main. TLS не расшифровывается. Может увеличить нагрузку на процессор."
+msgid "vless://, vmess://, ss://, trojan://, socks4/5://, hy2/hysteria2://, wireguard/wg://, awg/amneziawg://, warp:// links"
+msgstr "Ссылки vless://, vmess://, ss://, trojan://, socks4/5://, hy2/hysteria2://, wireguard/wg://, awg/amneziawg://, warp://"
 
 msgid "WAN"
 msgstr "WAN"
 
 msgid "WAN public IP"
 msgstr "Публичный WAN IP"
+
+msgid "WARP amnezia field must be a JSON object"
+msgstr "Поле amnezia в WARP должно быть JSON-объектом"
+
+msgid "WARP outbound does not accept manual mtu override"
+msgstr "Исходящее подключение WARP не поддерживает ручное переопределение mtu"
+
+msgid "WARP profile field must be a JSON object"
+msgstr "Поле profile в WARP должно быть JSON-объектом"
+
+msgid "WARP profile private_key must be a valid Curve25519 key"
+msgstr "Поле private_key профиля WARP должно быть корректным ключом Curve25519"
+
+msgid "WARP+ license key (optional)"
+msgstr "Лицензионный ключ WARP+ (необязательно)"
 
 msgid "When switching to another level, test every server and select the fastest instead of the first working one."
 msgstr "При переходе на другой уровень тестировать все сервера и выбирать самый быстрый, а не первый работающий."
@@ -2251,6 +2560,48 @@ msgstr "Целое число миллисекунд от 0 до 2147483647 до
 
 msgid "Whole seconds, 0–4294967295 (default: 60). Zero rewrites the DNS response TTL to zero."
 msgstr "Целое число секунд от 0 до 4294967295 (по умолчанию 60). Ноль устанавливает TTL ответа DNS равным нулю."
+
+msgid "WireGuard .conf is missing [Interface] PrivateKey"
+msgstr "В конфигурации WireGuard .conf отсутствует PrivateKey в секции [Interface]"
+
+msgid "WireGuard .conf is missing [Peer] Endpoint"
+msgstr "В конфигурации WireGuard .conf отсутствует Endpoint в секции [Peer]"
+
+msgid "WireGuard .conf is missing [Peer] PublicKey"
+msgstr "В конфигурации WireGuard .conf отсутствует PublicKey в секции [Peer]"
+
+msgid "WireGuard / AmneziaWG / WARP"
+msgstr "WireGuard / AmneziaWG / WARP"
+
+msgid "WireGuard / AmneziaWG link imported into Connection URL"
+msgstr "Ссылка WireGuard / AmneziaWG добавлена в URL подключения"
+
+msgid "WireGuard amnezia field must be a JSON object"
+msgstr "Поле amnezia в WireGuard должно быть JSON-объектом"
+
+msgid "WireGuard keepalive must be between 0 and 65535"
+msgstr "Интервал keepalive WireGuard должен быть от 0 до 65535"
+
+msgid "WireGuard MTU must be between 576 and 65535"
+msgstr "Значение MTU WireGuard должно быть от 576 до 65535"
+
+msgid "WireGuard outbound requires a non-empty address string or array"
+msgstr "Для WireGuard требуется непустая строка или массив address"
+
+msgid "WireGuard outbound requires a non-empty peers array"
+msgstr "Для WireGuard требуется непустой массив peers"
+
+msgid "WireGuard outbound requires a valid Curve25519 private_key"
+msgstr "Для WireGuard требуется корректный ключ Curve25519 в private_key"
+
+msgid "WireGuard peer allowed_ips must be a non-empty array of CIDRs"
+msgstr "Поле allowed_ips пира WireGuard должно быть непустым массивом CIDR"
+
+msgid "WireGuard peer pre_shared_key must be a valid Curve25519 key"
+msgstr "Поле pre_shared_key пира WireGuard должно быть корректным ключом Curve25519"
+
+msgid "WireGuard reserved field must be 3 comma-separated bytes or base64"
+msgstr "Поле reserved WireGuard должно содержать 3 байта через запятую или строку base64"
 
 msgid "XHTTP mode"
 msgstr "Режим XHTTP"
@@ -2305,3 +2656,27 @@ msgstr "sing-box outbound для Zapret2 настроен"
 
 msgid "Zapret2 sing-box outbound is not configured"
 msgstr "sing-box outbound для Zapret2 не настроен"
+
+msgid "Входящие подключения ещё не добавлены."
+msgstr "Входящие подключения ещё не добавлены."
+
+msgid "Выбран"
+msgstr "Выбран"
+
+msgid "Выбрать"
+msgstr "Выбрать"
+
+msgid "Выбрать сервер"
+msgstr "Выбрать сервер"
+
+msgid "Недоступен"
+msgstr "Недоступен"
+
+msgid "Переключаем…"
+msgstr "Переключаем…"
+
+msgid "Правила маршрутизации ещё не добавлены."
+msgstr "Правила маршрутизации ещё не добавлены."
+
+msgid "Состав URLTest и Priority"
+msgstr "Состав URLTest и Priority"

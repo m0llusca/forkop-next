@@ -116,15 +116,16 @@ Read operations use the same lock as writes; malformed JSON never mutates state.
 - `profile_diff {name}`: `{changed:["section.option"],current_digest,profile_digest}`; both digests identify the exact bytes reviewed, including when the active file changes during parsing. Values are omitted to avoid credential exposure.
 - `profile_apply {name,expected?,expected_profile?}` and `rollback {expected?}` atomically replace config, validate and restore on activation failure. A changed active config returns `conflict`; a replaced saved profile returns `profile_conflict`. The UI supplies both preview digests and invalidates its preview after a refresh, profile replacement or selection change.
 - `devices {}`: `{items:[{address,section}]}`; `device_set {address,section}` updates real fully-routed device lists using the config transaction.
-- `gaming_apply {preset,device?,section}`: presets `steam`, `playstation`, `xbox` route download/store domains only. Game session traffic keeps existing routing.
+- `gaming_apply {preset,device?,section,console_mode?}`: presets `steam`, `playstation`, `xbox`, `console` route download/store domains; optional `console_mode` (`true`/`false` or `0`/`1`) updates `console_mode` on the generated/selected gaming section inside the config transaction so non-FakeIP console UDP bypasses proxy latency while TCP uses the selected section.
 - `temporary_add {domain,section,ttl}` accepts 60..86400 seconds; `temporary_list {}` returns `{items:[{id,domain,section,expires}]}`; `temporary_delete {id}` removes one rule.
 - Internal `expire {}` removes expired generated sections and reapplies config. The service timer runs this every minute; expiry precision is one timer interval.
 - Root-owned Smart Detect actions: `recommendations`, `recommendation_record`, `recommendation_accept`, `recommendation_dismiss`.
 
-`forkop route_explain JSON` accepts `{domain,device?,port?,protocol?}` and returns
+`forkop route_explain JSON` accepts `{domain?,destination_ip?,device?,port?,protocol?}` (protocols `tcp`, `udp`, `https`, `dns`, `bittorrent`, `stun`) and returns
 `{success:true,data:{scope:"configured",connectivity_tested:false,capture_verified:false,
-decision:{status:"matched|direct|blocked|indeterminate",section?,outbound?},
+decision:{status:"matched|direct|blocked|indeterminate",section?,outbound?,reason?},
 trace:[{section,match:"yes|no|unknown",reason}],missing:[]}}`.
+Configured trace/decision reasons include `bittorrent_direct`, `console_udp_direct`, and `console_protocol_required` alongside rule matches.
 The trace describes configured rules, not live packet capture or website availability.
 Unknown remote rules cannot produce a false definitive answer.
 
@@ -231,17 +232,40 @@ Generic check/install remains on the selected custom source. Explicit official/s
 
 UX task 4 retains the navigation and workflow-context contracts below. The
 workspace adds a synchronized narrow-screen `Раздел Forkop` select using the
-same native tab activation authority as desktop navigation. Local theme
-preferences are hosted outside `.cbi-section[data-tab]`; changing them never
-marks native UCI drafts dirty.
+same native tab activation authority as desktop navigation. Light/dark theme
+(`data-theme="light" | "dark"`) is derived automatically from the surrounding
+LuCI host theme (`data-theme`, `data-darkmode`, `.dark`/`.light` classes,
+computed `color-scheme`, opaque `body`/`html` background luminance, or
+`prefers-color-scheme`) with no manual in-app theme toggle or override select.
+`mountForkopWorkspace` mirrors the resolved `data-theme` onto identifiable
+Forkop modals (`.fkp-workspace-modal`) and sibling `.cbi-page-actions` footers,
+and hides the footer on read-only / instant-RPC tabs (`next`, `dashboard`,
+`devices`, `rule_tools`, `diagnostic`, `route_tools`, `monitoring`, `updates`,
+`advanced`) unless unsaved UCI draft notices exist, restoring both `data-theme`
+and `hidden` on unmount without altering native Save/Apply/Reset handlers.
+
+`normalizeNamedSectionTable(root, headerLabel?)` normalizes OpenWrt 25.12+
+`GridSection` `tr.cbi-section-table-titles.named[data-title]` and
+`tr.cbi-section-table-row[data-title]` pseudo-element rows into explicit first-column
+`<th>` / `<td class="td cbi-value-field cbi-section-table-titles">` cells while
+retaining `row.dataset.title` for LuCI 24.10 compatibility.
 
 `configureRuleOrder(root, move)` decorates native rule rows in place with named
-enable controls and above/below buttons. The native adapter supplies
-`map.data.move(config, sid, referenceSid, after)` and must return its boolean
-result. Successful moves preserve mounted fields, move the existing row, emit
-a bubbling native `change` event, and announce the draft position and required
-Save/Apply. Failed moves retain DOM order. This stages native UCI priority;
-it does not apply routes. Native drag/drop remains available.
+enable controls and above/below buttons consolidated inside `.fkp-rule-actions-bar`.
+The native adapter supplies `map.data.move(config, sid, referenceSid, after)` and
+must return its boolean result. Successful moves preserve mounted fields, move the
+existing row, emit a bubbling native `change` event, and announce the draft position
+and required Save/Apply. Failed moves retain DOM order. This stages native UCI
+priority; it does not apply routes. Native drag/drop remains available.
+
+`createActionMenu(label, items, options?)` and `ensureRowOverflowMenu(bar, rowLabel?)`
+(exported on `view.forkop.main` from `src/forkop/workspace/actionMenu.ts`) group
+secondary and destructive header/row `<button>` controls inside an accessible
+`<details class="fkp-action-menu">` popover (`role="menu"` / `role="menuitem"`,
+single-open exclusivity, outside-`pointerdown` and `Escape` dismissal with focus
+restoration, `ArrowDown`/`ArrowUp`/`Home`/`End` navigation, and viewport-edge
+`data-align="start"|"end"` placement) without detaching native DOM buttons or
+altering their click/UCI handlers.
 
 These frontend helpers do not add a write API or change UCI identity/lifecycle.
 `device_set {address, section:""}` removes that exact IPv4 from all explicit
@@ -253,13 +277,16 @@ editor because this endpoint accepts only an explicit IPv4.
 
 `src/forkop/next/workflows.ts` exports:
 
-- `navigateToRule(root, {kind:"create"|"edit"|"site", section?, option?})` activates
+- `navigateToRule(root, {kind:"create"|"edit"|"site", section?, option?, site?})` activates
   the existing native rules tab and dispatches cancelable `forkop:navigate-rule`
   on its pane. `section` is the existing UCI ID, not its label; `option` is an
-  existing native option such as `subscription_url`, `domain`,
-  `mixed_proxy_enabled` or `fully_routed_ips`. The return value means the native
-  adapter accepted navigation, not that a save or apply completed. Exact
-  navigation failures are displayed in the destination. Native
+  existing native option such as `subscription_url`, `_wg_warp_helper`,
+  `_subscription_preview`, `domain`, `mixed_proxy_enabled` or
+  `fully_routed_ips`. When `kind:"site"` includes an optional `site` string,
+  `configureRuleWorkflow` pre-fills the Quick Site preview input inside the
+  opened rule modal without bypassing native validation or saving. The return
+  value means the native adapter accepted navigation, not that a save or apply
+  completed. Exact navigation failures are displayed in the destination. Native
   `handleAdd`/`renderMoreOptionsModal`/`getActiveModalMap` and existing
   save/parse/cancel behavior are retained. The native bundle exports this helper,
   `configureRuleWorkflow`, and `renderQuickSite`.
@@ -351,7 +378,10 @@ Native Priority draft `order` is the live list index, exactly as native Save
 materializes it; stored/default order does not override reordering or additions.
 
 Both preview and generation call pure `singbox/group_resolver.uc` initialized
-with the native connections accessor index. Generation alone creates candidate
+with the native connections accessor index and 3-tier `singbox/filter_identity.uc`
+matching (`exact` -> `connection_id` alias history -> `canonical_label`), while
+excluding internal `__forkop_filter_*` metadata from credential redaction heuristics
+and never projecting them in public responses. Generation alone creates candidate
 pools and records their consumed input context, finalizing evidence only after
 successful output creation. A section cache without completed provenance or with
 changed saved configuration/source/core context is unavailable. The cache token
@@ -362,7 +392,9 @@ runtime proof. Captured source inputs and internal digests are not response fiel
 
 Source outcome records are keyed by native subscription source ID plus exact
 source identity. `subscription/evidence.uc` preserves the last observed success
-across a subsequent failed attempt. Missing historical timestamps/counts are
+across a subsequent failed attempt, including when the `<50%` subscription shrink
+guard (`old_count >= 4 && new_count * 2 < old_count`) rejects a degraded feed with
+`subscription_shrunk` and retains the previous cached pool. Missing historical timestamps/counts are
 null/unknown; file mtime and current node count never stand in for history.
 Import results distinguish observed accepted/skipped counts from unknown duplicate
 and unsupported breakdowns. `forkop source_evidence <section>` returns only source
@@ -414,3 +446,79 @@ stays unconfirmed. The technical log action reuses the native masked/log viewer.
 Profile impact classifies changed parameter keys into rules/connections, devices,
 DNS and other counts; these are parameter counts, not device counts. It projects
 only changed keys and both reviewed digests, preserving the existing apply gate.
+
+## Tier-2 native resilience, routing, preview, TSPU classifier and endpoint contracts
+
+### FakeIPv6 RFC 5180 transition, `src_valid_mark` coexistence and health debounce
+
+- `SB_FAKEIP_INET6_RANGE` is `2001:2::/112` (RFC 5180 benchmarking space, bounded to
+  65,536 addresses and excluded from browser Local Network Access ULA prompts as
+  well as `singbox/country.uc` and `diagnostics/status.uc` public-IPv6 classifiers).
+  `service/lifecycle.uc` tracks `/etc/forkop/fakeip6.range` and clears stale
+  `cache.db` once when migrating from legacy `fc00::/18`.
+- `nft/apply.uc` installs `ip -4 rule add iif lo fwmark 0x4000000/0x4000000 lookup main priority 104`
+  (tracked via `source-check-rule4-present`) so marked router-originated packets pass
+  `rp_filter` / `src_valid_mark=1` checks alongside Tailscale or kernel WireGuard,
+  and removes the rule on teardown.
+- `singbox/runtime.uc` adds `@timeserver` (`system.ntp.server` hostnames) to
+  `bootstrap-dns-server` rules so router clock synchronization can resolve NTP pools
+  before DoH/DoT upstream TLS validation.
+- `singbox/dns_failover.uc` enforces a 90-second startup grace window, 3 consecutive
+  health strikes before switching to fallback DNS, and `/proc/<pid>/stat` `start_ticks`
+  PID identity verification. `singbox/priority.uc` enforces Pin Guard: after 3
+  consecutive failures on a manually-pinned node, runtime traffic switches to the
+  next healthy candidate without mutating `/etc/forkop/selections.json`, and
+  automatically restores the user's pin once healthy.
+
+### Console UDP split, BitTorrent direct and TorrServer cgroupv2 bypass
+
+- `forkop.<section>.console_mode` (`0` or `1`, default `0`; also configurable via
+  `gaming_apply {preset,device?,section,console_mode?}`): for `fully_routed_ips` /
+  `fully_routed_macs` devices and matching section rules, non-FakeIP UDP
+  (`198.18.0.0/15` and `2001:2::/112` excluded) fast-paths via `nft`
+  `priority_rules` `accept`, FakeIP UDP routes via `direct-out` in `sing-box`,
+  and TCP routes through the configured proxy section.
+- `forkop.settings.bittorrent_direct` (`0` or `1`, default `0`): inserts
+  `{protocol:"bittorrent", outbound:"direct-out"}` ahead of section catch-all rules
+  using standard `sing-box` sniffing without weakening DNS isolation.
+- `forkop.settings.torrserver_direct` (`0` or `1`, default `0`): manages isolated
+  `table inet ForkopTorrServerDirect` at `priority mangle - 1` (`-151`) matching
+  router-local TorrServer `socket cgroupv2` while excluding FakeIPv4/v6 and port 53
+  so tracker announces still resolve FakeIPs cleanly.
+- `routing/rulesets.uc` and `components/updates.uc` accept Clash `rule-provider`
+  `.yaml` / `.yml` local files and remote URLs (`payload:` / `rules:` with `DOMAIN`,
+  `DOMAIN-SUFFIX`, `DOMAIN-KEYWORD`, `DOMAIN-REGEX`, `IP-CIDR`, `IP-CIDR6`, and plain
+  domain/CIDR lists), storing remote YAML caches under `.yaml` suffixes without
+  colliding with `.lst` files.
+
+### Pre-save source preview, TSPU classifier and WireGuard / AmneziaWG / WARP
+
+- `forkop editor_preview <request_id|JSON>` reads a bounded UI-state draft file
+  (`/var/run/forkop/ui-state/<request_id>.json`) or inline JSON payload containing
+  `{section_id?, sources, section:{detect_server_country?, selector_proxy_links?, outbound_jsons?, interfaces?}}`
+  (bounded per remote HTTPS fetch, no loopback/private SSRF) and returns
+  `{success:true, count, names:[string], countries:Record<string,string>}`. It never
+  mutates UCI or persistent cache, redacts credential-bearing labels, and fails closed
+  (`proxy_download_unavailable`) when `download_via_proxy_enabled` is requested while
+  the local mixed listener is unavailable.
+- `forkop tspu_classify <JSON>` accepts `{domain, section?, compare_section?, timeout_sec?}`
+  and runs unlocked across 4 bounded read-only stages (`dns`, `tcp`, `tls`, `byte_cap`
+  64 KiB range transfer with strict TLS verification — never `--insecure`), returning
+  `{success:true, data:{domain, section, checked_at, verdict, severity, recommended_action, remote_ip, http_code, bytes_read, stages, comparison}}`
+  with verdicts `ok`, `uplink_down`, `dns_blocked`, `dns_spoofed`, `tcp_blocked`,
+  `tls_hello_blocked`, `tls_cert_intercepted`, `clock_skew`, `tspu_byte_cap_16kb`,
+  `slow_link`, `http_restricted`, and `probe_error`.
+- Native `wireguard`, 1-sided/2-sided `amnezia`, and Cloudflare `warp` inputs are
+  accepted from subscriptions, manual links (`wireguard://`, `wg://`, `awg://`,
+  `amneziawg://`, `warp://`), `.conf` profiles, Clash `type: wireguard`, and JSON
+  endpoints, and emitted into `sing-box` `endpoints[]` (with `detour` cascade
+  clearing `routing_mark` / `bind_interface`). Standard `wireguard` runs on both
+  stock and extended cores; `warp` emits native `type: "warp"` (+ `store_warp_config: true`
+  and optional 1-sided `amnezia`) on `sing-box-extended` and automatically falls back
+  to `type: "wireguard"` with `peers[0].reserved` on stock `sing-box`; `amnezia`
+  obfuscation requires `sing-box-extended` and is surfaced explicitly by validator and
+  `compatibility_check`.
+- `forkop generate_warp_profile <JSON>` accepts `{license_key?, one_sided_awg?, amnezia?, proxy_section?, endpoint?, tag?}`
+  and registers an anonymous Cloudflare WARP consumer keypair over verified HTTPS,
+  returning `{success:true, data:{link, endpoint}}` without mutating UCI until the
+  user saves the rule.

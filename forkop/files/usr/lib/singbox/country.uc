@@ -2,6 +2,7 @@
 
 let fs = require("fs");
 let common = require("core.common");
+let core_ip = require("core.ip");
 
 let as_string = common.as_string;
 let array_or_empty = common.array_or_empty;
@@ -89,7 +90,9 @@ function public_ipv6(value) {
     let first_value = int(first, 16);
     if (first_value < 0x2000 || first_value > 0x3fff)
         return false;
-    return match(value, /^2001:0?db8:/) == null;
+    if (core_ip.ip_in_cidr(value, "2001:2::/48"))
+        return false;
+    return match(value, /^2001:0?db8:/) == null && !core_ip.ip_in_cidr(value, "2001:db8::/32");
 }
 
 function public_ip(value) {

@@ -22,7 +22,7 @@ function handle(payload) {
         let port = common.option(configured,"mixed_proxy_port","");
         if (!common.bool_option(configured,"mixed_proxy_enabled",false) || !match(port,/^[0-9]+$/) || int(port)<1 || int(port)>65535)
             return failure("section_probe_unavailable");
-        let config_path = getenv("FORKOP_SINGBOX_CONFIG") || uci.get(getenv("FORKOP_CONFIG_NAME") || "forkop", "settings", "config_path") || "/etc/sing-box/config.json";
+        let config_path = getenv("FORKOP_SINGBOX_CONFIG") || uci.get((getenv("FORKOP_CONFIG_NAME") || "forkop") + ".settings.config_path") || "/etc/sing-box/config.json";
         let info = fs.stat(config_path), generated = {}, listener = null;
         if (!info || info.type != "file" || info.size > 1048576) return failure("section_probe_unavailable");
         try { generated = json(fs.readfile(config_path)); } catch (e) { return failure("section_probe_unavailable"); }

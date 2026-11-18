@@ -91,4 +91,52 @@ set -e
 [ "$(cat "$WORK_DIR/dns-restore.marker")" = "failsafe-restore" ] ||
   fail "missing lifecycle module must trigger dnsmasq failsafe restore"
 
+rm -f "$WORK_DIR/dns-restore.marker"
+mkdir -p "$fake_lib/subscription" "$fake_lib/warp" "$WORK_DIR/bin"
+cat >"$WORK_DIR/bin/timeout" <<'SH'
+#!/bin/sh
+printf 'timeout=%s\t' "$1"
+shift
+exec "$@"
+SH
+chmod +x "$WORK_DIR/bin/timeout"
+
+cat >"$fake_lib/subscription/editor.uc" <<'UCODE'
+#!/usr/bin/env ucode
+print("editor\t", ARGV[0], "\t", ARGV[1] || "", "\n");
+UCODE
+
+cat >"$fake_lib/service/tspu_classify.uc" <<'UCODE'
+#!/usr/bin/env ucode
+print("tspu\t", ARGV[0], "\t", ARGV[1] || "", "\n");
+UCODE
+
+cat >"$fake_lib/warp/register.uc" <<'UCODE'
+#!/usr/bin/env ucode
+print("warp\t", ARGV[0], "\t", ARGV[1] || "", "\n");
+UCODE
+
+editor_out="$(PATH="$WORK_DIR/bin:$PATH" FORKOP_LIB="$fake_lib" ucode "$FORKOP_BIN" editor_preview req123)"
+[ "$editor_out" = $'timeout=25\teditor\tpreview\treq123' ] ||
+  fail "editor_preview must dispatch with timeout 25"
+
+tspu_out="$(PATH="$WORK_DIR/bin:$PATH" FORKOP_LIB="$fake_lib" ucode "$FORKOP_BIN" tspu_classify '{"domain":"example.com"}')"
+[ "$tspu_out" = $'timeout=25\ttspu\tcli\t{"domain":"example.com"}' ] ||
+  fail "tspu_classify must dispatch with timeout 25"
+
+warp_out="$(PATH="$WORK_DIR/bin:$PATH" FORKOP_LIB="$fake_lib" ucode "$FORKOP_BIN" generate_warp_profile '{}')"
+[ "$warp_out" = $'timeout=25\twarp\tcli\t{}' ] ||
+  fail "generate_warp_profile must dispatch with timeout 25"
+
+rm -f "$fake_lib/warp/register.uc"
+set +e
+FORKOP_TEST_DNS_RESTORE_MARKER="$WORK_DIR/dns-restore-helper.marker" FORKOP_LIB="$fake_lib" \
+  ucode "$FORKOP_BIN" generate_warp_profile '{}' >/dev/null 2>&1
+helper_status="$?"
+set -e
+[ "$helper_status" -ne 0 ] ||
+  fail "missing warp module must fail"
+[ ! -e "$WORK_DIR/dns-restore-helper.marker" ] ||
+  fail "helper commands must not trigger dnsmasq failsafe restore"
+
 printf 'CLI entrypoint checks passed\n'

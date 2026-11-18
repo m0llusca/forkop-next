@@ -255,6 +255,18 @@ function network_wireguard_route_allowed_peers() {
     }
 }
 
+function wan_section_selected(fields) {
+    if (length(fields) < 2 || fields[0] != "config")
+        return false;
+    let sec_type = replace(as_string(fields[1]), /['"]/g, "");
+    let sec_name = length(fields) >= 3 ? replace(as_string(fields[2]), /['"]/g, "") : "";
+    if (sec_type == "interface" && (sec_name == "wan" || sec_name == "wan6" || sec_name == "wwan"))
+        return true;
+    if (sec_type == "wireguard_wan" || sec_type == "wireguard_wwan")
+        return true;
+    return false;
+}
+
 function wan_config_masked(path) {
     let data = fs.readfile(path);
     let in_wan = false;
@@ -271,28 +283,25 @@ function wan_config_masked(path) {
 
         let fields = split(trim(as_string(line)), /[ \t\r\n]+/);
         if (length(fields) > 0 && fields[0] == "config") {
-            in_wan = length(fields) >= 3 && fields[1] == "interface" && fields[2] == "'wan'";
+            in_wan = wan_section_selected(fields);
             proto = "";
         }
 
         if (!in_wan)
             continue;
 
+        let clean_proto = replace(as_string(proto), /['"]/g, "");
         if (length(fields) >= 3 && fields[0] == "option" && fields[1] == "proto") {
             proto = fields[2];
             print(line, "\n");
         }
-        else if (proto == "'static'" && length(fields) >= 2 && fields[0] == "option" &&
-            (fields[1] == "ipaddr" || fields[1] == "netmask" || fields[1] == "gateway")) {
-            print("        option ", fields[1], " '******'\n");
+        else if (length(fields) >= 2 && (fields[0] == "option" || fields[0] == "list") &&
+            (fields[1] == "private_key" || fields[1] == "preshared_key" || fields[1] == "password" || fields[1] == "username")) {
+            print("        ", fields[0], " ", fields[1], " '******'\n");
         }
-        else if (proto == "'pppoe'" && length(fields) >= 2 && fields[0] == "option" &&
-            (fields[1] == "username" || fields[1] == "password")) {
-            print("        option ", fields[1], " '******'\n");
-        }
-        else if (proto == "'wireguard'" && length(fields) >= 2 && fields[0] == "option" &&
-            fields[1] == "private_key") {
-            print("        option private_key '******'\n");
+        else if (clean_proto == "static" && length(fields) >= 2 && (fields[0] == "option" || fields[0] == "list") &&
+            (fields[1] == "ipaddr" || fields[1] == "netmask" || fields[1] == "gateway" || fields[1] == "ip6addr" || fields[1] == "ip6gw")) {
+            print("        ", fields[0], " ", fields[1], " '******'\n");
         }
         else {
             print(line, "\n");
@@ -304,30 +313,35 @@ function is_space_char(value) {
     return value == " " || value == "\t" || value == "\r" || value == "\n";
 }
 
+function uci_directive_match(line, token) {
+    let parts = split(as_string(token), " ");
+    if (length(parts) != 2)
+        return null;
+    let matched = match(as_string(line), /^([ \t]*)(option|list)[ \t]+([^ \t\r\n'"]+)(.*)$/);
+    if (matched == null || matched[2] != parts[0] || matched[3] != parts[1])
+        return null;
+    let tail = as_string(matched[4]);
+    if (tail != "") {
+        let ch = substr(tail, 0, 1);
+        if (!is_space_char(ch) && ch != "'" && ch != "\"")
+            return null;
+    }
+    return matched;
+}
+
 function mask_after_token(line, token) {
-    let pos = index(line, token);
-    return pos < 0 ? line : substr(line, 0, pos) + token + " 'MASKED'";
+    let matched = uci_directive_match(line, token);
+    if (matched == null)
+        return line;
+    return matched[1] + matched[2] + " " + matched[3] + " 'MASKED'";
 }
 
 function mask_after_token_space(line, token) {
-    let pos = index(line, token);
-    if (pos < 0)
-        return line;
-
-    let space_pos = pos + length(token);
-    if (space_pos >= length(line) || !is_space_char(substr(line, space_pos, 1)))
-        return line;
-
-    return substr(line, 0, space_pos + 1) + "'MASKED'";
+    return mask_after_token(line, token);
 }
 
 function delete_token_space(line, token) {
-    let pos = index(line, token);
-    if (pos < 0)
-        return false;
-
-    let space_pos = pos + length(token);
-    return space_pos < length(line) && is_space_char(substr(line, space_pos, 1));
+    return uci_directive_match(line, token) != null;
 }
 
 function mask_option_path(line, token) {
@@ -348,6 +362,15 @@ function mask_option_path(line, token) {
     return substr(line, 0, slash) + "/MASKED'" + substr(line, quote + 1);
 }
 
+function has_unclosed_single_quote(line) {
+    let cleaned = replace(as_string(line), /'\\''/g, "");
+    let count = 0;
+    for (let i = 0; i < length(cleaned); i++)
+        if (substr(cleaned, i, 1) == "'")
+            count++;
+    return (count % 2) == 1;
+}
+
 function forkop_config_masked_line(line) {
     line = mask_after_token(line, "option proxy_string");
     line = mask_after_token(line, "option hwid");
@@ -356,16 +379,27 @@ function forkop_config_masked_line(line) {
     line = mask_after_token(line, "list urltest_proxy_links");
     line = mask_after_token(line, "list selector_proxy_links");
     line = mask_after_token_space(line, "option outbound_json");
+    line = mask_after_token_space(line, "list outbound_jsons");
+    line = mask_after_token_space(line, "option inbound_json");
+    line = mask_after_token_space(line, "option domain");
     line = mask_after_token_space(line, "list domain");
     line = mask_after_token_space(line, "list domain_suffix");
     line = mask_after_token_space(line, "list domain_keyword");
     line = mask_after_token_space(line, "list domain_regex");
+    line = mask_after_token_space(line, "option ip_cidr");
     line = mask_after_token_space(line, "list ip_cidr");
+    line = mask_after_token_space(line, "option source_ip_cidr");
     line = mask_after_token_space(line, "list source_ip_cidr");
     line = mask_after_token_space(line, "list fully_routed_ips");
+    line = mask_after_token_space(line, "list domain_ip_lists");
+    line = mask_after_token_space(line, "list remote_domain_lists");
+    line = mask_after_token_space(line, "list remote_subnet_lists");
+    line = mask_after_token_space(line, "list rule_set");
+    line = mask_after_token_space(line, "list rule_set_with_subnets");
     line = mask_after_token(line, "list server_users");
     line = mask_after_token_space(line, "option dns_server");
     line = mask_after_token_space(line, "option bootstrap_dns_server");
+    line = mask_after_token_space(line, "option domain_resolver_dns_server");
     line = mask_after_token_space(line, "list dns_server");
     line = mask_after_token_space(line, "list bootstrap_dns_server");
     line = mask_after_token_space(line, "option listen");
@@ -382,6 +416,8 @@ function forkop_config_masked_line(line) {
     line = mask_after_token_space(line, "option reality_handshake_server_port");
     line = mask_after_token_space(line, "option transport_host");
     line = mask_after_token_space(line, "list transport_hosts");
+    line = mask_after_token_space(line, "option transport_path");
+    line = mask_after_token_space(line, "option transport_service_name");
     line = mask_after_token_space(line, "option tailscale_auth_key");
     line = mask_after_token_space(line, "option tailscale_control_url");
     line = mask_after_token_space(line, "option tailscale_hostname");
@@ -416,7 +452,7 @@ function forkop_config_masked(path) {
             continue;
 
         if (in_masked_multiline) {
-            if (index(line, "'") >= 0)
+            if (has_unclosed_single_quote(line))
                 in_masked_multiline = false;
             continue;
         }
@@ -428,11 +464,8 @@ function forkop_config_masked(path) {
 
         let masked = forkop_config_masked_line(line);
         print(masked, "\n");
-        if (index(line, "option outbound_json") >= 0) {
-            let first_quote = index(line, "'");
-            if (first_quote >= 0 && index(substr(line, first_quote + 1), "'") < 0)
-                in_masked_multiline = true;
-        }
+        if (masked != line && has_unclosed_single_quote(line))
+            in_masked_multiline = true;
     }
 }
 
@@ -713,6 +746,8 @@ function valid_public_ipv6(value) {
     if (substr(value, 0, 2) == "fc" || substr(value, 0, 2) == "fd")
         return false;
     if (index(value, "2001:db8") == 0)
+        return false;
+    if (core_ip.ip_in_cidr(value, "2001:2::/48"))
         return false;
     return true;
 }
@@ -1255,7 +1290,10 @@ function write_fakeip_check_json(fakeip_status, fakeip_address) {
 }
 
 function fakeip_address_status(address) {
-    print(match(as_string(address), /^198\.(18|19)\./) != null ? "true\n" : "false\n");
+    let addr = trim(as_string(address));
+    let ok = match(addr, /^198\.(18|19)\./) != null ||
+        (core_ip.valid_ipv6(addr) && core_ip.ip_in_cidr(addr, "2001:2::/112"));
+    print(ok ? "true\n" : "false\n");
 }
 
 function repeat_char(char, count) {
@@ -1713,7 +1751,19 @@ let masked_sing_box_keys = {
     domain_keyword: true,
     domain_regex: true,
     ip_cidr: true,
-    source_ip_cidr: true
+    source_ip_cidr: true,
+    pre_shared_key: true,
+    auth_token: true,
+    license_key: true,
+    header_protection_key: true,
+    reserved: true,
+    certificate: true,
+    key: true,
+    ech_key: true,
+    plugin_opts: true,
+    headers: true,
+    path: true,
+    service_name: true
 };
 
 function mask_sing_box_value(value) {

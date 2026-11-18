@@ -22,6 +22,56 @@ async function configurationEvent(name: string, action: string) {
   await Promise.all(pending);
   if (event.defaultPrevented) throw Error('native_pending_changes');
 }
+export interface TspuStageResult {
+  stage: 'dns' | 'tcp' | 'tls' | 'byte_cap';
+  status: 'ok' | 'failed' | 'warning' | 'skipped';
+  verdict?: string;
+  remote_ip?: string;
+  exitcode?: number;
+  bytes_read?: number;
+  http_code?: number;
+  verified_64kb?: boolean;
+  small_response?: boolean;
+  duration_ms?: number;
+}
+
+export interface TspuClassifyData {
+  domain: string;
+  section: string;
+  checked_at: number;
+  verdict:
+    | 'ok'
+    | 'uplink_down'
+    | 'dns_blocked'
+    | 'dns_spoofed'
+    | 'tcp_blocked'
+    | 'tls_hello_blocked'
+    | 'tls_cert_intercepted'
+    | 'clock_skew'
+    | 'tspu_byte_cap_16kb'
+    | 'slow_link'
+    | 'http_restricted'
+    | 'probe_error';
+  severity: 'ok' | 'none' | 'blocked' | 'warning' | 'error';
+  recommended_action: string;
+  remote_ip: string;
+  http_code: number;
+  bytes_read: number;
+  stages: TspuStageResult[];
+  comparison: null | {
+    section: string;
+    verdict: string;
+    bypass_verified: boolean;
+  };
+}
+
+export interface GamingApplyPayload {
+  preset: 'steam' | 'playstation' | 'xbox' | 'console';
+  section: string;
+  device?: string;
+  console_mode?: boolean;
+}
+
 export async function nextRequest(
   action: string,
   payload: object = {},
@@ -50,8 +100,8 @@ export async function nextRequest(
     const response = await executeShellCommand({
       command: '/usr/bin/forkop',
       args:
-        action === 'route_explain'
-          ? ['route_explain', JSON.stringify(payload)]
+        action === 'route_explain' || action === 'tspu_classify'
+          ? [action, JSON.stringify(payload)]
           : ['next', action, JSON.stringify(payload)],
       timeout: 60000,
       operationName: `Forkop Next ${action}`,
@@ -76,4 +126,20 @@ export async function nextRequest(
       );
     }
   }
+}
+
+export async function tspuClassify(payload: {
+  domain: string;
+  section?: string;
+  compare_section?: string;
+}): Promise<NextResponse & { data?: TspuClassifyData }> {
+  return (await nextRequest('tspu_classify', payload || {})) as NextResponse & {
+    data?: TspuClassifyData;
+  };
+}
+
+export async function gamingApply(
+  payload: GamingApplyPayload,
+): Promise<NextResponse> {
+  return nextRequest('gaming_apply', payload);
 }

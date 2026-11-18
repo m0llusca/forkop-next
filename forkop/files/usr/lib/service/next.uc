@@ -8,7 +8,9 @@ const LIB = getenv('FORKOP_LIB') || '/usr/lib/forkop';
 const BIN = getenv('FORKOP_BIN') || '/usr/bin/forkop';
 const INIT = getenv('FORKOP_SERVICE_INIT') || '/etc/init.d/forkop';
 const MAX = 1048576;
-const WORK = sprintf("/tmp/.forkop-next-%x-%x",clock()[0],clock()[1]);
+const SELF_STAT = fs.readfile('/proc/self/stat') || '';
+const SELF_PID = index(SELF_STAT, ' ') > 0 ? substr(SELF_STAT, 0, index(SELF_STAT, ' ')) : '0';
+const WORK = sprintf("/tmp/.forkop-next-%s-%x-%x", SELF_PID, clock()[0], clock()[1]);
 function quote(s) { return "'" + replace(''+s, /'/g, "'\\''") + "'"; }
 function contains(values,value) {return index(values,value)>=0;}
 function ok(data) { return {success:true,data:data || {}}; }
@@ -208,7 +210,7 @@ function policy(action,payload) {
     else {
         let target=c.get_all('forkop',payload.section);
         if(!target || target['.type']!='section' || target.enabled=='0' || target.next_kind || !contains(['connection','proxy','outbound','vpn','bypass','block'],target.action))return fail('invalid_section');
-        let names=[],kind='temporary',expires=0;
+        let names=[],kind='temporary',expires=0,console_mode_on=(payload.console_mode===true||payload.console_mode=='1'||payload.console_mode==1),console_only=false;
         if(action=='temporary_add') {
             if(!domain(payload.domain))return fail('invalid_domain');
             if(type(payload.ttl)!='int' || payload.ttl<60 || payload.ttl>86400)return fail('invalid_ttl');
@@ -220,15 +222,30 @@ function policy(action,payload) {
         }
         else if(action=='gaming_apply') {
             let presets={steam:['steampowered.com','steamcommunity.com','steamstatic.com'],playstation:['playstation.net','playstation.com'],xbox:['xboxlive.com','xbox.com']};
-            names=presets[payload.preset];kind='gaming';if(!names)return fail('invalid_preset');
-            if(payload.device && !address(payload.device))return fail('invalid_address');
+            kind='gaming';
+            if(payload.preset=='console' && console_mode_on) {
+                if(!payload.device || !address(payload.device))return fail('invalid_address');
+                console_only=true;
+            }
+            else {
+                names=presets[payload.preset];if(!names)return fail('invalid_preset');
+                if(payload.device && !address(payload.device))return fail('invalid_address');
+            }
         }
         else return fail('unknown_action');
         let id=sprintf('nxt_%x_%x',clock()[0],clock()[1]);
         c.set('forkop',id,'section');c.set('forkop',id,'enabled','1');c.set('forkop',id,'action',target.action);
         c.set('forkop',id,'next_kind',kind);c.set('forkop',id,'next_target',payload.section);
-        c.set('forkop',id,'next_expires',''+expires);c.set('forkop',id,'domain_suffix',names);
-        if(payload.device)c.set('forkop',id,'source_ip_cidr',[payload.device]);
+        c.set('forkop',id,'next_expires',''+expires);
+        if(console_only) {
+            c.set('forkop',id,'fully_routed_ips',[payload.device]);
+            c.set('forkop',id,'console_mode','1');
+        }
+        else {
+            c.set('forkop',id,'domain_suffix',names);
+            if(payload.device)c.set('forkop',id,'source_ip_cidr',[payload.device]);
+            if(action=='gaming_apply' && console_mode_on)c.set('forkop',id,'console_mode','1');
+        }
         c.reorder('forkop',id,0);
     }
     if(!c.commit('forkop'))return fail('config_write_failed');
@@ -291,6 +308,7 @@ function handle(action,payload) {
     if(contains(['smart_detect_configure','devices','device_set','gaming_apply','temporary_add','temporary_list','temporary_delete','expire'],action))return policy(action,payload);
     if(action=='compatibility_check' || action=='compatibility_updates')return require('service.compatibility').handle(action,payload);
     if(action=='probe')return require('service.probe').handle(payload);
+    if(action=='tspu_classify')return require('service.tspu_classify').handle(payload);
     if(action=='recommendation_accept') {
         let smart=require('service.smart_detect'),proposal=smart.handle(action,payload);
         if(!proposal.success)return proposal;
@@ -315,6 +333,7 @@ try {
         exit(0);
     }
     if(type(payload)!='object')result=fail('invalid_request');
+    else if(action=='tspu_classify')result=require('service.tspu_classify').handle(payload);
     else if(!mkdir(DIR) || !mkdir(DIR+'/profiles'))result=fail('storage_unavailable');
     else if((action=='startup_recover' || action=='checkpoint') && active_ancestor())result=ok({active_transaction:true});
     else {

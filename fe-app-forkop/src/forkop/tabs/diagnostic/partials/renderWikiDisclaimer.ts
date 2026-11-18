@@ -27,11 +27,10 @@ export function renderWikiDisclaimer(kind: 'default' | 'error' | 'warning') {
       ]),
     ]),
     renderButton({
-      classNames: ['cbi-button-save'],
       text: _('Open Project Page'),
       onClick: () =>
         window.open(
-          'https://github.com/ushan0v/forkop#readme',
+          'https://github.com/m0llusca/forkop-next#readme',
           '_blank',
           'noopener,noreferrer',
         ),

@@ -93,4 +93,27 @@ describe('validateOutboundJson', () => {
       'Selector and URLTest outbounds must contain a non-empty outbounds array',
     );
   });
+
+  it('accepts Hysteria2 JSON outbounds with colon-formatted server_ports and no server_port', () => {
+    const result = validateOutboundJson(
+      '{"type":"hysteria2","tag":"hy2-hop","server":"198.51.100.10","server_ports":["20000:40000","50000:50000"],"password":"secret","tls":{"enabled":true,"server_name":"example.com"}}',
+    );
+
+    expect(result.valid).toBe(true);
+  });
+
+  it('rejects Hysteria2 JSON outbounds with malformed server_ports ranges', () => {
+    for (const badPorts of [
+      '[]',
+      '["50000"]',
+      '["50000:20000"]',
+      '["0:40000"]',
+      '["20000:70000"]',
+    ]) {
+      const result = validateOutboundJson(
+        `{"type":"hysteria2","tag":"hy2-bad","server":"198.51.100.10","server_ports":${badPorts},"password":"secret"}`,
+      );
+      expect(result.valid).toBe(false);
+    }
+  });
 });

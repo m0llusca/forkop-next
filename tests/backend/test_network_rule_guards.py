@@ -30,9 +30,13 @@ esac
                         PATH=str(directory) + os.pathsep + os.environ['PATH'])
 
     def check_guard(self, mode, expected, *, rules='', routes=''):
-        args = ['ucode', '-L', str(LIB), str(LIB / 'nft/apply.uc'), mode, 'forkop']
-        if 'marking-rule' in mode:
+        args = ['ucode', '-L', str(LIB), str(LIB / 'nft/apply.uc'), mode]
+        if mode == 'source-check-rule4-present':
             args.append('0x00100000')
+        else:
+            args.append('forkop')
+            if 'marking-rule' in mode or mode == 'tproxy-route-rule-present':
+                args.append('0x00100000')
         result = subprocess.run(args, env=dict(self.env, FORKOP_TEST_RULES=rules,
                                               FORKOP_TEST_ROUTES=routes),
                                 capture_output=True, text=True, timeout=10)
@@ -97,3 +101,35 @@ esac
     def test_ipv4_default_on_different_interface_is_absent(self):
         self.check_guard('tproxy-route4-present', False,
                          routes='local default dev lo0 scope host')
+
+    def test_priority_104_source_check_rule_requires_exact_lo_main_and_mark(self):
+        for good in (
+            '104: from all fwmark 0x100000/0x100000 iif lo lookup main',
+            '104: from all iif lo fwmark 0x100000/0xffffffff table main proto static',
+        ):
+            with self.subTest(good=good):
+                self.check_guard('source-check-rule4-present', True, rules=good)
+
+        for bad in (
+            '105: from all fwmark 0x100000/0x100000 iif lo lookup main',
+            '104: from all fwmark 0x100000/0x100000 lookup main',
+            '104: from all fwmark 0x100000/0x100000 iif br-lan lookup main',
+            '104: from all to 198.51.100.0/24 fwmark 0x100000/0x100000 iif lo lookup main',
+            '104: from all fwmark 0x100000/0x100000 iif lo oif eth0 lookup main',
+        ):
+            with self.subTest(bad=bad):
+                self.check_guard('source-check-rule4-present', False, rules=bad)
+
+    def test_tproxy_route_rule_present_requires_priority_104_rule(self):
+        self.check_guard(
+            'tproxy-route-rule-present',
+            False,
+            rules='105: from all fwmark 0x100000/0x100000 lookup forkop',
+            routes='local default dev lo scope host',
+        )
+        self.check_guard(
+            'tproxy-route-rule-present',
+            True,
+            rules='104: from all fwmark 0x100000/0x100000 iif lo lookup main\n105: from all fwmark 0x100000/0x100000 lookup forkop',
+            routes='local default dev lo scope host',
+        )

@@ -71,16 +71,17 @@ let detected = country.detect({
     zero: "0.0.0.0",
     private: "192.168.1.1",
     fakeip: "198.18.6.9",
+    fakeip6: "2001:2::69",
     documentation: "203.0.113.10"
 }, {}, "9.9.9.9");
 if (detected.alpha != "DE" || detected.beta != "NL")
     fail("country.is response was not mapped to outbound tags");
-if (detected.zero != null || detected.private != null || detected.fakeip != null || detected.documentation != null)
+if (detected.zero != null || detected.private != null || detected.fakeip != null || detected.fakeip6 != null || detected.documentation != null)
     fail("non-public server addresses must not receive country metadata");
 
 if (!country.public_ip("8.8.8.8") || !country.public_ip("2606:4700:4700::1111"))
     fail("public address classification changed");
-if (country.public_ip("0.0.0.0") || country.public_ip("192.168.1.1") || country.public_ip("198.18.6.9") || country.public_ip("fc00::1"))
+if (country.public_ip("0.0.0.0") || country.public_ip("192.168.1.1") || country.public_ip("198.18.6.9") || country.public_ip("fc00::1") || country.public_ip("2001:2::1") || country.public_ip("2001:2:0:1::1"))
     fail("non-public address classification changed");
 
 let cached = country.detect({

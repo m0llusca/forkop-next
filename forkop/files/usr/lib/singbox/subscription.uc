@@ -4,6 +4,7 @@ let fs = require("fs");
 let common = require("core.common");
 let preview_basis = require("singbox.preview_basis");
 let subscription_share_link = require("subscription.share_link");
+let filter_identity = require("singbox.filter_identity");
 
 let as_string = common.as_string;
 let read_json_file = common.read_json_file;
@@ -202,25 +203,63 @@ function remember_outbound_metadata(state, tag_name, display_name, outbound) {
         return;
     state.outboundMetadata.names[tag_name] = display_name;
     let protocol = lc(as_string(outbound.type || ""));
+    if (protocol == "wireguard" && outbound.amnezia != null)
+        protocol = "amneziawg";
     if (protocol != "")
         state.outboundMetadata.protocols[tag_name] = protocol;
 
-    let transport = lc(as_string(object_or_empty(outbound.transport).type || ""));
-    if (transport == "" || transport == "raw")
-        transport = "tcp";
-    else if (transport == "h2")
-        transport = "http";
-    state.outboundMetadata.transports[tag_name] = transport;
-
-    let tls = type(outbound.tls) == "object" ? outbound.tls : null;
+    let transport = "";
     let security = "none";
-    if (tls != null && tls.enabled !== false) {
-        let reality = type(tls.reality) == "object" ? tls.reality : null;
-        security = reality != null && reality.enabled !== false ? "reality" : "tls";
+    if (protocol == "wireguard" || protocol == "amneziawg" || protocol == "warp") {
+        transport = "udp";
+        security = "none";
     }
+    else {
+        transport = lc(as_string(object_or_empty(outbound.transport).type || ""));
+        if (transport == "" || transport == "raw")
+            transport = "tcp";
+        else if (transport == "h2")
+            transport = "http";
+
+        let tls = type(outbound.tls) == "object" ? outbound.tls : null;
+        if (tls != null && tls.enabled !== false) {
+            let reality = type(tls.reality) == "object" ? tls.reality : null;
+            security = reality != null && reality.enabled !== false ? "reality" : "tls";
+        }
+    }
+    state.outboundMetadata.transports[tag_name] = transport;
     state.outboundMetadata.securities[tag_name] = security;
 
+    if (type(state.outboundMetadata.filterIds) != "object")
+        state.outboundMetadata.filterIds = {};
+    if (type(state.outboundMetadata.filterNames) != "object")
+        state.outboundMetadata.filterNames = {};
+
+    let fid = as_string(outbound.__forkop_filter_id || "");
+    if (fid == "" && protocol != "" && protocol != "selector" && protocol != "urltest" && protocol != "direct" && protocol != "dns" && protocol != "block")
+        fid = filter_identity.connection_id(outbound);
+    if (fid != "")
+        state.outboundMetadata.filterIds[tag_name] = fid;
+
+    if (type(outbound.__forkop_filter_names) == "array" && length(outbound.__forkop_filter_names) > 0) {
+        let aliases = [];
+        for (let alias in outbound.__forkop_filter_names) {
+            alias = as_string(alias);
+            if (alias != "" && index(aliases, alias) < 0)
+                push(aliases, alias);
+        }
+        if (length(aliases) > 0)
+            state.outboundMetadata.filterNames[tag_name] = aliases;
+    }
+
     let server = as_string(outbound.server || "");
+    if (server == "") {
+        let peers = array_or_empty(outbound.peers);
+        if (length(peers) > 0 && type(peers[0]) == "object")
+            server = as_string(peers[0].address || "");
+        else if (type(outbound.address) == "string")
+            server = as_string(outbound.address);
+    }
     if (server != "")
         state.servers[tag_name] = server;
 }
@@ -320,7 +359,7 @@ function read_source_outbounds(source_section) {
     let raw = preview_basis.read(source_json_path(source_section));
     let subscription = {};
     try { subscription = object_or_empty(json(raw)); } catch (e) {}
-    return array_or_empty(subscription.outbounds);
+    return [ ...array_or_empty(subscription.outbounds), ...array_or_empty(subscription.endpoints) ];
 }
 
 function new_section_state(section_name) {
@@ -333,9 +372,15 @@ function new_section_state(section_name) {
             countries: {},
             protocols: {},
             transports: {},
-            securities: {}
+            securities: {},
+            filterIds: {},
+            filterNames: {}
         },
         servers: {},
+        selectorTag: "",
+        selectorOutbounds: [],
+        urltestTags: [],
+        priorityTags: [],
         urltestCandidateTags: [],
         urltestGroups: {},
         priorityGroups: {},
@@ -343,8 +388,13 @@ function new_section_state(section_name) {
     };
 }
 
+function get_section_cache_dir() {
+    return section_cache_dir;
+}
+
 return {
     set_section_cache_dir,
+    get_section_cache_dir,
     source_id,
     section_cache_path,
     merge_source_metadata,

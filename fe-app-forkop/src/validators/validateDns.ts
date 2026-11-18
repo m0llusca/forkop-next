@@ -21,6 +21,24 @@ export function validateDNS(value: string): ValidationResult {
     return { valid: false, message: _('Invalid DNS server port') };
   }
 
+  if (
+    pathParts.length > 0 &&
+    !pathParts.every(
+      (part) =>
+        part.length > 0 &&
+        part !== '.' &&
+        part !== '..' &&
+        /^[A-Za-z0-9._~:@!$&'()*+,;=%-]+$/.test(part),
+    )
+  ) {
+    return {
+      valid: false,
+      message: _(
+        'Invalid DNS server format. Examples: 8.8.8.8 or dns.example.com or dns.example.com/nicedns for DoH',
+      ),
+    };
+  }
+
   if (validateIP(host).valid) {
     return { valid: true, message: _('Valid') };
   }

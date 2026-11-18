@@ -71,3 +71,18 @@ class RoutingRegressions(unittest.TestCase):
         self.assertEqual(run.returncode,0,run.stderr)
         uptime=float(Path('/proc/uptime').read_text().split()[0])
         self.assertLess(abs(float(run.stdout)-uptime),2)
+
+    def test_default_fakeip_ipv6_uses_rfc5180_2001_2_112(self):
+        config=self.generate({'domain_suffix':['example.org']})
+        fakeip=next(s for s in config['dns']['servers'] if s.get('tag')=='fakeip-server')
+        self.assertEqual(fakeip['inet6_range'],'2001:2::/112')
+
+    def test_bittorrent_direct_routes_tproxy_inbounds_to_direct_out(self):
+        config=self.generate({'domain_suffix':['example.org']},settings={'bittorrent_direct':'1'})
+        bt_rules=[r for r in config['route']['rules'] if r.get('protocol')=='bittorrent']
+        self.assertEqual(bt_rules,[{
+            'action':'route',
+            'inbound':['tproxy-in','tproxy6-in'],
+            'protocol':'bittorrent',
+            'outbound':'direct-out',
+        }])

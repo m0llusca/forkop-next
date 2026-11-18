@@ -10,6 +10,7 @@ export function showComponentImpact(options: {
   available: () => boolean;
 }) {
   const root = document.createElement('div');
+  root.className = 'fkp-component-impact';
   const text = <K extends keyof HTMLElementTagNameMap>(
     tag: K,
     value: string,
@@ -27,9 +28,14 @@ export function showComponentImpact(options: {
       : 'Установить после просмотра',
   );
   start.type = 'button';
+  start.className =
+    options.action === 'remove'
+      ? 'btn cbi-button cbi-button-remove'
+      : 'btn cbi-button cbi-button-positive';
   start.disabled = true;
   const cancel = text('button', 'Отмена');
   cancel.type = 'button';
+  cancel.className = 'btn cbi-button';
   let active = true;
   cancel.onclick = () => {
     active = false;
@@ -51,7 +57,10 @@ export function showComponentImpact(options: {
     ui.hideModal();
     options.proceed();
   };
-  root.append(result, cancel, start);
+  const buttonRow = document.createElement('div');
+  buttonRow.className = 'button-row';
+  buttonRow.append(cancel, start);
+  root.append(result, buttonRow);
   ui.showModal('Влияние изменения компонента', root);
   void executeShellCommand({
     command: '/usr/bin/forkop',

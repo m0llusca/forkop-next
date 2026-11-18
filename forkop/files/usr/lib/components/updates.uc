@@ -1951,7 +1951,7 @@ function service_proxy_address(settings, purpose) {
 function download_to_file(url, filepath, proxy_address) {
     let attempt = 1;
     while (attempt <= 3) {
-        let command = command_from_args([ "wget", "-O", filepath, url ]);
+        let command = command_from_args([ "wget", "-T", "30", "-O", filepath, url ]);
         if (as_string(proxy_address) != "")
             command = "http_proxy=" + shell_quote("http://" + as_string(proxy_address)) +
                 " https_proxy=" + shell_quote("http://" + as_string(proxy_address)) + " " + command;
@@ -2059,6 +2059,26 @@ function import_domain_ip_list_file_into_rulesets(filepath, section) {
     if (!file_exists_value(filepath))
         return true;
 
+    let ruleset_filepath = domain_ip_list_ruleset_path(section);
+    let domains_only = option(section, "action", "") == "dns";
+    let source_rulesets = routing_rulesets_module();
+    let lower_path = lc(as_string(filepath));
+    let is_yaml_ext = match(lower_path, /\.(yaml|yml)$/) != null;
+    let file_content = is_yaml_ext ? null : fs.readfile(as_string(filepath));
+
+    if (is_yaml_ext || (file_content != null && source_rulesets.content_is_clash_rule_yaml(file_content))) {
+        let subnets_tmpfile = temp_path();
+        if (subnets_tmpfile == "")
+            return false;
+
+        let ok = source_rulesets.import_clash_yaml(filepath, ruleset_filepath, subnets_tmpfile, domains_only);
+        if (ok && !domains_only)
+            ok = add_plain_subnet_file_to_nft_for_section(section, subnets_tmpfile);
+
+        remove_file(subnets_tmpfile);
+        return ok;
+    }
+
     let domains_tmpfile = temp_path();
     let subnets_tmpfile = temp_path();
     if (domains_tmpfile == "" || subnets_tmpfile == "") {
@@ -2066,9 +2086,7 @@ function import_domain_ip_list_file_into_rulesets(filepath, section) {
         return false;
     }
 
-    let ruleset_filepath = domain_ip_list_ruleset_path(section);
     let ok = nft_module_success([ "split-domain-subnet-file", filepath, domains_tmpfile, subnets_tmpfile ]);
-    let domains_only = option(section, "action", "") == "dns";
     if (ok)
         ok = ruleset_module_success([ "import-plain-list", domains_tmpfile, ruleset_filepath, "domain_suffix", "domains", "5000" ]);
     if (ok && !domains_only)

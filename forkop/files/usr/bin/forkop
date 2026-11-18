@@ -124,6 +124,11 @@ function show_help() {
     print("                            Validate an NFQWS2 strategy and print JSON result\n");
     print("    validate_byedpi_strategy_json\n");
     print("                            Validate a ByeDPI ciadpi strategy and print JSON result\n");
+    print("    editor_preview [request_id]\n");
+    print("                            Preview unsaved subscription and connection rule sources\n");
+    print("    tspu_classify [json]    Classify domain connectivity and TSPU blocking stage\n");
+    print("    generate_warp_profile [json]\n");
+    print("                            Generate a Cloudflare WARP connection profile\n");
 }
 
 function command_spec(command) {
@@ -131,6 +136,9 @@ function command_spec(command) {
         next: [ "service/next.uc", "dispatch", 2 ],
         route_explain: [ "service/route_explain.uc", "explain", 1 ],
         extended_preview: [ "service/extended_preview.uc", "preview", 1 ],
+        editor_preview: [ "subscription/editor.uc", "preview", 1 ],
+        tspu_classify: [ "service/tspu_classify.uc", "cli", 1 ],
+        generate_warp_profile: [ "warp/register.uc", "cli", 1 ],
         source_evidence: [ "subscription/evidence.uc", "read-section", 1 ],
         start: [ "service/lifecycle.uc", "start", 1 ],
         stop: [ "service/lifecycle.uc", "stop", 1 ],
@@ -216,6 +224,8 @@ function run_spec(command, spec, user_args) {
     let args = [ "ucode", "-L", LIB_DIR, module, spec[1] ];
     if (command == "extended_preview")
         args = [ "timeout", "10", "ucode", "-L", LIB_DIR, module, spec[1] ];
+    else if (command == "editor_preview" || command == "tspu_classify" || command == "generate_warp_profile")
+        args = [ "timeout", "25", "ucode", "-L", LIB_DIR, module, spec[1] ];
     let count = int(spec[2] || 0);
     for (let i = 0; i < count; i++)
         push(args, user_args[i] || "");

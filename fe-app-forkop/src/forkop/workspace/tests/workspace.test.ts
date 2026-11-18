@@ -104,24 +104,14 @@ it('offers all six destinations in one menu and synchronizes native activation w
   expect(root.querySelector('[name=section]')).toBe(draft);
 });
 
-it('shows theme preferences only under settings and outside native editable panes', () => {
+it('omits manual theme controls and derives light/dark strictly from the host LuCI theme', () => {
   const { root } = nativeMap();
   mountForkopWorkspace(root);
-  const theme = root.querySelector<HTMLSelectElement>(
-    '[aria-label="Тема Forkop"]',
-  )!;
-  expect(theme.closest('[data-workspace-preferences]')).not.toBeNull();
-  expect(
-    theme.closest('[data-workspace-preferences]')!.hasAttribute('hidden'),
-  ).toBe(true);
+  expect(root.querySelector('.fkp-workspace-theme-toggle')).toBeNull();
+  expect(root.querySelector('[data-workspace-preferences]')).toBeNull();
+  expect(root.querySelector('[aria-label="Тема Forkop"]')).toBeNull();
   primary(root, 'settings').click();
-  expect(
-    theme.closest('[data-workspace-preferences]')!.hasAttribute('hidden'),
-  ).toBe(false);
-  expect(theme.closest('.cbi-section[data-tab]')).toBeNull();
-  theme.value = 'dark';
-  theme.dispatchEvent(new Event('change', { bubbles: true }));
-  expect(root.dataset.theme).toBe('dark');
+  expect(root.querySelector('[data-workspace-preferences]')).toBeNull();
 });
 
 it('explains the task of each destination without changing native tabs or field drafts', () => {
@@ -283,12 +273,7 @@ it('applies one theme to the workspace and only identifiable Forkop modals', asy
   const { root } = nativeMap();
   mountForkopWorkspace(root);
   expect(root.dataset.theme).toBe('dark');
-  const theme = root.querySelector<HTMLSelectElement>(
-    '.fkp-workspace-theme select',
-  );
-  expect(theme).not.toBeNull();
-  theme!.value = 'light';
-  theme!.dispatchEvent(new Event('change'));
+  document.documentElement.dataset.theme = 'light';
   const forkop = document.createElement('div');
   forkop.className = 'modal cbi-modal';
   forkop.innerHTML = '<div id="cbi-forkop-rule-modal"><input></div>';
@@ -346,7 +331,7 @@ it('themes identifiable Forkop detail modals that do not contain UCI fields', as
   expect(modal.classList.contains('fkp-workspace-modal')).toBe(true);
 });
 
-it('follows native Atlas darkmode changes while an explicit workspace choice remains authoritative', async () => {
+it('follows native LuCI and Atlas darkmode changes continuously', async () => {
   document.documentElement.setAttribute('data-darkmode', 'true');
   const { root } = nativeMap();
   mountForkopWorkspace(root);
@@ -357,13 +342,7 @@ it('follows native Atlas darkmode changes while an explicit workspace choice rem
   document.body.dataset.theme = 'dark';
   await flush();
   expect(root.dataset.theme).toBe('dark');
-  const theme = root.querySelector<HTMLSelectElement>(
-    '.fkp-workspace-theme select',
-  )!;
-  theme.value = 'light';
-  theme.dispatchEvent(new Event('change'));
   document.body.dataset.theme = 'light';
-  document.body.dataset.theme = 'dark';
   await flush();
   expect(root.dataset.theme).toBe('light');
 });

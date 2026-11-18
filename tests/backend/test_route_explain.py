@@ -134,6 +134,30 @@ class RouteExplainTests(unittest.TestCase):
             self.assertEqual(self.explain(sections, {"domain": "example.com", "device": device})["data"]["decision"]["section"], "main")
         self.assertEqual(self.explain(sections, {"domain": "example.com", "device": "192.168.2.0"})["data"]["decision"]["status"], "direct")
 
+    def test_bittorrent_direct_precedes_sections_when_enabled(self):
+        sections = [("main", {"domain_suffix": "example.com", "action": "block"})]
+        enabled = self.explain(sections, {"domain": "example.com", "protocol": "bittorrent"}, {"bittorrent_direct": "1"})["data"]
+        self.assertEqual(enabled["decision"], {"status": "direct", "section": None, "outbound": "direct-out"})
+        self.assertEqual(enabled["trace"][0]["reason"], "bittorrent_direct")
+        disabled = self.explain(sections, {"domain": "example.com", "protocol": "bittorrent"}, {"bittorrent_direct": "0"})["data"]
+        self.assertEqual(disabled["decision"]["status"], "blocked")
+
+    def test_console_mode_fast_paths_udp_quic_stun_and_requires_protocol(self):
+        sections = [("ps5", {"fully_routed_ips": "192.168.1.50", "console_mode": "1"})]
+        for proto in ("udp", "quic", "stun"):
+            with self.subTest(protocol=proto):
+                data = self.explain(sections, {"destination_ip": "203.0.113.10", "device": "192.168.1.50", "protocol": proto})["data"]
+                self.assertEqual(data["decision"], {"status": "direct", "section": "ps5", "outbound": "direct-out"})
+                self.assertEqual(data["trace"][-1]["reason"], "console_udp_direct")
+
+        missing_proto = self.explain(sections, {"destination_ip": "203.0.113.10", "device": "192.168.1.50"})["data"]
+        self.assertEqual(missing_proto["decision"], {"status": "indeterminate", "section": "ps5", "outbound": None})
+        self.assertIn("protocol", missing_proto["missing"])
+        self.assertEqual(missing_proto["trace"][-1]["reason"], "console_protocol_required")
+
+        tcp_data = self.explain(sections, {"destination_ip": "203.0.113.10", "device": "192.168.1.50", "protocol": "tcp"})["data"]
+        self.assertEqual(tcp_data["decision"], {"status": "matched", "section": "ps5", "outbound": "ps5-out"})
+
 
 if __name__ == "__main__":
     unittest.main()

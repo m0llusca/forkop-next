@@ -1,9 +1,11 @@
 # Forkop Next
 
 Форк [Forkop](https://github.com/ushan0v/forkop) для OpenWrt.
-Версия **1.2.1** исправляет сохранение доменов в редакторе правил LuCI.
-[Изменения 1.2.1](docs/releases/1.2.1.md) · [Документация](docs/README.md)
-· [История 1.1.4](https://github.com/m0llusca/forkop-next/releases/tag/1.1.4).
+Версия **1.3.0** добавляет нативные WireGuard / AmneziaWG / Cloudflare WARP,
+предпросмотр подписок, 4-этапную диагностику ТСПУ (16–20 КБ), консольный режим
+Open NAT, списки Clash YAML и обновлённый интерфейс LuCI с автонаследованием темы.
+[Изменения 1.3.0](docs/releases/1.3.0.md) · [Документация](docs/README.md)
+· [Журнал изменений](CHANGELOG.md).
 Сохраняются конфигурация `/etc/config/forkop`, служба и страницы LuCI.
 
 ## Возможности
@@ -111,7 +113,7 @@ pnpm run build
 компилятором и инструментами из `build.sh`:
 
 ```sh
-bash build.sh 1.2.1
+bash build.sh 1.3.0
 ```
 
 Создаются IPK и APK; SDK проверяются по SHA256, инструмент переводов собирается

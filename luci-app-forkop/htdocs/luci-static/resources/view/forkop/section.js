@@ -455,6 +455,8 @@ let actionProvidersAvailabilityPromise = null;
 let actionProvidersAvailabilityLoader = null;
 const outboundNameChoicesCache = new Map();
 const outboundNameChoicesInflight = new Map();
+const subscriptionPreviewCache = new Map();
+let subscriptionUrlSourceOption = null;
 const outboundNameSourceOptions = new Map();
 const sectionGroupSourceOptions = new Map();
 const dashboardFilterChoiceRefreshers = new Map();
@@ -678,7 +680,11 @@ function loadOutboundNameChoices(section_id) {
 
   const task = readOutboundMetadataFromSectionCache(section_id)
     .then((metadata) => {
-      const names = Object.values(plainObject(metadata.names));
+      const previewNames =
+        (subscriptionPreviewCache.get(section_id) || {}).names || [];
+      const names = Object.values(plainObject(metadata.names)).concat(
+        previewNames,
+      );
 
       const choices = names
         .filter(Boolean)
@@ -862,10 +868,9 @@ function ensureConnectionsDynamicListStyles() {
 
 .fkp-connections-dynlist > .item > .fkp-dynlist-settings:hover,
 .fkp-connections-dynlist > .item > .fkp-dynlist-settings:focus {
-  --focus-color-rgb: 82, 168, 236;
   outline: 0;
-  border-color: rgba(var(--focus-color-rgb), 0.8) !important;
-  box-shadow: inset 0 1px 3px hsla(var(--border-color-low-hsl), .01), 0 0 8px rgba(var(--focus-color-rgb), 0.6);
+  border-color: var(--next-accent, #14635e) !important;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--next-accent, #14635e) 22%, transparent);
   text-decoration: none;
 }
 
@@ -939,8 +944,8 @@ function ensureConnectionsDynamicListStyles() {
 
 .fkp-button-add-dynlist > .add-item > .cbi-button-add:hover,
 .fkp-button-add-dynlist > .add-item > .cbi-button-add:focus {
-  border-color: rgba(82, 168, 236, .8) !important;
-  box-shadow: inset 0 1px 3px hsla(var(--border-color-low-hsl, 0, 0%, 0%), .01), 0 0 8px rgba(82, 168, 236, .6) !important;
+  border-color: var(--next-accent, #14635e) !important;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--next-accent, #14635e) 22%, transparent) !important;
   outline: 0;
 }
 
@@ -1548,6 +1553,9 @@ function currentOutboundNameChoices(section_id, values) {
   };
 
   (outboundNameChoicesCache.get(section_id) || []).forEach(append);
+  ((subscriptionPreviewCache.get(section_id) || {}).names || []).forEach(
+    append,
+  );
   currentDraftOutboundNames(section_id).forEach(append);
   normalizeDynamicListItems(values).forEach(append);
 
@@ -1913,6 +1921,9 @@ function proxyProtocolChoices() {
     ["socks", "SOCKS"],
     ["http", "HTTP"],
     ["hysteria2", "Hysteria2"],
+    ["wireguard", "WireGuard"],
+    ["amneziawg", "AmneziaWG"],
+    ["warp", "Cloudflare WARP"],
     ["direct", "Direct"],
   ];
 }
@@ -4400,7 +4411,18 @@ function getActionOptionLabel(action) {
 }
 
 function getRuleActionDisplayMarkup(section_id) {
-  return main.renderRuleRoute(uci.get(UCI_PACKAGE, section_id));
+  const row = uci.get(UCI_PACKAGE, section_id);
+  if (!row) return main.renderRuleRoute(row);
+  return main.renderRuleRoute(
+    Object.assign({}, row, {
+      subscription_urls_count: getChildItemIds(section_id, "subscription_url")
+        .length,
+      interfaces_count: getChildItemIds(section_id, "section_interface").length,
+      urltest_count: getChildItemIds(section_id, "urltest").length,
+      priority_group_count: getChildItemIds(section_id, "priority_group")
+        .length,
+    }),
+  );
 }
 
 function populateActionOptionValues(option, section_id) {
@@ -4951,7 +4973,16 @@ function applyTextareaInputAttributes(textarea) {
       (Number.parseFloat(style.borderTopWidth) || 0) +
       (Number.parseFloat(style.borderBottomWidth) || 0);
 
-    return Math.ceil(rows * lineHeight + verticalPadding + verticalBorder);
+    const rawHeight = Math.ceil(
+      rows * lineHeight + verticalPadding + verticalBorder,
+    );
+    if (window.innerWidth <= 720 || window.innerHeight <= 720) {
+      return Math.min(
+        rawHeight,
+        Math.max(160, Math.floor((window.innerHeight || 800) * 0.35)),
+      );
+    }
+    return rawHeight;
   };
 
   const applyMinHeight = () => {
@@ -7216,11 +7247,837 @@ function validateCustomRulesetReference(value) {
 function validatePlainListReference(value) {
   return validateFileReference(
     value,
-    [".lst"],
-    _("List must be an HTTP(S) URL or a local .lst path"),
+    [".lst", ".yaml", ".yml"],
+    _("List must be an HTTP(S) URL or a local .lst, .yaml, or .yml path"),
     { allowRemoteWithoutExtension: true },
   );
 }
+
+// Tier-2 native helpers begin
+function collectSubscriptionEditorPreviewPayload(section_id) {
+  let rawItems = currentLiveDynamicListValues(section_id, "subscription_url");
+  if (rawItems == null) {
+    if (
+      subscriptionUrlSourceOption &&
+      typeof subscriptionUrlSourceOption.formvalue === "function"
+    ) {
+      try {
+        const val = subscriptionUrlSourceOption.formvalue(section_id);
+        if (val != null) {
+          rawItems = normalizeDynamicListItems(val);
+        }
+      } catch (_err) {
+        // Fall back to saved child items when widget is not yet bound.
+      }
+    }
+  }
+  if (rawItems == null) {
+    rawItems = getChildItemIds(section_id, "subscription_url");
+  }
+
+  const sources = [];
+  normalizeDynamicListItems(rawItems).forEach((rawItem) => {
+    const existing = isExistingChildItem(
+      section_id,
+      rawItem,
+      "subscription_url",
+    );
+    const url = childItemInputValue(
+      section_id,
+      rawItem,
+      "subscription_url",
+      "url",
+    ).trim();
+    if (!url) {
+      return;
+    }
+
+    const baseSettings = existing
+      ? readChildSettings(
+          rawItem,
+          subscriptionUrlSettingsKeys(),
+          defaultSubscriptionUrlSettings(),
+        )
+      : defaultSubscriptionUrlSettings();
+    const stagedSettings =
+      subscriptionUrlSourceOption &&
+      typeof subscriptionUrlSourceOption.stagedChildSettings === "function"
+        ? subscriptionUrlSourceOption.stagedChildSettings(section_id, rawItem)
+        : null;
+    const merged = Object.assign({}, baseSettings, stagedSettings || {});
+
+    sources.push({
+      url,
+      name: existing ? rawItem : "",
+      prefix: merged.prefix_nodes === "1" ? `${merged.node_prefix || ""}` : "",
+      user_agent:
+        merged.auto_user_agent === "0" ? `${merged.user_agent || ""}` : "",
+      hwid_auto: merged.auto_hwid !== "0",
+      hwid: merged.auto_hwid === "0" ? `${merged.hwid || ""}` : "",
+      download_via_proxy_enabled:
+        merged.download_via_proxy_enabled === "1" ? "1" : "0",
+      download_via_proxy_section:
+        merged.download_via_proxy_enabled === "1"
+          ? `${merged.download_via_proxy_section || ""}`
+          : "",
+      include_urltest_groups: merged.include_urltest_groups !== "0" ? "1" : "0",
+      hide_urltest_group_outbounds:
+        merged.hide_urltest_group_outbounds !== "0" ? "1" : "0",
+      hide_detour_outbounds: merged.hide_detour_outbounds !== "0" ? "1" : "0",
+    });
+  });
+
+  const detectWidget =
+    typeof document !== "undefined"
+      ? document.getElementById(
+          `widget.cbid.${UCI_PACKAGE}.${section_id}.detect_server_country`,
+        )
+      : null;
+  const detectCountry =
+    (detectWidget && detectWidget.value) ||
+    uci.get(UCI_PACKAGE, section_id, "detect_server_country") ||
+    "flag_emoji";
+
+  const interfaces = currentSourceOptionValues(section_id, "interfaces")
+    .map((itemId) =>
+      childItemInputValue(
+        section_id,
+        itemId,
+        "section_interface",
+        "name",
+      ).trim(),
+    )
+    .filter(Boolean);
+
+  return {
+    section_id,
+    sources,
+    section: {
+      detect_server_country: detectCountry,
+      selector_proxy_links: currentSourceOptionValues(
+        section_id,
+        "selector_proxy_links",
+      ),
+      outbound_jsons: currentSourceOptionValues(section_id, "outbound_jsons"),
+      interfaces,
+    },
+  };
+}
+
+function previewCountryFlag(countryCode) {
+  const code = `${countryCode || ""}`.trim().toUpperCase();
+  if (!/^[A-Z]{2}$/.test(code)) {
+    return "";
+  }
+  return String.fromCodePoint(
+    0x1f1e6 + code.charCodeAt(0) - 65,
+    0x1f1e6 + code.charCodeAt(1) - 65,
+  );
+}
+
+function renderSubscriptionPreviewResultInto(container, badge, previewData) {
+  container.textContent = "";
+  if (!previewData) {
+    badge.textContent = _("Not previewed yet");
+    return;
+  }
+
+  const names = Array.isArray(previewData.names) ? previewData.names : [];
+  const countries = plainObject(previewData.countries);
+  const total =
+    typeof previewData.count === "number" ? previewData.count : names.length;
+  badge.textContent = `${total} · ${_("Servers available for filtering")}`;
+
+  if (!names.length) {
+    return;
+  }
+
+  const chipEntries = names.map((serverName) => {
+    const code = `${countries[serverName] || ""}`.trim().toUpperCase();
+    const flag = previewCountryFlag(code);
+    const label = code
+      ? `${flag ? `${flag} ` : ""}[${code}] ${serverName}`
+      : serverName;
+    const node = E("span", { class: "fkp-sub-preview-chip" }, label);
+    return {
+      node,
+      haystack: `${code} ${serverName}`.toLowerCase(),
+    };
+  });
+
+  const summaryNode = E(
+    "summary",
+    {},
+    `${_("Previewed servers")} (${names.length})`,
+  );
+  const detailChildren = [summaryNode];
+
+  if (names.length > 6) {
+    const searchInput = E("input", {
+      type: "search",
+      class: "fkp-sub-preview-search",
+      "data-sub-preview-search": "",
+      placeholder: _("Filter previewed servers by name or country..."),
+      "aria-label": _("Filter previewed servers by name or country..."),
+    });
+    searchInput.addEventListener("input", () => {
+      const q = `${searchInput.value || ""}`.trim().toLowerCase();
+      let shown = 0;
+      chipEntries.forEach((entry) => {
+        const match = !q || entry.haystack.includes(q);
+        entry.node.hidden = !match;
+        if (match) shown += 1;
+      });
+      summaryNode.textContent = q
+        ? `${_("Previewed servers")} (${shown} / ${names.length})`
+        : `${_("Previewed servers")} (${names.length})`;
+    });
+    detailChildren.push(searchInput);
+  }
+
+  detailChildren.push(
+    E(
+      "div",
+      { class: "fkp-sub-preview-list" },
+      chipEntries.map((entry) => entry.node),
+    ),
+  );
+
+  const details = E(
+    "details",
+    { class: "fkp-sub-preview-details", open: "" },
+    detailChildren,
+  );
+  container.appendChild(details);
+}
+
+function renderSubscriptionPreviewToolbar(section_id) {
+  const badge = E(
+    "span",
+    { class: "fkp-tier2-badge", role: "status", "aria-live": "polite" },
+    _("Not previewed yet"),
+  );
+  const resultHost = E("div", { class: "fkp-sub-preview-host" });
+  const existingPreview = subscriptionPreviewCache.get(section_id);
+  if (existingPreview) {
+    renderSubscriptionPreviewResultInto(resultHost, badge, existingPreview);
+  }
+
+  const btn = E(
+    "button",
+    {
+      type: "button",
+      class: "btn cbi-button cbi-button-action",
+      click: async () => {
+        const payload = collectSubscriptionEditorPreviewPayload(section_id);
+        if (
+          !payload.sources.length &&
+          !payload.section.selector_proxy_links.length &&
+          !payload.section.outbound_jsons.length &&
+          !payload.section.interfaces.length
+        ) {
+          badge.textContent = _(
+            "Add at least one subscription URL or connection source first",
+          );
+          return;
+        }
+
+        btn.disabled = true;
+        badge.textContent = _("Fetching subscription preview...");
+        const requestId = `editor-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        const statePath = `/var/run/forkop/ui-state/${requestId}.json`;
+
+        try {
+          await fs.write(statePath, JSON.stringify(payload));
+          const execRes = await fs.exec("/usr/bin/forkop", [
+            "editor_preview",
+            requestId,
+          ]);
+          let parsed = null;
+          try {
+            parsed = JSON.parse((execRes && execRes.stdout) || "{}");
+          } catch (_err) {
+            parsed = null;
+          }
+
+          if (!parsed || parsed.success !== true) {
+            const errMsg =
+              (parsed && (parsed.message || parsed.error)) ||
+              (execRes && execRes.stderr) ||
+              _("Subscription preview failed");
+            badge.textContent = `${_("Preview error")}: ${errMsg}`;
+            return;
+          }
+
+          const names = Array.isArray(parsed.names)
+            ? parsed.names.map((n) => `${n || ""}`.trim()).filter(Boolean)
+            : [];
+          const countries = plainObject(parsed.countries);
+          const count =
+            typeof parsed.count === "number" ? parsed.count : names.length;
+          const cachedEntry = { names, countries, count };
+          subscriptionPreviewCache.set(section_id, cachedEntry);
+
+          const prevChoices = outboundNameChoicesCache.get(section_id) || [];
+          const mergedChoices = prevChoices
+            .concat(names)
+            .filter(Boolean)
+            .filter((name, idx, arr) => arr.indexOf(name) === idx)
+            .sort((a, b) => `${a}`.localeCompare(`${b}`));
+          outboundNameChoicesCache.set(section_id, mergedChoices);
+
+          renderSubscriptionPreviewResultInto(resultHost, badge, cachedEntry);
+          refreshDashboardFilterChoiceWidgets(section_id);
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(new CustomEvent("forkop:source-pool-changed"));
+          }
+        } catch (err) {
+          badge.textContent = `${_("Preview error")}: ${(err && err.message) || _("Request failed")}`;
+        } finally {
+          btn.disabled = false;
+        }
+      },
+    },
+    _("Preview subscription servers"),
+  );
+
+  return E("div", { class: "fkp-sub-preview-wrap" }, [
+    E("div", { class: "fkp-tier2-toolbar" }, [btn, badge]),
+    resultHost,
+  ]);
+}
+
+function appendLinkToSelectorProxyLinks(section_id, link) {
+  const normalized = `${link || ""}`.trim();
+  if (!normalized) {
+    return false;
+  }
+
+  const dlNode =
+    typeof document !== "undefined"
+      ? document.getElementById(
+          `cbid.${UCI_PACKAGE}.${section_id}.selector_proxy_links`,
+        )
+      : null;
+
+  if (dlNode) {
+    const widget =
+      typeof L !== "undefined" &&
+      L.dom &&
+      typeof L.dom.findClassInstance === "function"
+        ? L.dom.findClassInstance(dlNode)
+        : null;
+    if (widget && typeof widget.addItem === "function") {
+      widget.addItem(dlNode, normalized, null, false);
+      if (typeof widget.dispatchCbiDynlistChange === "function") {
+        widget.dispatchCbiDynlistChange(dlNode, normalized);
+      }
+      refreshDashboardFilterChoiceWidgets(section_id);
+      return true;
+    }
+
+    const textInput = dlNode.querySelector('.add-item > input[type="text"]');
+    const addBtn = dlNode.querySelector(".add-item > .cbi-button-add");
+    if (textInput && addBtn) {
+      textInput.value = normalized;
+      addBtn.click();
+      refreshDashboardFilterChoiceWidgets(section_id);
+      return true;
+    }
+  }
+
+  const existing = getConfigListValues(section_id, "selector_proxy_links");
+  if (!existing.includes(normalized)) {
+    uci.set(
+      UCI_PACKAGE,
+      section_id,
+      "selector_proxy_links",
+      existing.concat([normalized]),
+    );
+  }
+  refreshDashboardFilterChoiceWidgets(section_id);
+  return true;
+}
+
+function parseWgAwgIniToLink(rawText, customName, enableOneSidedAwg) {
+  const lines = `${rawText || ""}`.split(/\r?\n/);
+  let currentSection = "";
+  let peerCount = 0;
+  const iface = {};
+  const peer = {};
+
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i].trim();
+    if (!line || line.startsWith("#") || line.startsWith(";")) {
+      continue;
+    }
+    const secMatch = line.match(/^\[([^\]]+)\]/);
+    if (secMatch) {
+      currentSection = secMatch[1].trim().toLowerCase();
+      if (currentSection === "peer") {
+        peerCount += 1;
+      }
+      continue;
+    }
+    const eqIdx = line.indexOf("=");
+    if (eqIdx < 0) {
+      continue;
+    }
+    const key = line.slice(0, eqIdx).trim().toLowerCase();
+    const val = line
+      .slice(eqIdx + 1)
+      .replace(/\s+[#;].*$/, "")
+      .trim();
+    if (!key || !val) {
+      continue;
+    }
+    if (currentSection === "interface") {
+      iface[key] =
+        iface[key] && key === "address" ? `${iface[key]},${val}` : val;
+    } else if (currentSection === "peer" && peerCount === 1) {
+      peer[key] =
+        peer[key] && key === "allowedips" ? `${peer[key]},${val}` : val;
+    }
+  }
+
+  if (!iface.privatekey) {
+    return {
+      valid: false,
+      message: _("WireGuard .conf is missing [Interface] PrivateKey"),
+    };
+  }
+  if (!peer.publickey) {
+    return {
+      valid: false,
+      message: _("WireGuard .conf is missing [Peer] PublicKey"),
+    };
+  }
+  if (!peer.endpoint) {
+    return {
+      valid: false,
+      message: _("WireGuard .conf is missing [Peer] Endpoint"),
+    };
+  }
+
+  const awgKeys = [
+    "jc",
+    "jmin",
+    "jmax",
+    "s1",
+    "s2",
+    "s3",
+    "s4",
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "i1",
+    "i2",
+    "i3",
+    "i4",
+    "i5",
+  ];
+  const awgParams = {};
+  let hasAwg = false;
+  awgKeys.forEach((k) => {
+    if (iface[k] !== undefined && `${iface[k]}`.trim() !== "") {
+      awgParams[k] = `${iface[k]}`.trim();
+      hasAwg = true;
+    }
+  });
+
+  if (enableOneSidedAwg && !awgParams.jc) {
+    awgParams.jc = "4";
+    awgParams.jmin = "40";
+    awgParams.jmax = "70";
+    hasAwg = true;
+  }
+
+  const scheme = hasAwg ? "awg" : "wireguard";
+  const queryParts = [`publickey=${encodeURIComponent(peer.publickey)}`];
+  if (peer.presharedkey) {
+    queryParts.push(`psk=${encodeURIComponent(peer.presharedkey)}`);
+  }
+  if (iface.address) {
+    const cleanAddr = iface.address
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .join(",");
+    if (cleanAddr) {
+      queryParts.push(`address=${encodeURIComponent(cleanAddr)}`);
+    }
+  }
+  if (peer.allowedips) {
+    const cleanAllowed = peer.allowedips
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .join(",");
+    if (cleanAllowed) {
+      queryParts.push(`allowedips=${encodeURIComponent(cleanAllowed)}`);
+    }
+  }
+  if (iface.mtu) {
+    queryParts.push(`mtu=${encodeURIComponent(iface.mtu)}`);
+  }
+  if (peer.persistentkeepalive) {
+    queryParts.push(
+      `keepalive=${encodeURIComponent(peer.persistentkeepalive)}`,
+    );
+  }
+  awgKeys.forEach((k) => {
+    if (awgParams[k] !== undefined) {
+      queryParts.push(`${k}=${encodeURIComponent(awgParams[k])}`);
+    }
+  });
+
+  const tag = `${customName || ""}`.trim() || peer.endpoint;
+  const link = `${scheme}://${encodeURIComponent(iface.privatekey)}@${peer.endpoint}?${queryParts.join("&")}#${encodeURIComponent(tag)}`;
+  const check = main.validateProxyUrl(link);
+  if (!check.valid) {
+    return { valid: false, message: check.message };
+  }
+
+  return { valid: true, link };
+}
+
+function warpBootstrapProxyChoices(currentSectionId) {
+  const choices = [["", _("Direct connection (from router)")]];
+  uci.sections(UCI_PACKAGE, "section").forEach((sec) => {
+    const name = sec[".name"];
+    if (!name || name === currentSectionId || sec.enabled === "0") {
+      return;
+    }
+    if (sec.mixed_proxy_enabled === "1" && sec.mixed_proxy_port) {
+      const label = sec.label ? `${sec.label} (${name})` : name;
+      choices.push([name, label]);
+    }
+  });
+  return choices;
+}
+
+function openWgWarpHelperModal(section_id) {
+  const statusBanner = E("div", {
+    class: "alert-message warning",
+    style: "display:none",
+    role: "alert",
+  });
+  const showBanner = (msg) => {
+    statusBanner.textContent = msg || "";
+    statusBanner.style.display = msg ? "" : "none";
+  };
+
+  const confProfileInput = E("input", {
+    type: "text",
+    placeholder: "AWG-Router",
+  });
+  const confFileInput = E("input", {
+    type: "file",
+    accept: ".conf,.txt,.ini",
+    "data-wg-conf-file": "",
+  });
+  const confTextarea = E("textarea", {
+    placeholder:
+      "[Interface]\nPrivateKey = ...\nAddress = 10.66.66.2/32\nJc = 4\nJmin = 40\nJmax = 70\n\n[Peer]\nPublicKey = ...\nEndpoint = 198.51.100.10:51820\nAllowedIPs = 0.0.0.0/0",
+  });
+  const confOneSidedCheck = E("input", { type: "checkbox" });
+  const confDetected = E(
+    "p",
+    {
+      class: "fkp-wg-warp-hint",
+      "data-wg-conf-detected": "",
+      role: "status",
+    },
+    _(
+      "Paste or upload a .conf file to detect WireGuard or AmneziaWG parameters",
+    ),
+  );
+
+  const updateConfDetected = () => {
+    const raw = `${confTextarea.value || ""}`.trim();
+    if (!raw) {
+      confDetected.textContent = _(
+        "Paste or upload a .conf file to detect WireGuard or AmneziaWG parameters",
+      );
+      return;
+    }
+    const isAwg =
+      Boolean(confOneSidedCheck.checked) ||
+      /\b(jc|jmin|jmax|s1|s2|s3|s4|h1|h2|h3|h4|i1|i2|i3|i4|i5)\s*=/i.test(raw);
+    const kindLabel = isAwg
+      ? _("Detected format: AmneziaWG (awg:// with packet obfuscation)")
+      : _("Detected format: Standard WireGuard (wireguard://)");
+    const check = parseWgAwgIniToLink(
+      raw,
+      confProfileInput.value,
+      confOneSidedCheck.checked,
+    );
+    confDetected.textContent = check.valid
+      ? kindLabel
+      : `${kindLabel} · ${check.message}`;
+  };
+
+  confTextarea.addEventListener("input", updateConfDetected);
+  confOneSidedCheck.addEventListener("change", updateConfDetected);
+  confFileInput.addEventListener("change", async () => {
+    const file = confFileInput.files && confFileInput.files[0];
+    if (!file) return;
+    try {
+      const content =
+        typeof file.text === "function"
+          ? await file.text()
+          : await new Promise((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onload = () => resolve(`${reader.result || ""}`);
+              reader.onerror = () => reject(reader.error);
+              reader.readAsText(file);
+            });
+      confTextarea.value = `${content || ""}`;
+      if (!`${confProfileInput.value || ""}`.trim() && file.name) {
+        confProfileInput.value = file.name.replace(/\.(conf|ini|txt)$/i, "");
+      }
+      showBanner("");
+      updateConfDetected();
+    } catch (_err) {
+      showBanner(_("Failed to read .conf file"));
+    }
+  });
+
+  const warpLicenseInput = E("input", {
+    type: "text",
+    placeholder: _("Optional WARP+ license key"),
+  });
+  const warpOneSidedCheck = E("input", {
+    type: "checkbox",
+    checked: "checked",
+  });
+  const warpProxySelect = E(
+    "select",
+    {},
+    warpBootstrapProxyChoices(section_id).map(([val, label]) =>
+      E("option", { value: val }, label),
+    ),
+  );
+
+  let closeSubview = () => ui.hideModal();
+
+  const importConfBtn = E(
+    "button",
+    {
+      type: "button",
+      class: "btn cbi-button cbi-button-action",
+      click: () => {
+        showBanner("");
+        const parsed = parseWgAwgIniToLink(
+          confTextarea.value,
+          confProfileInput.value,
+          confOneSidedCheck.checked,
+        );
+        if (!parsed.valid) {
+          showBanner(parsed.message);
+          return;
+        }
+        appendLinkToSelectorProxyLinks(section_id, parsed.link);
+        if (typeof main.showToast === "function") {
+          main.showToast(
+            _("WireGuard / AmneziaWG link imported into Connection URL"),
+            "success",
+          );
+        }
+        closeSubview();
+      },
+    },
+    _("Import .conf as Connection URL"),
+  );
+
+  const generateWarpBtn = E(
+    "button",
+    {
+      type: "button",
+      class: "btn cbi-button cbi-button-positive important",
+      click: async () => {
+        showBanner("");
+        generateWarpBtn.disabled = true;
+        const origLabel = generateWarpBtn.textContent;
+        generateWarpBtn.textContent = _("Registering Cloudflare WARP...");
+        try {
+          const reqPayload = {
+            license_key: `${warpLicenseInput.value || ""}`.trim(),
+            one_sided_awg: Boolean(warpOneSidedCheck.checked),
+            proxy_section: `${warpProxySelect.value || ""}`.trim(),
+          };
+          const res = await fs.exec("/usr/bin/forkop", [
+            "generate_warp_profile",
+            JSON.stringify(reqPayload),
+          ]);
+          let body = null;
+          try {
+            body = JSON.parse((res && res.stdout) || "{}");
+          } catch (_err) {
+            body = null;
+          }
+          if (!body || body.success !== true || !body.data || !body.data.link) {
+            showBanner(
+              (body && (body.message || body.error)) ||
+                (res && res.stderr) ||
+                _("Failed to register Cloudflare WARP profile"),
+            );
+            return;
+          }
+          const validation = main.validateProxyUrl(body.data.link);
+          if (!validation.valid) {
+            showBanner(validation.message);
+            return;
+          }
+          appendLinkToSelectorProxyLinks(section_id, body.data.link);
+          if (typeof main.showToast === "function") {
+            main.showToast(
+              _("Cloudflare WARP profile generated and added"),
+              "success",
+            );
+          }
+          closeSubview();
+        } catch (err) {
+          showBanner(
+            (err && err.message) ||
+              _("Failed to register Cloudflare WARP profile"),
+          );
+        } finally {
+          generateWarpBtn.disabled = false;
+          generateWarpBtn.textContent = origLabel;
+        }
+      },
+    },
+    _("Generate Cloudflare WARP profile"),
+  );
+
+  const subviewNode = E("div", { class: "fkp-wg-warp-subview" }, [
+    statusBanner,
+    E("div", { class: "fkp-wg-warp-grid" }, [
+      E("div", { class: "fkp-wg-warp-card" }, [
+        E("h5", {}, _("Import WireGuard or AmneziaWG .conf")),
+        E(
+          "p",
+          { class: "fkp-wg-warp-lead" },
+          _(
+            "Use an existing tunnel config from your provider or self-hosted Amnezia server.",
+          ),
+        ),
+        E("label", {}, [_("Load .conf file from device"), confFileInput]),
+        E("label", {}, [_("Profile display name"), confProfileInput]),
+        E("label", {}, [
+          _("Paste [Interface] and [Peer] configuration"),
+          confTextarea,
+        ]),
+        confDetected,
+        E("label", { class: "fkp-wg-warp-check" }, [
+          confOneSidedCheck,
+          _("Enable 1-sided AmneziaWG obfuscation (Jc=4, Jmin=40, Jmax=70)"),
+        ]),
+        E("div", { class: "fkp-wg-warp-actions" }, [importConfBtn]),
+      ]),
+      E("div", { class: "fkp-wg-warp-card" }, [
+        E("h5", {}, _("Cloudflare WARP generator")),
+        E(
+          "p",
+          { class: "fkp-wg-warp-lead" },
+          _(
+            "No account needed: registers a free Cloudflare WARP keypair directly on the router.",
+          ),
+        ),
+        E("label", {}, [_("WARP+ license key (optional)"), warpLicenseInput]),
+        E("label", {}, [
+          _(
+            "Bootstrap registration via active Mixed inbound section (optional)",
+          ),
+          warpProxySelect,
+        ]),
+        E("label", { class: "fkp-wg-warp-check" }, [
+          warpOneSidedCheck,
+          _("Enable 1-sided AmneziaWG obfuscation (Jc=4, Jmin=40, Jmax=70)"),
+        ]),
+        E("div", { class: "fkp-wg-warp-actions" }, [generateWarpBtn]),
+      ]),
+    ]),
+  ]);
+
+  const modal = document.querySelector("#modal_overlay > .modal.cbi-modal");
+  const activeMap = modal ? modal.querySelector(".cbi-map:not(.hidden)") : null;
+  const buttonRow = modal ? modal.querySelector("div.button-row") : null;
+  const heading = modal ? modal.querySelector("h4") : null;
+
+  if (modal && activeMap && buttonRow && heading) {
+    const titleSuffix = E(
+      "span",
+      {},
+      ` » ${_("WireGuard / AmneziaWG / WARP")}`,
+    );
+    const origClass = buttonRow.getAttribute("class") || "";
+    const origButtons = Array.from(buttonRow.childNodes);
+    let closed = false;
+    closeSubview = () => {
+      if (closed) return;
+      closed = true;
+      if (subviewNode.parentNode) {
+        subviewNode.parentNode.removeChild(subviewNode);
+      }
+      if (titleSuffix.parentNode) {
+        titleSuffix.parentNode.removeChild(titleSuffix);
+      }
+      activeMap.classList.remove("hidden");
+      buttonRow.textContent = "";
+      origButtons.forEach((n) => buttonRow.appendChild(n));
+      buttonRow.setAttribute("class", origClass);
+    };
+
+    buttonRow.textContent = "";
+    buttonRow.appendChild(
+      E(
+        "button",
+        { type: "button", class: "btn cbi-button", click: closeSubview },
+        _("Back"),
+      ),
+    );
+    heading.appendChild(titleSuffix);
+    activeMap.classList.add("hidden");
+    activeMap.parentNode.insertBefore(
+      subviewNode,
+      activeMap.nextElementSibling,
+    );
+    return;
+  }
+
+  ui.showModal(_("WireGuard / AmneziaWG / WARP"), [
+    subviewNode,
+    E("div", { class: "right" }, [
+      E(
+        "button",
+        {
+          type: "button",
+          class: "btn cbi-button",
+          click: () => ui.hideModal(),
+        },
+        _("Close"),
+      ),
+    ]),
+  ]);
+}
+
+function renderWgWarpHelperToolbar(section_id) {
+  return E("div", { class: "fkp-tier2-toolbar" }, [
+    E(
+      "button",
+      {
+        type: "button",
+        class: "btn cbi-button cbi-button-action",
+        click: () => openWgWarpHelperModal(section_id),
+      },
+      _("Import WireGuard / AmneziaWG / Generate WARP"),
+    ),
+  ]);
+}
+// Tier-2 native helpers end
 
 function getRulesetReferences(section_id) {
   return getConfigListValues(section_id, "rule_set");
@@ -7537,7 +8394,7 @@ function createSectionContent(section) {
     "selector_proxy_links",
     _("Connection URL"),
     _(
-      "vless://, vmess://, ss://, trojan://, socks4/5://, hy2/hysteria2:// links",
+      "vless://, vmess://, ss://, trojan://, socks4/5://, hy2/hysteria2://, wireguard/wg://, awg/amneziawg://, warp:// links",
     ),
   );
   o.depends("action", "connection");
@@ -7555,6 +8412,19 @@ function createSectionContent(section) {
     refreshDashboardFilterChoiceWidgets(section_id);
   };
   outboundNameSourceOptions.set("selector_proxy_links", o);
+
+  o = section.taboption("settings", form.DummyValue, "_wg_warp_helper", "");
+  o.depends("action", "connection");
+  o.modalonly = true;
+  o.rawhtml = true;
+  o.cfgvalue = function () {
+    return "";
+  };
+  o.write = function () {};
+  o.remove = function () {};
+  o.renderWidget = function (section_id) {
+    return renderWgWarpHelperToolbar(section_id);
+  };
 
   o = section.taboption(
     "settings",
@@ -7602,6 +8472,25 @@ function createSectionContent(section) {
       section_id,
       childItemInputValue(section_id, value, "subscription_url", "url"),
     );
+  };
+  subscriptionUrlSourceOption = o;
+
+  o = section.taboption(
+    "settings",
+    form.DummyValue,
+    "_subscription_preview",
+    "",
+  );
+  o.depends("action", "connection");
+  o.modalonly = true;
+  o.rawhtml = true;
+  o.cfgvalue = function () {
+    return "";
+  };
+  o.write = function () {};
+  o.remove = function () {};
+  o.renderWidget = function (section_id) {
+    return renderSubscriptionPreviewToolbar(section_id);
   };
 
   o = section.taboption(
@@ -7890,13 +8779,16 @@ function createSectionContent(section) {
   o.depends({ action: "zapret2", mixed_proxy_enabled: "1" });
   o.modalonly = true;
   o.validate = function (_section_id, value) {
-    if (!value || value.length === 0) {
+    const normalized = String(value ?? "").trim();
+    if (!normalized) {
       return _("Port cannot be empty");
     }
 
-    const parsed = parseInt(value, 10);
-    if (!isNaN(parsed) && parsed >= 1 && parsed <= 65535) {
-      return true;
+    if (/^[0-9]+$/.test(normalized)) {
+      const parsed = Number(normalized);
+      if (parsed >= 1 && parsed <= 65535) {
+        return true;
+      }
     }
 
     return _("Invalid port number. Must be between 1 and 65535");
@@ -7959,6 +8851,7 @@ function createSectionContent(section) {
     "mixed_proxy_password",
     _("Mixed Proxy Password"),
   );
+  o.password = true;
   o.rmempty = false;
   o.depends({
     action: "connection",
@@ -8014,6 +8907,22 @@ function createSectionContent(section) {
 
     return getRuleResolvedAction(section_id) === "byedpi" ? "1" : "0";
   };
+
+  o = section.taboption(
+    "settings",
+    form.Flag,
+    "console_mode",
+    _("Console gaming mode (TCP proxy, UDP direct)"),
+    _(
+      "Route TCP (store, sign-in, party signaling) through this connection while sending non-FakeIP UDP (voice, P2P/STUN, game ticks) directly for Open NAT and low latency.",
+    ),
+  );
+  o.default = "0";
+  o.rmempty = false;
+  o.modalonly = true;
+  ["connection", "proxy", "outbound", "vpn"].forEach((act) =>
+    o.depends("action", act),
+  );
 
   addTextConditionField(section, {
     key: "domain_suffix",
@@ -8133,7 +9042,9 @@ function createSectionContent(section) {
     form.DynamicList,
     "domain_ip_lists",
     _("Domain and IP lists"),
-    _("Add URLs or local paths to .lst lists containing domains and subnets."),
+    _(
+      "Add URLs or local paths to .lst or Clash .yaml / .yml lists containing domains and subnets.",
+    ),
   );
   domainIpListsOption.modalonly = true;
   // Both widgets map to domain_ip_lists, so neither inactive view may erase shared storage.
@@ -8155,7 +9066,7 @@ function createSectionContent(section) {
     "_dns_domain_ip_lists",
     _("Domain lists"),
     _(
-      "Add URLs or local paths to .lst lists containing domains. IP entries are ignored.",
+      "Add URLs or local paths to .lst or Clash .yaml / .yml lists containing domains. IP entries are ignored.",
     ),
   );
   dnsDomainListsOption.depends("action", "dns");
@@ -8230,11 +9141,69 @@ function loadSectionTableOptions(sectionRef) {
   return Promise.all(tasks);
 }
 
+function captureUciPackageSnapshot() {
+  const state = uci.state;
+  if (!state) return null;
+  const buckets = {};
+  for (const key of [
+    "values",
+    "creates",
+    "changes",
+    "deletes",
+    "removes",
+    "reorder",
+  ]) {
+    buckets[key] =
+      state[key] &&
+      Object.prototype.hasOwnProperty.call(state[key], UCI_PACKAGE)
+        ? previewClone(state[key][UCI_PACKAGE])
+        : undefined;
+  }
+  const pending = new Map();
+  for (const [optKey, option] of outboundNameSourceOptions.entries()) {
+    pending.set(optKey, previewClone(option.pendingChildSettings || {}));
+  }
+  return { buckets, pending };
+}
+
+function restoreUciPackageSnapshot(snapshot) {
+  if (!snapshot || !uci.state) return;
+  for (const [key, value] of Object.entries(snapshot.buckets)) {
+    uci.state[key] ??= {};
+    if (value === undefined) {
+      delete uci.state[key][UCI_PACKAGE];
+    } else {
+      uci.state[key][UCI_PACKAGE] = previewClone(value);
+    }
+  }
+  for (const [optKey, savedPending] of snapshot.pending.entries()) {
+    const option = outboundNameSourceOptions.get(optKey);
+    if (option) {
+      option.pendingChildSettings = previewClone(savedPending);
+    }
+  }
+}
+
 function configureSectionSection(sectionRef, options = {}) {
   setActionProvidersAvailabilityLoader(options.loadActionProvidersAvailability);
+  if (
+    !configureSectionSection._reloadCacheListenerBound &&
+    typeof window !== "undefined" &&
+    main.FORKOP_CONFIGURATION_RELOAD_EVENT
+  ) {
+    configureSectionSection._reloadCacheListenerBound = true;
+    window.addEventListener(main.FORKOP_CONFIGURATION_RELOAD_EVENT, () => {
+      extendedPreviewBaselines.clear();
+      outboundNameChoicesCache.clear();
+      subscriptionPreviewCache.clear();
+    });
+  }
   const renderContents = sectionRef.renderContents;
   sectionRef.renderContents = function () {
     const node = renderContents.apply(this, arguments);
+    if (typeof main.normalizeNamedSectionTable === "function") {
+      main.normalizeNamedSectionTable(node, "Правило");
+    }
     // LuCI titleFn stringifies sectiontitle for row metadata and modal titles.
     // Keep that contract textual and decorate only the rendered name cell.
     node
@@ -8279,6 +9248,51 @@ function configureSectionSection(sectionRef, options = {}) {
     return node;
   };
   main.configureRuleWorkflow(sectionRef);
+
+  const handleAdd = sectionRef.handleAdd;
+  sectionRef.handleAdd = function () {
+    this.pendingAddSnapshot = captureUciPackageSnapshot();
+    return handleAdd.apply(this, arguments);
+  };
+
+  const addModalOptions = sectionRef.addModalOptions;
+  sectionRef.addModalOptions = function (modalSection, section_id, ev) {
+    this.sectionEditSnapshots ??= {};
+    if (this.pendingAddSnapshot) {
+      this.sectionEditSnapshots[section_id] = this.pendingAddSnapshot;
+      this.pendingAddSnapshot = null;
+    } else if (!this.sectionEditSnapshots[section_id]) {
+      this.sectionEditSnapshots[section_id] = captureUciPackageSnapshot();
+    }
+    return typeof addModalOptions === "function"
+      ? addModalOptions.call(this, modalSection, section_id, ev)
+      : form.GridSection.prototype.addModalOptions.call(
+          this,
+          modalSection,
+          section_id,
+          ev,
+        );
+  };
+
+  sectionRef.handleModalCancel = function (modalMap, ev, isSaving) {
+    const section_id = modalMap?.section;
+    const snapshot = section_id
+      ? this.sectionEditSnapshots?.[section_id]
+      : null;
+    if (section_id && this.sectionEditSnapshots) {
+      delete this.sectionEditSnapshots[section_id];
+    }
+    const result = form.GridSection.prototype.handleModalCancel.call(
+      this,
+      modalMap,
+      ev,
+      isSaving,
+    );
+    if (!isSaving && snapshot) {
+      restoreUciPackageSnapshot(snapshot);
+    }
+    return result;
+  };
 
   const handleRemove = sectionRef.handleRemove;
   sectionRef.handleRemove = function (section_id) {

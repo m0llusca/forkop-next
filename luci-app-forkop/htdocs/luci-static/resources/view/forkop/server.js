@@ -470,16 +470,16 @@ function injectServerStyles() {
 .fkp-server-info-modal__qr-col{display:flex;flex-direction:column;align-items:center;gap:12px;flex-shrink:0;width:180px}
 .fkp-server-info-modal__qr-image{width:180px;height:180px;display:block;image-rendering:pixelated}
 .fkp-server-info-modal__details-col{display:flex;flex-direction:column;gap:16px;flex-grow:1;min-width:0;box-sizing:border-box}
-.fkp-server-info-modal__details-grid{display:flex;flex-direction:column;gap:10px;background:rgba(128,128,128,0.08);padding:14px;border:1px solid rgba(128,128,128,0.15);box-sizing:border-box}
+.fkp-server-info-modal__details-grid{display:flex;flex-direction:column;gap:10px;background:var(--next-subtle,rgba(128,128,128,0.08));padding:14px;border:1px solid var(--next-line,rgba(128,128,128,0.15));border-radius:10px;box-sizing:border-box}
 .fkp-server-info-modal__detail-item{display:flex;justify-content:space-between;align-items:center;gap:16px}
-.fkp-server-info-modal__detail-label{font-size:11px;opacity:0.65;text-transform:uppercase;letter-spacing:0.05em;font-weight:700}
+.fkp-server-info-modal__detail-label{font-size:11px;color:var(--next-muted,inherit);text-transform:uppercase;letter-spacing:0.05em;font-weight:700}
 .fkp-server-info-modal__detail-value{font-size:13px;font-weight:500}
 .fkp-server-info-modal__detail-value--title{font-weight:600}
 .fkp-server-info-modal__detail-value--mono{font-family:monospace;font-size:12px;background:rgba(128,128,128,0.12);padding:2px 6px;border-radius:4px;word-break:break-all}
-.fkp-server-info-modal__badge{display:inline-flex;align-items:center;padding:2px 8px;font-size:11px;font-weight:600;border-radius:4px;border:1px solid var(--border-color,rgba(128,128,128,0.25));background:rgba(128,128,128,0.08);line-height:1.2}
+.fkp-server-info-modal__badge{display:inline-flex;align-items:center;padding:2px 8px;font-size:11px;font-weight:600;border-radius:6px;border:1px solid var(--next-line,var(--border-color,rgba(128,128,128,0.25)));background:var(--next-subtle,rgba(128,128,128,0.08));line-height:1.2}
 .fkp-server-info-modal__link-section{display:flex;flex-direction:column;gap:8px;box-sizing:border-box}
-.fkp-server-info-modal__link{width:100% !important;max-width:100% !important;font-family:monospace;font-size:11px;padding:8px 10px;resize:none;min-height:54px;box-sizing:border-box;margin:0 !important;line-height:1.4;word-break:break-all;float:none !important;position:static !important;border-radius:0 !important;background-color:transparent !important}
-.fkp-server-info-modal__copy-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;align-self:flex-start;padding:3px 10px !important;font-size:11px !important;height:auto !important;min-height:24px !important;float:none !important;position:static !important;margin:0 !important}
+.fkp-server-info-modal__link{width:100% !important;max-width:100% !important;font-family:monospace;font-size:12px;padding:8px 10px;resize:none;min-height:58px;box-sizing:border-box;margin:0 !important;line-height:1.4;word-break:break-all;float:none !important;position:static !important;border:1px solid var(--next-line,rgba(128,128,128,0.25)) !important;border-radius:8px !important;background-color:var(--next-field,transparent) !important;color:var(--next-fg,inherit) !important}
+.fkp-server-info-modal__copy-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;align-self:flex-start;padding:6px 14px !important;font-size:13px !important;height:auto !important;min-height:40px !important;border-radius:8px !important;float:none !important;position:static !important;margin:0 !important}
 
 @media (max-width:640px){
 .fkp-server-info-modal{width:100%}
@@ -830,12 +830,8 @@ function applyDefaultPublicHost(sectionId, host) {
   const currentHost = normalizeHost(
     uci.get(UCI_PACKAGE, sectionId, "public_host"),
   );
-  const browserHost = getBrowserHost();
 
-  if (
-    normalizedHost &&
-    (!currentHost || currentHost === browserHost || currentHost === "127.0.0.1")
-  ) {
+  if (normalizedHost && (!currentHost || currentHost === "127.0.0.1")) {
     uci.set(UCI_PACKAGE, sectionId, "public_host", normalizedHost);
   }
 }
@@ -1546,7 +1542,7 @@ function iconSvg(name) {
   ]);
 }
 
-function copyText(text) {
+function fallbackCopyText(text) {
   const textarea = document.createElement("textarea");
   textarea.value = text;
   textarea.style.position = "fixed";
@@ -1557,14 +1553,35 @@ function copyText(text) {
   textarea.select();
 
   try {
-    document.execCommand("copy");
-    main.showToast(_("Copied"), "success");
+    if (document.execCommand("copy")) {
+      main.showToast(_("Copied"), "success");
+    } else {
+      throw new Error("execCommand returned false");
+    }
   } catch (error) {
     main.showToast(_("Failed to copy!"), "error");
     console.warn("Failed to copy server client link", error);
+  } finally {
+    document.body.removeChild(textarea);
   }
+}
 
-  document.body.removeChild(textarea);
+function copyText(text) {
+  if (
+    navigator.clipboard &&
+    typeof navigator.clipboard.writeText === "function"
+  ) {
+    navigator.clipboard
+      .writeText(text)
+      .then(() => {
+        main.showToast(_("Copied"), "success");
+      })
+      .catch(() => {
+        fallbackCopyText(text);
+      });
+    return;
+  }
+  fallbackCopyText(text);
 }
 
 function renderInfoClientLink(sectionId, linkContext = {}) {
@@ -1982,7 +1999,9 @@ function validateInboundJson(_sectionId, value) {
 }
 
 function validateDurationValue(value) {
-  return /^([0-9]+(ns|us|ms|s|m|h))+$/.test(`${value || ""}`);
+  return /^(?=.*[1-9])([0-9]+(?:\.[0-9]+)?(?:ns|us|ms|s|m|h|d))+$/.test(
+    `${value || ""}`,
+  );
 }
 
 function validateRequiredDuration(_sectionId, value) {
@@ -2463,6 +2482,39 @@ function configureServerSection(sectionRef, options = {}) {
   sectionRef.renderRowActions = function (sectionId) {
     return renderServerRowActions(this, sectionId);
   };
+
+  if (typeof sectionRef.renderContents === "function") {
+    const originalRenderContents = sectionRef.renderContents;
+    sectionRef.renderContents = function () {
+      const node = originalRenderContents.apply(this, arguments);
+      if (node && typeof main.normalizeNamedSectionTable === "function") {
+        main.normalizeNamedSectionTable(node, "Сервер");
+      }
+      if (
+        node &&
+        typeof node.querySelectorAll === "function" &&
+        typeof main.ensureRowOverflowMenu === "function"
+      ) {
+        for (const row of node.querySelectorAll(
+          "tr.cbi-section-table-row[data-sid]",
+        )) {
+          const bar = row.querySelector(".cbi-section-actions > div");
+          if (bar) {
+            bar.classList.add("fkp-rule-actions-bar");
+            const label =
+              row
+                .querySelector(".cbi-section-table-titles")
+                ?.textContent?.trim() ||
+              row.getAttribute("data-title") ||
+              row.dataset.sid ||
+              "";
+            main.ensureRowOverflowMenu(bar, label);
+          }
+        }
+      }
+      return node;
+    };
+  }
 }
 
 function createServerContent(section, options = {}) {
@@ -2480,7 +2532,6 @@ function createServerContent(section, options = {}) {
   o.width = "6rem";
 
   o = section.option(form.DummyValue, "_protocol_display", _("Protocol"));
-  o.rawhtml = true;
   o.modalonly = false;
   o.cfgvalue = function (sectionId) {
     return getProtocolLabel(getProtocol(sectionId));
@@ -2706,6 +2757,7 @@ function createServerContent(section, options = {}) {
     _("Reality private key"),
   );
   o.modalonly = true;
+  o.password = true;
   o.rmempty = false;
   o.validate = validateRequired;
   addRealityDepends(o);
@@ -2858,6 +2910,8 @@ function createServerContent(section, options = {}) {
 
   o = section.option(form.Value, "server_password", _("Password"));
   o.modalonly = true;
+  o.password = true;
+  o.retain = true;
   o.rmempty = false;
   o.validate = validateRequiredText;
   o.load = function (sectionId) {
@@ -2870,6 +2924,9 @@ function createServerContent(section, options = {}) {
     uci.set(UCI_PACKAGE, sectionId, "server_password", value);
     return value;
   };
+  o.depends("protocol", "shadowsocks");
+  o.depends("protocol", "trojan");
+  o.depends("protocol", "hysteria2");
   o.depends({ protocol: "socks", socks_auth_enabled: "1" });
 
   o = section.option(form.Value, "vmess_alter_id", _("Alter ID"));
@@ -2882,6 +2939,33 @@ function createServerContent(section, options = {}) {
       return _("This field is required");
     }
     return /^[0-9]+$/.test(value) ? true : _("Use a non-negative integer");
+  };
+
+  o = section.option(form.Value, "server_uuid", _("UUID"));
+  o.rmempty = false;
+  o.modalonly = true;
+  o.depends("protocol", "vless");
+  o.depends("protocol", "vmess");
+  o.validate = function (_sectionId, value) {
+    const trimmed = `${value || ""}`.trim();
+    if (!trimmed) {
+      return _("This field is required");
+    }
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      trimmed,
+    )
+      ? true
+      : _("Use a valid UUID");
+  };
+  o.load = function (sectionId) {
+    const current = getServerIdentity(sectionId).uuid;
+    if (current) {
+      return current;
+    }
+
+    const value = generateUuid();
+    uci.set(UCI_PACKAGE, sectionId, "server_uuid", value);
+    return value;
   };
 
   o = section.option(form.ListValue, "vless_flow", _("VLESS flow"));
@@ -2919,6 +3003,7 @@ function createServerContent(section, options = {}) {
     _("Obfuscation password"),
   );
   o.modalonly = true;
+  o.password = true;
   o.rmempty = false;
   o.validate = validateRequired;
   o.load = function (sectionId) {
@@ -2934,6 +3019,7 @@ function createServerContent(section, options = {}) {
 
   o = section.option(form.Value, "mtproto_secret", _("Secret"));
   o.modalonly = true;
+  o.password = true;
   o.rmempty = false;
   o.validate = validateMtprotoSecret;
   o.load = function (sectionId) {
@@ -3076,6 +3162,7 @@ function createServerContent(section, options = {}) {
 
   o = section.option(form.Value, "tailscale_auth_key", _("Tailscale auth key"));
   o.modalonly = true;
+  o.password = true;
   o.rmempty = false;
   o.validate = validateRequired;
   addTailscaleDepends(o, singBoxTailscale);

@@ -49,6 +49,15 @@ function configureGridSection(sectionRef, type, title, addTitle) {
   sectionRef.sectiontitle = function (section_id) {
     return uci.get(UCI_PACKAGE, section_id, "label") || section_id;
   };
+  sectionRef.renderSectionPlaceholder = function () {
+    return E(
+      "em",
+      {},
+      type === "server"
+        ? _("Входящие подключения ещё не добавлены.")
+        : _("Правила маршрутизации ещё не добавлены."),
+    );
+  };
 
   if (type === "section") {
     sectionRef.renderRowActions = function (section_id) {
@@ -80,6 +89,7 @@ const EntryPoint = {
     let mapRendered = false;
     let initializeSettings = null;
     const capabilityNotice = document.createElement("div");
+    capabilityNotice.className = "fkp-capability-notice";
     const capabilityMessage = document.createElement("p");
     capabilityMessage.setAttribute("role", "status");
     capabilityMessage.textContent =
@@ -386,6 +396,7 @@ const EntryPoint = {
     saveDraft.textContent = "Сохранить изменения";
     const applyDraft = document.createElement("button");
     applyDraft.type = "button";
+    applyDraft.className = "fkp-next-primary-action";
     applyDraft.textContent = "Применить сейчас";
     const refreshEditor = document.createElement("button");
     refreshEditor.type = "button";
@@ -401,10 +412,12 @@ const EntryPoint = {
           : "Изменения сохранены, но ещё не применены. Нажмите «Применить сейчас», затем повторите действие.");
     };
     const localChanges = function () {
-      return ["changes", "creates", "deletes", "reorder"].some(function (kind) {
-        const value = uci.state?.[kind]?.[UCI_PACKAGE];
-        return value === true || Object.keys(value || {}).length > 0;
-      });
+      return ["changes", "creates", "deletes", "removes", "reorder"].some(
+        function (kind) {
+          const value = uci.state?.[kind]?.[UCI_PACKAGE];
+          return value === true || Object.keys(value || {}).length > 0;
+        },
+      );
     };
     const readPending = async function () {
       const changes = await uci.changes();
@@ -565,6 +578,9 @@ const EntryPoint = {
           staging?.remove();
           main.mountForkopWorkspace(rendered);
           rendered.prepend(pendingBar);
+          nativeDirty = localChanges();
+          if (nativeDirty || pendingSaved) showPending();
+          else if (!synchronizationFailed) pendingBar.hidden = true;
           if (activeTab)
             rendered
               .querySelector('.cbi-tabmenu [data-tab="' + activeTab + '"] a')

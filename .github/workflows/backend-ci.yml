@@ -7,6 +7,7 @@ on:
       - 'forkop/files/**'
       - 'forkop/Makefile'
       - 'build.sh'
+      - 'install.sh'
       - 'tests/**'
       - 'tools/provision-test-cores.py'
       - '.github/workflows/build.yml'
@@ -18,6 +19,7 @@ on:
       - 'forkop/files/**'
       - 'forkop/Makefile'
       - 'build.sh'
+      - 'install.sh'
       - 'tests/**'
       - 'tools/provision-test-cores.py'
       - '.github/workflows/build.yml'
@@ -80,6 +82,9 @@ jobs:
 
       - name: Provision checksum-pinned published test cores
         run: python3 tools/provision-test-cores.py
+
+      - name: Run router user-space emulation checks
+        run: python3 -m unittest discover -s tests/emulation -p 'asus_tuf_*.py' -v
 
       - name: Run backend tests
         shell: bash

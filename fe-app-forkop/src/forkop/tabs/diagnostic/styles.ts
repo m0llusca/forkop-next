@@ -13,30 +13,41 @@ export const styles = `
 
 .fkp_diagnostic-page {
     display: grid;
-    grid-template-columns: 2fr 1fr;
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
     grid-column-gap: 10px;
     align-items: start;
+    min-width: 0;
 }
 
-@media (max-width: 800px) {
+@media (max-width: 960px) {
     .fkp_diagnostic-page {
-        grid-template-columns: 1fr;
+        grid-template-columns: minmax(0, 1fr);
+        row-gap: 16px;
     }
 }
 
 .fkp_diagnostic-page__right-bar {
     display: grid;
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
     grid-row-gap: 10px;
+    min-width: 0;
+}
+
+@media (min-width: 981px) {
+    .fkp_diagnostic-page__right-bar {
+        position: sticky;
+        top: 18px;
+    }
 }
 
 .fkp_diagnostic-page__right-bar__wiki {
     border: 2px var(--background-color-low, lightgray) solid;
     border-radius: 4px;
     padding: 10px;
+    min-width: 0;
 
     display: grid;
-    grid-template-columns: auto;
+    grid-template-columns: minmax(0, 1fr);
     grid-row-gap: 10px;
 }
 
@@ -49,24 +60,41 @@ export const styles = `
 
 .fkp_diagnostic-page__right-bar__wiki__content {
     display: grid;
-    grid-template-columns: 1fr 5fr;
+    grid-template-columns: 24px minmax(0, 1fr);
     grid-column-gap: 10px;
+    min-width: 0;
 }
 
-.fkp_diagnostic-page__right-bar__wiki__texts {}
+.fkp_diagnostic-page__right-bar__wiki__texts {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
 
 .fkp_diagnostic-page__right-bar__actions {
     border: 2px var(--background-color-low, lightgray) solid;
     border-radius: 4px;
     padding: 10px;
+    min-width: 0;
 
     display: grid;
-    grid-template-columns: auto;
+    grid-template-columns: minmax(0, 1fr);
     grid-row-gap: 10px;
 
 }
 
-.fkp_diagnostic-page__right-bar__actions > .fkp-partial-button {
+.fkp_diagnostic-page__right-bar__actions .fkp_diagnostic-page__actions-group {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-row-gap: 8px;
+    min-width: 0;
+}
+
+.fkp_diagnostic-page__right-bar__actions .fkp_diagnostic-page__actions-group--service {
+    padding-top: 8px;
+    border-top: 1px var(--background-color-low, lightgray) solid;
+}
+
+.fkp_diagnostic-page__right-bar__actions .fkp-partial-button {
     width: 100%;
     min-width: 0;
     margin-left: 0;
@@ -76,9 +104,10 @@ export const styles = `
     border: 2px var(--background-color-low, lightgray) solid;
     border-radius: 4px;
     padding: 10px;
+    min-width: 0;
 
     display: grid;
-    grid-template-columns: auto;
+    grid-template-columns: minmax(0, 1fr);
     grid-row-gap: 10px;
 }
 
@@ -88,8 +117,10 @@ export const styles = `
 
 .fkp_diagnostic-page__right-bar__system-info__row {
     display: grid;
-    grid-template-columns: auto 1fr;
+    grid-template-columns: minmax(0, auto) minmax(0, 1fr);
     grid-column-gap: 5px;
+    min-width: 0;
+    overflow-wrap: anywhere;
 }
 
 .fkp_diagnostic-page__right-bar__system-info__row__tag {
@@ -116,8 +147,9 @@ export const styles = `
 
 .fkp_diagnostic-page__left-bar {
     display: grid;
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
     grid-row-gap: 10px;
+    min-width: 0;
 }
 
 .fkp_diagnostic-page__run_check_wrapper {}
@@ -128,16 +160,18 @@ export const styles = `
 
 .fkp_diagnostic-page__checks {
     display: grid;
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
     grid-row-gap: 10px;
+    min-width: 0;
 }
 
 .fkp_diagnostic_alert {
     border: 2px var(--background-color-low, lightgray) solid;
     border-radius: 4px;
+    min-width: 0;
 
     display: grid;
-    grid-template-columns: 24px 1fr;
+    grid-template-columns: 24px minmax(0, 1fr);
     grid-column-gap: 10px;
     align-items: center;
     padding: 10px;
@@ -166,13 +200,19 @@ export const styles = `
 
 .fkp_diagnostic_alert__icon {}
 
-.fkp_diagnostic_alert__content {}
+.fkp_diagnostic_alert__content {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
 
 .fkp_diagnostic_alert__title {
     display: block;
+    overflow-wrap: anywhere;
 }
 
-.fkp_diagnostic_alert__description {}
+.fkp_diagnostic_alert__description {
+    overflow-wrap: anywhere;
+}
 
 .fkp_diagnostic_alert__summary {
     margin-top: 10px;
@@ -180,8 +220,10 @@ export const styles = `
 
 .fkp_diagnostic_alert__summary__item {
     display: grid;
-    grid-template-columns: 16px auto 1fr;
+    grid-template-columns: 16px minmax(0, auto) minmax(0, 1fr);
     grid-column-gap: 10px;
+    min-width: 0;
+    overflow-wrap: anywhere;
 }
 
 .fkp_diagnostic_alert__summary__item--error {

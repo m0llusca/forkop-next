@@ -13,32 +13,39 @@ function marker(path, allowed, fallback) {
 function requirements() {
     let unavailable = {basis:'unavailable',reality:null,record_fragment:null};
     let path = getenv('FORKOP_SINGBOX_CONFIG');
-    if (!path) path = require('core.uci').get(getenv('FORKOP_CONFIG_NAME') || 'forkop', 'settings', 'config_path') || '/etc/sing-box/config.json';
+    if (!path) path = require('core.uci').get((getenv('FORKOP_CONFIG_NAME') || 'forkop') + '.settings.config_path') || '/etc/sing-box/config.json';
     let raw = bounded(path, 1048576), config;
     try { config = object(json(raw)); } catch (e) { return unavailable; }
     if (type(config.outbounds) != 'array' || length(config.outbounds) > 2000) return unavailable;
     let result = {basis:'generated_config',reality:0,record_fragment:0};
     for (let out in config.outbounds) {
-        let r = object(object(object(out).tls).reality);
+        let tls = object(object(out).tls);
+        let r = object(tls.reality);
         if (r.enabled === true) result.reality++;
-        if (index(keys(r), 'record_fragment_size') >= 0) result.record_fragment++;
+        if (index(keys(r), 'record_fragment_size') >= 0 || tls.record_fragment === true) result.record_fragment++;
     }
     return result;
 }
 function preview(raw) {
-    if (type(raw) != 'string' || length(raw) > 4096) return {success:false,error:'invalid_request'};
     let request;
-    try { request = json(raw); } catch (e) { return {success:false,error:'invalid_request'}; }
-    if (type(request) != 'object' || length(keys(request)) != 2 ||
-        index(['forkop','sing_box','zapret','zapret2','byedpi'], request.component) < 0)
+    if (type(raw) == 'object') {
+        request = raw;
+    } else {
+        if (type(raw) != 'string' || length(raw) > 4096) return {success:false,error:'invalid_request'};
+        try { request = json(raw); } catch (e) { return {success:false,error:'invalid_request'}; }
+    }
+    if (type(request) != 'object' || length(keys(request)) != 2)
         return {success:false,error:'invalid_request'};
-    let actions = request.component == 'sing_box' ? ['install','install_extended','install_extended_compressed','install_stable','install_tiny','install_forkop_record_compressed'] :
-        request.component == 'forkop' ? ['install'] : ['install','remove'];
+    let component = request.component == 'sing-box' ? 'sing_box' : request.component;
+    if (index(['forkop','sing_box','zapret','zapret2','byedpi'], component) < 0)
+        return {success:false,error:'invalid_request'};
+    let actions = component == 'sing_box' ? ['install','install_extended','install_extended_compressed','install_stable','install_tiny','install_forkop_record_compressed'] :
+        component == 'forkop' ? ['install'] : ['install','remove'];
     if (index(actions, request.action) < 0) return {success:false,error:'invalid_request'};
     let current = {version:null,variant:null,source:null,runtime_source:null,admission:'unknown',sha256:null,capabilities:null};
     let target = {variant:request.action == 'remove' ? 'removed' : null,source:'official',admission:'unverified',capabilities:null};
     let required = {basis:'unavailable',reality:null,record_fragment:null};
-    if (request.component == 'sing_box') {
+    if (component == 'sing_box') {
         current.version = reality.runtime_version() || null;
         current.variant = marker(getenv('SB_VARIANT_STATE_FILE') || '/etc/forkop/sing-box-variant', ['stable','tiny','extended','extended-compressed'], null);
         current.source = marker(getenv('SB_SOURCE_STATE_FILE') || '/etc/forkop/sing-box-source', ['','forkop-next-record'], null);
@@ -54,7 +61,9 @@ function preview(raw) {
         target.source = request.action == 'install' ? current.source : request.action == 'install_forkop_record_compressed' ? 'forkop-next-record' : 'official';
         required = requirements();
     }
-    return {success:true,data:{component:request.component,action:request.action,captured_at:time(),current,target,requirements:required,
-        restart_expected:true,recovery:request.component == 'sing_box' ? 'sing_box_transaction' : 'manual',connectivity_tested:false}};
+    return {success:true,data:{component,action:request.action,captured_at:time(),current,target,requirements:required,
+        restart_expected:true,recovery:component == 'sing_box' ? 'sing_box_transaction' : 'manual',connectivity_tested:false}};
 }
+if (sourcepath(1) != null && sourcepath(1) != '')
+    return {preview, requirements};
 print(sprintf('%J\n', ARGV[0] == 'preview' ? preview(ARGV[1]) : {success:false,error:'invalid_command'}));

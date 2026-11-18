@@ -63,7 +63,20 @@ function getPotHeader({ name, email }) {
 }
 
 function escapePoString(str) {
-  return str.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  return str
+    .replace(/\\/g, '\\\\')
+    .replace(/"/g, '\\"')
+    .replace(/\r/g, '\\r')
+    .replace(/\n/g, '\\n')
+    .replace(/\t/g, '\\t');
+}
+
+function extractExistingHeader(raw) {
+  if (!raw) return null;
+  const normalized = raw.replace(/\r\n/g, '\n');
+  const idx = normalized.indexOf('\n\n');
+  if (idx === -1 || !normalized.includes('msgid ""')) return null;
+  return normalized.slice(0, idx + 1);
 }
 
 function generateEntry(item) {
@@ -73,11 +86,14 @@ function generateEntry(item) {
 }
 
 async function generatePot() {
-  const gitUser = getGitUser();
-  const raw = await fs.readFile(inputFile, 'utf8');
+  const [raw, existingPotRaw] = await Promise.all([
+    fs.readFile(inputFile, 'utf8'),
+    fs.readFile(outputFile, 'utf8').catch(() => ''),
+  ]);
   const entries = JSON.parse(raw);
 
-  const header = getPotHeader(gitUser);
+  const header =
+    extractExistingHeader(existingPotRaw) ?? getPotHeader(getGitUser());
   const body = entries.map(generateEntry).join('\n');
 
   await fs.writeFile(outputFile, `${header}\n${body}`, 'utf8');

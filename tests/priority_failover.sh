@@ -664,4 +664,112 @@ same_level="$(ucode -L "$FORKOP_LIB" "$PRIORITY_UC" select-faster-fixture \
 printf '%s\n' "$same_level" | grep -Fq '"tag": "b"' ||
   fail "same-level switching should compare candidates with the active delay from the same pass"
 
+mkdir -p "$WORK_DIR/pg-bin" "$WORK_DIR/pg-run/section-cache" "$WORK_DIR/pg-etc" "$WORK_DIR/pg-proc"
+cat >"$WORK_DIR/pg-etc/selections.json" <<'JSON'
+{"version":1,"selections":{"proxy-out":{"tag":"proxy-manual-1","origin":"manual","updated_at":1700000000}}}
+JSON
+cp "$WORK_DIR/pg-etc/selections.json" "$WORK_DIR/pg-etc/selections.expected.json"
+cat >"$WORK_DIR/pg-run/section-cache/proxy.json" <<'JSON'
+{"section":"proxy","selectorTag":"proxy-out","urltestTags":["proxy-auto-out"],"priorityGroups":{}}
+JSON
+cat >"$WORK_DIR/pg-uci.state" <<'EOF'
+forkop.settings=settings
+forkop.settings.latency_test_url=https://cp.cloudflare.com/generate_204
+forkop.proxy=section
+forkop.proxy.enabled=1
+forkop.proxy.action=proxy
+EOF
+cat >"$WORK_DIR/pg-proxies.json" <<'JSON'
+{
+  "proxies": {
+    "proxy-out": {
+      "type": "Selector",
+      "now": "proxy-manual-1",
+      "all": [ "proxy-auto-out", "proxy-manual-1", "proxy-manual-2" ]
+    },
+    "proxy-auto-out": {
+      "type": "URLTest",
+      "now": "proxy-manual-2",
+      "all": [ "proxy-manual-1", "proxy-manual-2" ]
+    },
+    "proxy-manual-1": { "type": "VLESS" },
+    "proxy-manual-2": { "type": "VLESS" }
+  }
+}
+JSON
+cat >"$WORK_DIR/pg-bin/ubus" <<'SH'
+#!/bin/sh
+printf '{"sing-box":{"instances":{"main":{"running":true,"pid":1111}}}}\n'
+SH
+cat >"$WORK_DIR/pg-bin/curl" <<SH
+#!/bin/sh
+method="GET"
+url=""
+data=""
+prev=""
+for arg in "\$@"; do
+  if [ "\$prev" = "-X" ]; then method="\$arg"; prev=""; continue; fi
+  if [ "\$prev" = "--data-raw" ]; then data="\$arg"; prev=""; continue; fi
+  if [ "\$prev" = "--data-urlencode" ] || [ "\$prev" = "--header" ] || [ "\$prev" = "-w" ]; then prev=""; continue; fi
+  case "\$arg" in
+    -X|--data-raw|--data-urlencode|--header|-w) prev="\$arg" ;;
+    http://*|https://*|*/proxies*) url="\$arg" ;;
+  esac
+done
+case "\$method:\$url" in
+  GET:*/proxies)
+    cat "$WORK_DIR/pg-proxies.json"
+    exit 0
+    ;;
+  GET:*/proxies/proxy-manual-1/delay*)
+    printf '{"message":"timeout"}\n'
+    exit 0
+    ;;
+  PUT:*/proxies/proxy-out)
+    printf '%s\n' "\$data" >"$WORK_DIR/pg-put.json"
+    sed 's/"now": "proxy-manual-1"/"now": "proxy-auto-out"/' "$WORK_DIR/pg-proxies.json" >"$WORK_DIR/pg-proxies.next"
+    mv "$WORK_DIR/pg-proxies.next" "$WORK_DIR/pg-proxies.json"
+    printf '\n204'
+    exit 0
+    ;;
+esac
+exit 1
+SH
+chmod +x "$WORK_DIR/pg-bin/ubus" "$WORK_DIR/pg-bin/curl"
+
+run_pin_guard_tick() {
+  PATH="$WORK_DIR/pg-bin:$PATH" \
+    FORKOP_LIB="$FORKOP_LIB" \
+    FORKOP_UCI_STATE_FILE="$WORK_DIR/pg-uci.state" \
+    FORKOP_RUNTIME_STATE_DIR="$WORK_DIR/pg-run" \
+    FORKOP_SECTION_CACHE_DIR="$WORK_DIR/pg-run/section-cache" \
+    FORKOP_PIN_GUARD_STATE_FILE="$WORK_DIR/pg-run/pin-guard.json" \
+    FORKOP_SELECTIONS_FILE="$WORK_DIR/pg-etc/selections.json" \
+    FORKOP_PIN_GUARD_STRIKES=3 \
+    ucode -L "$FORKOP_LIB" "$PRIORITY_UC" pin-guard-tick
+}
+
+run_pin_guard_tick
+run_pin_guard_tick
+[ ! -e "$WORK_DIR/pg-put.json" ] || fail "Pin Guard must wait 3 strikes before switching dead manual pin"
+run_pin_guard_tick
+[ -e "$WORK_DIR/pg-put.json" ] || fail "Pin Guard must switch dead manual pin to URLTest fallback on 3rd strike"
+grep -Eq '"name"[[:space:]]*:[[:space:]]*"proxy-auto-out"' "$WORK_DIR/pg-put.json" || fail "Pin Guard must switch selector to URLTest fallback"
+cmp -s "$WORK_DIR/pg-etc/selections.json" "$WORK_DIR/pg-etc/selections.expected.json" ||
+  fail "Pin Guard fallback must preserve /etc/forkop/selections.json"
+[ -e "$WORK_DIR/pg-run/pin-guard.json" ] || fail "Pin Guard must record runtime status in pin-guard.json"
+
+sleep 30 &
+pg_recycled_pid=$!
+mkdir -p "$WORK_DIR/pg-proc/$pg_recycled_pid"
+printf '%s (other) S 1 %s %s 0 -1 0 0 0 0 0 0 0 0 0 0 0 20 0 1 0 88888 0 0\n' "$pg_recycled_pid" "$pg_recycled_pid" "$pg_recycled_pid" >"$WORK_DIR/pg-proc/$pg_recycled_pid/stat"
+printf '%s\n22222\n' "$pg_recycled_pid" >"$WORK_DIR/pg-run/priority.pid"
+FORKOP_RUNTIME_STATE_DIR="$WORK_DIR/pg-run" \
+  FORKOP_PRIORITY_PID_FILE="$WORK_DIR/pg-run/priority.pid" \
+  FORKOP_PROC_ROOT="$WORK_DIR/pg-proc" \
+  ucode -L "$FORKOP_LIB" "$PRIORITY_UC" stop-runtime
+kill -0 "$pg_recycled_pid" 2>/dev/null || fail "priority stop-runtime must not kill recycled PID when start_ticks differ"
+kill "$pg_recycled_pid" 2>/dev/null || true
+wait "$pg_recycled_pid" 2>/dev/null || true
+
 printf 'Priority failover checks passed\n'

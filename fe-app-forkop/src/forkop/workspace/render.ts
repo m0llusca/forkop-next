@@ -21,7 +21,7 @@ const pageHelp: Record<string, string> = {
   monitoring:
     'Посмотрите текущие соединения, трафик и журнал работы. Данные обновляются, пока раздел открыт.',
   settings:
-    'Настройте DNS, сетевые интерфейсы, доступ к контроллеру и расписание обновлений. Параметры системы собраны отдельно.',
+    'Настройте DNS, сетевые интерфейсы, прямой обход торрентов и расписание обновлений. Параметры системы собраны отдельно.',
   updates:
     'Проверьте версии и управляйте установленными компонентами. Наличие новой версии само по себе не подтверждает совместимость.',
   advanced:
@@ -76,7 +76,6 @@ interface WorkspaceMount {
   main: HTMLElement;
   content: HTMLElement;
   disposed: () => boolean;
-  theme: () => string;
   dispose: () => void;
 }
 const mounted = new WeakMap<HTMLElement, WorkspaceMount>();
@@ -103,7 +102,6 @@ export function mountForkopWorkspace(root: HTMLElement): void {
     root.contains(previous.panes) &&
     root.contains(previous.main);
   if (intact && !previous.disposed()) return;
-  const previousTheme = previous?.theme();
   previous?.dispose();
   // A detached and later reused map may still have its original shell. Unwrap
   // only that intact instance; native renderContents() already clears its root.
@@ -139,39 +137,33 @@ export function mountForkopWorkspace(root: HTMLElement): void {
     'Соединение ещё не проверено',
   );
   status.append(service, connection);
-  const themeLabel = el('label', 'fkp-workspace-theme', 'Тема');
-  const theme = el('select', '');
-  theme.setAttribute('aria-label', 'Тема Forkop');
-  for (const [value, label] of [
-    ['auto', 'Как в LuCI'],
-    ['light', 'Светлая'],
-    ['dark', 'Тёмная'],
-  ]) {
-    const option = el('option', '', label);
-    option.value = value;
-    theme.append(option);
-  }
-  theme.value = previousTheme || 'auto';
-  themeLabel.append(theme);
   top.append(status);
-  // Local preferences live outside native editable panes, so their input/change
-  // events cannot mark a UCI draft or block immediate route actions.
-  const preferences = el('section', 'fkp-workspace-preferences');
-  preferences.dataset.workspacePreferences = '';
-  preferences.append(el('h3', '', 'Предпочтения'), themeLabel);
   const heading = el('h2', 'fkp-workspace-title');
   const description = el('p', 'fkp-workspace-description');
   const secondary = el('div', 'fkp-workspace-secondary');
   const content = el('div', 'fkp-workspace-content');
   content.append(...originalContent);
-  main.append(top, heading, description, secondary, preferences, content);
+  main.append(top, heading, description, secondary, content);
   root.append(sidebar, main);
 
+  const uciEditableTabs = new Set(['settings', 'section', 'server']);
   let disposed = false;
   let wasConnected = root.isConnected;
   let navigationSignature = '';
   const markedModals = new Set<HTMLElement>();
   const modalContent = new WeakMap<HTMLElement, Element>();
+  function parseOpaqueLuminance(bg: string): number | null {
+    const match = bg.match(
+      /^rgba?\(\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)(?:\s*,\s*(\d+(?:\.\d+)?))?\s*\)$/i,
+    );
+    if (!match) return null;
+    const alpha = match[4] === undefined ? 1 : Number(match[4]);
+    if (!Number.isFinite(alpha) || alpha <= 0.5) return null;
+    const r = Number(match[1]);
+    const g = Number(match[2]);
+    const b = Number(match[3]);
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  }
   function surroundingTheme(): string {
     for (
       let parent: HTMLElement | null = root.parentElement || document.body;
@@ -185,25 +177,91 @@ export function mountForkopWorkspace(root: HTMLElement): void {
       if (choice === 'false') return 'light';
       if (
         parent.classList.contains('dark') ||
-        parent.classList.contains('dark-mode')
+        parent.classList.contains('dark-mode') ||
+        parent.classList.contains('theme-dark')
       )
         return 'dark';
       if (
         parent.classList.contains('light') ||
-        parent.classList.contains('light-mode')
+        parent.classList.contains('light-mode') ||
+        parent.classList.contains('theme-light')
       )
         return 'light';
     }
-    const scheme = getComputedStyle(document.documentElement).colorScheme;
-    if (scheme === 'dark' || scheme === 'light') return scheme;
+    for (const surface of [document.body, document.documentElement]) {
+      if (!surface) continue;
+      const scheme = getComputedStyle(surface).colorScheme;
+      if (scheme === 'dark' || scheme === 'light') return scheme;
+    }
+    for (const surface of [document.body, document.documentElement]) {
+      if (!surface) continue;
+      const lum = parseOpaqueLuminance(
+        getComputedStyle(surface).backgroundColor,
+      );
+      if (lum !== null) return lum < 128 ? 'dark' : 'light';
+    }
     return window.matchMedia?.('(prefers-color-scheme: dark)').matches
       ? 'dark'
       : 'light';
   }
+  function hasPendingUciDraft(): boolean {
+    if (
+      root.querySelector(
+        ':scope > .fkp-next-notice[role="status"]:not([hidden]), .cbi-value-error, .cbi-input-invalid, [aria-invalid="true"], [data-errors]',
+      )
+    )
+      return true;
+    const uciGlobal = (
+      window as unknown as {
+        uci?: { state?: Record<string, Record<string, unknown>> };
+        L?: { uci?: { state?: Record<string, Record<string, unknown>> } };
+      }
+    ).uci?.state
+      ? (
+          window as unknown as {
+            uci: { state: Record<string, Record<string, unknown>> };
+          }
+        ).uci.state
+      : (
+          window as unknown as {
+            L?: { uci?: { state?: Record<string, Record<string, unknown>> } };
+          }
+        ).L?.uci?.state;
+    if (!uciGlobal) return false;
+    return ['changes', 'creates', 'deletes', 'removes', 'reorder'].some(
+      (kind) => {
+        const pkg = uciGlobal[kind]?.forkop;
+        return (
+          pkg === true ||
+          (Boolean(pkg) &&
+            typeof pkg === 'object' &&
+            Object.keys(pkg as Record<string, unknown>).length > 0)
+        );
+      },
+    );
+  }
+  const markedFooters = new Set<HTMLElement>();
+  function syncFooters(
+    resolved = root.dataset.theme || 'light',
+    active = root.dataset.activeTab || '',
+  ) {
+    const showFooter =
+      !active || uciEditableTabs.has(active) || hasPendingUciDraft();
+    for (const actions of root.parentElement?.querySelectorAll<HTMLElement>(
+      ':scope > .cbi-page-actions',
+    ) || []) {
+      actions.dataset.theme = resolved;
+      actions.hidden = !showFooter;
+      markedFooters.add(actions);
+    }
+    for (const actions of markedFooters)
+      if (!actions.isConnected) markedFooters.delete(actions);
+  }
   function applyTheme() {
-    root.dataset.theme =
-      theme.value === 'auto' ? surroundingTheme() : theme.value;
-    for (const modal of markedModals) modal.dataset.theme = root.dataset.theme;
+    const resolved = surroundingTheme();
+    root.dataset.theme = resolved;
+    for (const modal of markedModals) modal.dataset.theme = resolved;
+    syncFooters(resolved);
   }
   function markModals() {
     for (const modal of document.querySelectorAll<HTMLElement>('.modal')) {
@@ -293,9 +351,9 @@ export function mountForkopWorkspace(root: HTMLElement): void {
       menu!.querySelector<HTMLElement>('.cbi-tab:not(.cbi-tab-disabled)')
         ?.dataset.tab ||
       '';
+    root.dataset.activeTab = active;
     setText(description, pageHelp[active] || '');
     description.hidden = !description.textContent;
-    preferences.hidden = active !== 'settings';
     const signature = [...tabs.keys()].join(',');
     if (signature !== navigationSignature) {
       navigationSignature = signature;
@@ -395,20 +453,32 @@ export function mountForkopWorkspace(root: HTMLElement): void {
             : undefined;
     const overviewText =
       overview?.querySelector('.fkp-next-service')?.textContent;
-    setText(
-      service,
+    const resolvedService =
       (active === 'next'
         ? overviewText || sharedText
         : sharedText ||
           (overviewText
             ? `Последнее состояние: ${overviewText}`
-            : undefined)) || 'Состояние сервиса неизвестно',
+            : undefined)) || 'Состояние сервиса неизвестно';
+    setText(service, resolvedService);
+    service.dataset.state = resolvedService.includes('запущен')
+      ? 'running'
+      : resolvedService.includes('остановлен')
+        ? 'stopped'
+        : resolvedService.includes('Выполняется')
+          ? 'pending'
+          : resolvedService.includes('недоступно')
+            ? 'error'
+            : 'unknown';
+    const overviewConn = overview?.querySelector<HTMLElement>(
+      '.fkp-next-connection',
     );
     setText(
       connection,
-      overview?.querySelector('.fkp-next-connection')?.textContent ||
-        'Соединение ещё не проверено',
+      overviewConn?.textContent || 'Соединение ещё не проверено',
     );
+    connection.dataset.state = overviewConn?.dataset.state || 'unknown';
+    syncFooters(root.dataset.theme || 'light', active);
   }
   function navigate(event: Event) {
     if (disposed || !(event.target instanceof Element)) return;
@@ -434,7 +504,6 @@ export function mountForkopWorkspace(root: HTMLElement): void {
     sync();
   }
   mobileMenu.addEventListener('change', navigateMobile);
-  theme.addEventListener('change', applyTheme);
   const unsubscribeService = store.subscribe((_next, _previous, diff) => {
     if (diff.servicesInfoWidget) sync();
   });
@@ -459,7 +528,7 @@ export function mountForkopWorkspace(root: HTMLElement): void {
     )
       enhanceForkopForms(root);
     // Telemetry tables can replace hundreds of rows. Only native navigation,
-    // pane replacement and overview evidence affect this shell.
+    // pane replacement, pending UCI notices and overview evidence affect this shell.
     if (
       records.some((record) => {
         const target =
@@ -468,9 +537,13 @@ export function mountForkopWorkspace(root: HTMLElement): void {
             : record.target.parentElement;
         return (
           target &&
-          (menu.contains(target) ||
+          (target === root ||
+            menu.contains(target) ||
             target === panes ||
             target.parentElement === panes ||
+            target.matches(
+              '.fkp-next-notice,.cbi-input-invalid,[aria-invalid="true"]',
+            ) ||
             target.closest('.fkp-next-overview'))
         );
       })
@@ -502,8 +575,18 @@ export function mountForkopWorkspace(root: HTMLElement): void {
       attributes: true,
       attributeFilter: ['data-theme', 'data-darkmode', 'class', 'style'],
     });
+  if (document.head)
+    themeObserver.observe(document.head, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['href', 'media', 'disabled'],
+    });
   const lifecycle = new MutationObserver((records) => {
-    if (root.isConnected) wasConnected = true;
+    if (!wasConnected && root.isConnected) {
+      wasConnected = true;
+      applyTheme();
+    }
     if (wasConnected && !root.isConnected) {
       dispose();
       return;
@@ -525,6 +608,17 @@ export function mountForkopWorkspace(root: HTMLElement): void {
       })
     )
       markModals();
+    if (
+      records.some((record) =>
+        [...record.addedNodes].some(
+          (node) =>
+            node instanceof Element &&
+            (node.matches('.cbi-page-actions') ||
+              node.querySelector('.cbi-page-actions')),
+        ),
+      )
+    )
+      syncFooters();
   });
   function dispose() {
     if (disposed) return;
@@ -536,13 +630,17 @@ export function mountForkopWorkspace(root: HTMLElement): void {
     primary.removeEventListener('click', navigate);
     secondary.removeEventListener('click', navigate);
     mobileMenu.removeEventListener('change', navigateMobile);
-    theme.removeEventListener('change', applyTheme);
     media?.removeEventListener('change', applyTheme);
     for (const modal of markedModals) {
       modal.classList.remove('fkp-workspace-modal');
       delete modal.dataset.theme;
     }
     markedModals.clear();
+    for (const actions of markedFooters) {
+      actions.hidden = false;
+      delete actions.dataset.theme;
+    }
+    markedFooters.clear();
   }
   mounted.set(root, {
     menu,
@@ -550,7 +648,6 @@ export function mountForkopWorkspace(root: HTMLElement): void {
     main,
     content,
     disposed: () => disposed,
-    theme: () => theme.value,
     dispose,
   });
   lifecycle.observe(document.body, {

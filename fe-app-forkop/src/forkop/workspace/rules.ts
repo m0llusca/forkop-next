@@ -1,4 +1,5 @@
 import { parseValueList } from '../../helpers/parseValueList';
+import { ensureRowOverflowMenu } from './actionMenu';
 
 type Rule = Record<string, unknown>;
 
@@ -96,12 +97,33 @@ function scopeSummary(rule: Rule): string {
   );
 }
 
+function numericCount(value: unknown): number {
+  const n = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+}
+
 function sourceSummary(rule: Rule): string {
+  const subCount = Math.max(
+    list(rule.subscription_url).length + list(rule.subscription_urls).length,
+    numericCount(rule.subscription_urls_count),
+  );
+  const ifaceCount = Math.max(
+    list(rule.interfaces).length + list(rule.interface).length,
+    numericCount(rule.interfaces_count),
+  );
+  const urltestCount = Math.max(
+    list(rule.urltest).length + list(rule.urltests).length,
+    numericCount(rule.urltest_count),
+  );
+  const priorityCount = Math.max(
+    list(rule.priority_group).length + list(rule.priority_groups).length,
+    numericCount(rule.priority_group_count),
+  );
   return (
     [
       countLabel('Ссылки', list(rule.selector_proxy_links).length),
-      countLabel('Подписки', list(rule.subscription_url).length),
-      countLabel('Интерфейсы', list(rule.interfaces).length),
+      countLabel('Подписки', subCount),
+      countLabel('Интерфейсы', ifaceCount),
       countLabel(
         'JSON',
         Array.isArray(rule.outbound_jsons)
@@ -113,8 +135,8 @@ function sourceSummary(rule: Rule): string {
             ? 1
             : 0,
       ),
-      countLabel('URLTest', list(rule.urltest).length),
-      countLabel('Приоритет', list(rule.priority_group).length),
+      countLabel('URLTest', urltestCount),
+      countLabel('Приоритет', priorityCount),
     ]
       .filter(Boolean)
       .join(' · ') || 'Источники не заданы'
@@ -122,9 +144,13 @@ function sourceSummary(rule: Rule): string {
 }
 
 function routeSummary(rule: Rule): string {
+  const consoleBadge =
+    rule.console_mode === '1' || rule.console_mode === true
+      ? ' · Консольный режим (UDP напрямую)'
+      : '';
   switch (rule.action || 'connection') {
     case 'connection':
-      return sourceSummary(rule);
+      return `${sourceSummary(rule)}${consoleBadge}`;
     case 'bypass':
       return 'Обычный маршрут роутера';
     case 'block':
@@ -138,7 +164,7 @@ function routeSummary(rule: Rule): string {
     case 'proxy':
     case 'vpn':
     case 'outbound':
-      return 'Сохранены прежние настройки подключения';
+      return `Сохранены прежние настройки подключения${consoleBadge}`;
     default:
       return 'Проверьте действие в редакторе';
   }
@@ -177,11 +203,84 @@ export function renderRuleRoute(value: Rule | null | undefined): HTMLElement {
   return root;
 }
 
+export function normalizeNamedSectionTable(
+  root: ParentNode,
+  headerLabel = 'Правило',
+): void {
+  const theadRow = root.querySelector<HTMLElement>(
+    'tr.cbi-section-table-titles, .tr.cbi-section-table-titles',
+  );
+  const hadNamedPseudo = Boolean(
+    theadRow &&
+      (theadRow.classList.contains('named') ||
+        theadRow.hasAttribute('data-title')),
+  );
+  if (theadRow) {
+    if (hadNamedPseudo) {
+      theadRow.classList.remove('named');
+      theadRow.removeAttribute('data-title');
+      if (!theadRow.querySelector(':scope > [data-fkp-name-header]')) {
+        const nameHeader = textNode(
+          'th',
+          'th cbi-section-table-cell',
+          headerLabel,
+        );
+        nameHeader.dataset.fkpNameHeader = '';
+        theadRow.prepend(nameHeader);
+      }
+    } else {
+      const firstHeader = theadRow.firstElementChild as HTMLElement | null;
+      if (firstHeader && firstHeader.textContent?.trim() === 'Name') {
+        firstHeader.textContent = headerLabel;
+      }
+    }
+  }
+  for (const row of root.querySelectorAll<HTMLElement>(
+    'tr.cbi-section-table-row[data-sid]',
+  )) {
+    if (!row.querySelector(':scope > .cbi-section-table-titles')) {
+      const titleCell = textNode(
+        'td',
+        'td cbi-value-field cbi-section-table-titles',
+        row.getAttribute('data-title') || row.dataset.sid || '',
+      );
+      row.prepend(titleCell);
+    }
+  }
+  if (hadNamedPseudo) {
+    const placeholderTd = root.querySelector<HTMLTableCellElement>(
+      'tr.placeholder > td[colspan]',
+    );
+    if (placeholderTd && placeholderTd.colSpan > 0) {
+      placeholderTd.colSpan += 1;
+    }
+  }
+}
+
+export function ensureRuleActionsBar(actions: Element): HTMLElement {
+  const existing = actions.querySelector<HTMLElement>(
+    ':scope > .fkp-rule-actions-bar',
+  );
+  if (existing) return existing;
+  const nativeDiv = actions.querySelector<HTMLElement>(
+    ':scope > div:not(.cbi-dropdown):not(.fkp-rule-order)',
+  );
+  if (nativeDiv) {
+    nativeDiv.classList.add('fkp-rule-actions-bar');
+    return nativeDiv;
+  }
+  const bar = textNode('div', 'fkp-rule-actions-bar', '');
+  bar.append(...actions.childNodes);
+  actions.append(bar);
+  return bar;
+}
+
 /** Keep native fields mounted; UCI's move operation owns persisted priority. */
 export function configureRuleOrder(
   root: HTMLElement,
   move: (id: string, reference: string, after: boolean) => boolean,
 ): void {
+  normalizeNamedSectionTable(root, 'Правило');
   const status = textNode('p', 'fkp-rule-order-status', '');
   status.setAttribute('role', 'status');
   status.setAttribute('aria-live', 'polite');
@@ -206,14 +305,16 @@ export function configureRuleOrder(
       ?.setAttribute('aria-label', `Включить правило ${name}`);
     const actions = row.querySelector('.cbi-section-actions');
     const controls = textNode('div', 'fkp-rule-order', '');
-    for (const [direction, label] of [
-      ['up', 'Выше'],
-      ['down', 'Ниже'],
+    for (const [direction, label, glyph] of [
+      ['up', 'Выше', '↑'],
+      ['down', 'Ниже', '↓'],
     ]) {
       const button = document.createElement('button');
       button.type = 'button';
+      button.className = 'cbi-button fkp-rule-order-btn';
       button.dataset.ruleOrder = direction;
-      button.textContent = label;
+      button.textContent = glyph;
+      button.title = label;
       button.setAttribute('aria-label', `${label}: ${name}`);
       button.addEventListener('click', () => {
         const ordered = rows();
@@ -244,7 +345,11 @@ export function configureRuleOrder(
       });
       controls.append(button);
     }
-    actions?.append(controls);
+    if (actions) {
+      const bar = ensureRuleActionsBar(actions);
+      bar.prepend(controls);
+      ensureRowOverflowMenu(bar, name);
+    }
   }
   update();
   // Native drag/drop remains an optional input path and moves existing rows.

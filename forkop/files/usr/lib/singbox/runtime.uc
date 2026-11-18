@@ -310,6 +310,27 @@ function sing_box_supports_tailscale(version, version_output) {
     return output_has_build_tag(sing_box_version_output(), "with_tailscale");
 }
 
+function sing_box_supports_wireguard(version, version_output) {
+    version = as_string(version);
+    version_output = as_string(version_output);
+
+    if (command_exists("sing-box") && sing_box_marker_is("extended-compressed"))
+        return true;
+    if (sing_box_is_extended(version))
+        return true;
+    if (version_output != "")
+        return output_has_build_tag(version_output, "with_wireguard");
+    return output_has_build_tag(sing_box_version_output(), "with_wireguard");
+}
+
+function sing_box_supports_amneziawg(version) {
+    return sing_box_is_extended(version);
+}
+
+function sing_box_supports_native_warp(version) {
+    return sing_box_is_extended(version);
+}
+
 function module_command(args) {
     let command_args = [ "ucode", "-L", LIB_DIR ];
     for (let arg in args)
@@ -456,7 +477,7 @@ function prepare_service_disabled() {
 function configure_service() {
     let settings = uci_settings();
 
-    if (sing_box_compressed_marker_set() && !install_managed_service_script()) {
+    if ((sing_box_compressed_marker_set() || (!file_exists("/etc/init.d/sing-box") && sing_box_marker_is("extended"))) && !install_managed_service_script()) {
         log_message("Failed to install managed sing-box service for compressed binary. Aborted.", "fatal");
         exit(1);
     }
@@ -846,6 +867,20 @@ function init_config(populate_nft, caches_prepared, no_refresh, prepared_deferre
     print(deferred_sections, "\n");
 }
 
+if ((sourcepath(1) != null && sourcepath(1) != "") || SCRIPT_NAME != sourcepath(0)) {
+    return {
+        sing_box_version,
+        sing_box_version_output,
+        sing_box_is_extended,
+        sing_box_is_tiny,
+        sing_box_supports_tailscale,
+        sing_box_supports_wireguard,
+        sing_box_supports_amneziawg,
+        sing_box_supports_native_warp,
+        sing_box_variant
+    };
+}
+
 let mode = ARGV[0] || "";
 
 if (mode == "configure-service")
@@ -922,6 +957,12 @@ else if (mode == "is-tiny")
     exit(sing_box_is_tiny(ARGV[1], ARGV[2]) ? 0 : 1);
 else if (mode == "supports-tailscale")
     exit(sing_box_supports_tailscale(ARGV[1], ARGV[2]) ? 0 : 1);
+else if (mode == "supports-wireguard")
+    exit(sing_box_supports_wireguard(ARGV[1], ARGV[2]) ? 0 : 1);
+else if (mode == "supports-amneziawg")
+    exit(sing_box_supports_amneziawg(ARGV[1]) ? 0 : 1);
+else if (mode == "supports-native-warp")
+    exit(sing_box_supports_native_warp(ARGV[1]) ? 0 : 1);
 else if (mode == "variant")
     print(sing_box_variant(), "\n");
 else {

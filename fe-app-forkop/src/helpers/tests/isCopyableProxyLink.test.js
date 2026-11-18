@@ -13,6 +13,11 @@ const copyableLinks = [
   'socks4://example.com:1080',
   'socks4a://example.com:1080',
   'socks5://user:pass@example.com:1080',
+  'wireguard://key@example.com:51820',
+  'wg://key@example.com:51820',
+  'awg://key@example.com:51820',
+  'amneziawg://key@example.com:51820',
+  'warp://auto?private_key=abc',
 ];
 
 const nonCopyableLinks = [
@@ -25,7 +30,7 @@ const nonCopyableLinks = [
   'https://example.com/subscription',
   'https://example.com',
   'http://example.com:99999',
-  'wireguard://example.com',
+  'ftp://example.com',
 ];
 
 describe('isCopyableProxyLink', () => {

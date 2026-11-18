@@ -10,6 +10,7 @@ import { renderCompatibilityPanel } from './compatibility';
 import { nextRequest, type NextResponse } from './api';
 import { renderSymptomGuide } from '../tabs/diagnostic/symptomGuide';
 import { diagnosticRead } from '../tabs/diagnostic/symptomRead';
+import { createActionMenu } from '../workspace/actionMenu';
 type Obj = Record<string, unknown>;
 export type Request = (action: string, payload?: Obj) => Promise<NextResponse>;
 export type ToolArea = 'all' | 'rules' | 'diagnostics' | 'settings' | 'devices';
@@ -38,6 +39,7 @@ function input(name: string, label: string, value = '') {
 function select(label: string, choices: [string, string][]) {
   const wrap = el('label', label);
   const node = el('select');
+  node.setAttribute('aria-label', label);
   for (const [value, text] of choices) {
     const option = el('option', text);
     option.value = value;
@@ -107,13 +109,7 @@ export function renderAdvancedPanel(
       .querySelectorAll<HTMLElement>('[data-detail]')
       .forEach((node) => (node.hidden = !detailed));
   };
-  const theme = select('Тема', [
-    ['auto', 'Как в LuCI'],
-    ['light', 'Светлая'],
-    ['dark', 'Тёмная'],
-  ]);
-  theme.node.onchange = () => (root.dataset.theme = theme.node.value);
-  header.append(title, mode, theme.wrap);
+  header.append(title, mode);
   if (lazy || area !== 'all') header.replaceChildren();
   root.append(header);
   const message = el('p', '', 'fkp-next-notice');
@@ -300,8 +296,12 @@ export function renderAdvancedPanel(
       root.setAttribute('aria-busy', 'false');
     }
   }
-  function action(text: string, handler: () => Promise<unknown>) {
-    const b = el('button', text);
+  function action(
+    text: string,
+    handler: () => Promise<unknown>,
+    primary = false,
+  ) {
+    const b = el('button', text, primary ? 'fkp-next-primary-action' : '');
     b.type = 'button';
     b.onclick = async () => {
       b.disabled = true;
@@ -313,6 +313,11 @@ export function renderAdvancedPanel(
       }
     };
     return b;
+  }
+  function actionsRow(...buttons: HTMLElement[]) {
+    const row = el('div', '', 'fkp-next-actions');
+    row.append(...buttons);
+    return row;
   }
   const route = panel(
     'Почему сайт идёт так?',
@@ -327,6 +332,8 @@ export function renderAdvancedPanel(
     ['udp', 'UDP'],
     ['quic', 'QUIC'],
     ['dns', 'DNS'],
+    ['stun', 'STUN / WebRTC'],
+    ['bittorrent', 'BitTorrent'],
   ]);
   protocol.node.name = 'route_protocol';
   const port = input('route_port', 'Порт', '443');
@@ -359,121 +366,133 @@ export function renderAdvancedPanel(
     device.wrap,
     parameters,
     basis,
-    action('Объяснить маршрут', async () => {
-      const generation = ++routeGeneration;
-      const key = routeKey();
-      const capturedDomain = domain.node.value.trim();
-      const capturedDevice = device.node.value.trim();
-      const capturedAt = new Date().toLocaleString();
-      const capturedProtocol = protocol.node.value;
-      const capturedPort = port.node.value;
-      if (
-        !capturedDomain ||
-        !/^\d+$/.test(capturedPort) ||
-        Number(capturedPort) < 1 ||
-        Number(capturedPort) > 65535
-      ) {
-        routeResult.textContent =
-          'Укажите домен/IP и целый порт от 1 до 65535.';
-        return;
-      }
-      const target =
-        capturedDomain.includes(':') ||
-        /^\d+\.\d+\.\d+\.\d+$/.test(capturedDomain)
-          ? { destination_ip: capturedDomain }
-          : { domain: capturedDomain };
-      const r = await invoke('route_explain', {
-        ...target,
-        ...(capturedDevice ? { device: capturedDevice } : {}),
-        port: Number(capturedPort),
-        protocol: capturedProtocol,
-      });
-      if (generation !== routeGeneration || key !== routeKey()) return;
-      routeResult.replaceChildren();
-      if (!r.success) return;
-      const data = object(r.data);
-      const decision = object(data.decision);
-      const decisionLabels: Record<string, string> = {
-        matched: 'Правило найдено',
-        direct: 'Напрямую',
-        blocked: 'Заблокировано',
-        indeterminate: 'Не подтверждено',
-      };
-      routeResult.append(
-        el(
-          'strong',
-          `${decisionLabels[String(decision.status)] || 'Не определено'} → ${connectionLabel(decision.section || decision.outbound)}`,
-        ),
-        el('p', 'Доступность сайта не проверялась'),
-        el(
-          'p',
-          `Устройство: ${capturedDevice || 'не указано'} → Цель: ${capturedDomain} → ${capturedProtocol.toUpperCase()}/${capturedPort} · Сохранённая конфигурация · Источник правил: роутер · ${capturedAt}`,
-        ),
-      );
-      const reasons: Record<string, string> = {
-        section_conditions: 'Условия правила',
-        fully_routed_ips: 'Назначение устройства',
-        expired: 'Срок правила истёк',
-        exclude_ntp: 'Исключение NTP',
-        hijack_dns: 'Обработка DNS',
-        disable_quic: 'QUIC отключён',
-        service_ip_check: 'Служебная проверка адреса',
-      };
-      const winner = (Array.isArray(data.trace) ? data.trace : [])
-        .map(object)
-        .reverse()
-        .find((row) => row.match === 'yes');
-      if (winner && decision.status !== 'indeterminate')
-        routeResult.append(
-          el(
-            'p',
-            `Причина: ${reasons[String(winner.reason)] || 'Условие из сохранённых правил'}`,
-          ),
-        );
-      if (decision.status === 'indeterminate') {
-        const missing: Record<string, string> = {
-          rule_set: 'содержимое набора правил',
-          device: 'адрес устройства',
-          port: 'порт',
-          destination: 'условие назначения',
-          unsupported_action: 'поддержка действия',
-          evaluation_limit: 'предел анализа',
-        };
-        routeResult.append(
-          el(
-            'p',
-            `Не хватает данных: ${(Array.isArray(data.missing) ? data.missing : []).map((value) => missing[String(value)] || 'неизвестное условие').join(', ') || 'условия правила'}.`,
-          ),
-        );
-      } else if (typeof decision.section === 'string' && decision.section) {
-        routeResult.append(
-          action('Открыть правило', async () => {
-            if (
-              !navigateToRule(root, {
-                kind: 'edit',
-                section: String(decision.section),
-                option: 'domain',
-              })
-            )
-              message.textContent =
-                'Не удалось открыть точное правило. Откройте раздел правил и повторите.';
-          }),
-        );
-      }
-      const trace = el('ol');
-      trace.dataset.detail = 'true';
-      trace.hidden = root.dataset.mode !== 'detailed';
-      for (const step of Array.isArray(data.trace) ? data.trace : []) {
-        const row = object(step);
-        trace.append(
-          el(
-            'li',
-            `${connectionLabel(row.section, '')}: ${reasons[String(row.reason)] || row.reason || 'Дополнительное условие'} · ${row.match === 'yes' ? 'совпало' : row.match === 'no' ? 'не совпало' : 'не подтверждено'}`,
-          ),
-        );
-      }
-      routeResult.append(trace);
-    }),
+    actionsRow(
+      action(
+        'Объяснить маршрут',
+        async () => {
+          const generation = ++routeGeneration;
+          const key = routeKey();
+          const capturedDomain = domain.node.value.trim();
+          const capturedDevice = device.node.value.trim();
+          const capturedAt = new Date().toLocaleString();
+          const capturedProtocol = protocol.node.value;
+          const capturedPort = port.node.value;
+          if (
+            !capturedDomain ||
+            !/^\d+$/.test(capturedPort) ||
+            Number(capturedPort) < 1 ||
+            Number(capturedPort) > 65535
+          ) {
+            routeResult.textContent =
+              'Укажите домен/IP и целый порт от 1 до 65535.';
+            return;
+          }
+          const target =
+            capturedDomain.includes(':') ||
+            /^\d+\.\d+\.\d+\.\d+$/.test(capturedDomain)
+              ? { destination_ip: capturedDomain }
+              : { domain: capturedDomain };
+          const r = await invoke('route_explain', {
+            ...target,
+            ...(capturedDevice ? { device: capturedDevice } : {}),
+            port: Number(capturedPort),
+            protocol: capturedProtocol,
+          });
+          if (generation !== routeGeneration || key !== routeKey()) return;
+          routeResult.replaceChildren();
+          if (!r.success) return;
+          const data = object(r.data);
+          const decision = object(data.decision);
+          const decisionLabels: Record<string, string> = {
+            matched: 'Правило найдено',
+            direct: 'Напрямую',
+            blocked: 'Заблокировано',
+            indeterminate: 'Не подтверждено',
+          };
+          routeResult.append(
+            el(
+              'strong',
+              `${decisionLabels[String(decision.status)] || 'Не определено'} → ${connectionLabel(decision.section || decision.outbound)}`,
+            ),
+            el('p', 'Доступность сайта не проверялась'),
+            el(
+              'p',
+              `Устройство: ${capturedDevice || 'не указано'} → Цель: ${capturedDomain} → ${capturedProtocol.toUpperCase()}/${capturedPort} · Сохранённая конфигурация · Источник правил: роутер · ${capturedAt}`,
+            ),
+          );
+          const reasons: Record<string, string> = {
+            section_conditions: 'Условия правила',
+            fully_routed_ips: 'Назначение устройства',
+            expired: 'Срок правила истёк',
+            exclude_ntp: 'Исключение NTP',
+            hijack_dns: 'Обработка DNS',
+            disable_quic: 'QUIC отключён',
+            service_ip_check: 'Служебная проверка адреса',
+            console_udp_direct:
+              'Консольный режим: UDP идёт напрямую (Open NAT)',
+            console_protocol_required:
+              'Консольный режим требует указания протокола TCP/UDP',
+            bittorrent_direct: 'Прямой обход BitTorrent вне туннеля',
+          };
+          const winner = (Array.isArray(data.trace) ? data.trace : [])
+            .map(object)
+            .reverse()
+            .find((row) => row.match === 'yes');
+          if (winner && decision.status !== 'indeterminate')
+            routeResult.append(
+              el(
+                'p',
+                `Причина: ${reasons[String(winner.reason)] || 'Условие из сохранённых правил'}`,
+              ),
+            );
+          if (decision.status === 'indeterminate') {
+            const missing: Record<string, string> = {
+              rule_set: 'содержимое набора правил',
+              device: 'адрес устройства',
+              port: 'порт',
+              protocol: 'протокол (TCP/UDP)',
+              destination: 'условие назначения',
+              unsupported_action: 'поддержка действия',
+              evaluation_limit: 'предел анализа',
+            };
+            routeResult.append(
+              el(
+                'p',
+                `Не хватает данных: ${(Array.isArray(data.missing) ? data.missing : []).map((value) => missing[String(value)] || 'неизвестное условие').join(', ') || 'условия правила'}.`,
+              ),
+            );
+          } else if (typeof decision.section === 'string' && decision.section) {
+            routeResult.append(
+              action('Открыть правило', async () => {
+                if (
+                  !navigateToRule(root, {
+                    kind: 'edit',
+                    section: String(decision.section),
+                    option: 'domain',
+                  })
+                )
+                  message.textContent =
+                    'Не удалось открыть точное правило. Откройте раздел правил и повторите.';
+              }),
+            );
+          }
+          const trace = el('ol');
+          trace.dataset.detail = 'true';
+          trace.hidden = root.dataset.mode !== 'detailed';
+          for (const step of Array.isArray(data.trace) ? data.trace : []) {
+            const row = object(step);
+            trace.append(
+              el(
+                'li',
+                `${connectionLabel(row.section, '')}: ${reasons[String(row.reason)] || row.reason || 'Дополнительное условие'} · ${row.match === 'yes' ? 'совпало' : row.match === 'no' ? 'не совпало' : 'не подтверждено'}`,
+              ),
+            );
+          }
+          routeResult.append(trace);
+        },
+        true,
+      ),
+    ),
     routeResult,
   );
   const probeSection = select('Маршрут проверки', [
@@ -519,14 +538,22 @@ export function renderAdvancedPanel(
   protocol.node.onchange = invalidateRoute;
   port.node.oninput = invalidateRoute;
   probeSection.node.onchange = invalidateProbe;
-  const probeSettings = el('div');
-  route.append(probeSection.wrap, probeAction, probeResult, probeSettings);
+  const probeSettings = el('div', '', 'fkp-next-actions');
+  route.append(
+    probeSection.wrap,
+    actionsRow(probeAction),
+    probeResult,
+    probeSettings,
+  );
   const profiles = panel(
     'Профили и восстановление',
     'Сначала сравните профиль. При применении сохраняется предыдущая рабочая конфигурация.',
     'settings',
   );
-  const profile = select('Сохранённый профиль', []);
+  const profile = select('Сохранённый профиль', [
+    ['', 'Нет сохранённых профилей'],
+  ]);
+  profile.node.options[0].disabled = true;
   const profileName = input('profile_name', 'Название нового профиля');
   const profileResult = el('div', '', 'fkp-next-result');
   profileResult.setAttribute('aria-live', 'polite');
@@ -554,50 +581,66 @@ export function renderAdvancedPanel(
   profile.node.onchange = () => {
     invalidatePreview();
   };
-  profiles.append(
-    profile.wrap,
-    action('Сравнить профиль', async () => {
-      invalidatePreview();
-      const generation = previewGeneration;
-      const requestedName = profile.node.value;
-      const r = await invoke(
-        'profile_diff',
-        { name: requestedName },
-        profileResult,
-      );
-      const data = object(r.data);
-      if (
-        r.success &&
-        requestedName === profile.node.value &&
-        generation === previewGeneration &&
-        data.current_digest &&
-        data.profile_digest
-      ) {
-        previewName = requestedName;
-        previewDigest = String(data.current_digest);
-        previewProfileDigest = String(data.profile_digest);
-        apply.disabled = false;
-      }
-    }),
-    apply,
-    profileName.wrap,
-    action('Сохранить текущий профиль', async () => {
-      invalidatePreview();
-      await invoke(
-        'profile_save',
-        { name: profileName.node.value },
-        profileResult,
-      );
-      await refreshProfiles();
-    }),
-    profileResult,
-  );
   const rollback = action('Вернуть предыдущую конфигурацию', async () => {
     await invoke('rollback', { expected: digest }, profileResult);
     await refreshStatus();
   });
   rollback.disabled = true;
-  profiles.append(rollback);
+  rollback.dataset.danger = 'true';
+  profiles.append(
+    profile.wrap,
+    actionsRow(
+      action(
+        'Сравнить профиль',
+        async () => {
+          invalidatePreview();
+          const requestedName = profile.node.value;
+          if (!requestedName) {
+            profileResult.textContent =
+              'Сначала сохраните или импортируйте профиль.';
+            return;
+          }
+          const generation = previewGeneration;
+          const r = await invoke(
+            'profile_diff',
+            { name: requestedName },
+            profileResult,
+          );
+          const data = object(r.data);
+          if (
+            r.success &&
+            requestedName === profile.node.value &&
+            generation === previewGeneration &&
+            data.current_digest &&
+            data.profile_digest
+          ) {
+            previewName = requestedName;
+            previewDigest = String(data.current_digest);
+            previewProfileDigest = String(data.profile_digest);
+            apply.disabled = false;
+          }
+        },
+        true,
+      ),
+      apply,
+    ),
+    profileName.wrap,
+    actionsRow(
+      action('Сохранить текущий профиль', async () => {
+        invalidatePreview();
+        await invoke(
+          'profile_save',
+          { name: profileName.node.value },
+          profileResult,
+        );
+        await refreshProfiles();
+      }),
+      createActionMenu('Ещё', [rollback], {
+        ariaLabel: 'Дополнительные действия профиля',
+      }),
+    ),
+    profileResult,
+  );
   const recoveryNotice = el(
     'p',
     'Применение было прервано. Восстановите транзакцию, затем проверьте результат.',
@@ -618,6 +661,7 @@ export function renderAdvancedPanel(
   recoveryNotice.hidden = true;
   recover.hidden = true;
   const recovery = el('div');
+  recovery.hidden = true;
   recovery.append(recoveryNotice, recover, recoveryResult);
   root.insertBefore(recovery, content);
   const temporary = panel(
@@ -638,18 +682,24 @@ export function renderAdvancedPanel(
     td.wrap,
     ts.wrap,
     ttl.wrap,
-    action('Добавить временное правило', async () => {
-      if (!ts.node.value || ts.node.selectedOptions[0]?.disabled) {
-        message.textContent = 'Выберите доступный маршрут.';
-        return;
-      }
-      await invoke('temporary_add', {
-        domain: td.node.value.trim(),
-        section: ts.node.value,
-        ttl: Number(ttl.node.value),
-      });
-      await refreshTemporary();
-    }),
+    actionsRow(
+      action(
+        'Добавить временное правило',
+        async () => {
+          if (!ts.node.value || ts.node.selectedOptions[0]?.disabled) {
+            message.textContent = 'Выберите доступный маршрут.';
+            return;
+          }
+          await invoke('temporary_add', {
+            domain: td.node.value.trim(),
+            section: ts.node.value,
+            ttl: Number(ttl.node.value),
+          });
+          await refreshTemporary();
+        },
+        true,
+      ),
+    ),
     tempList,
   );
   const recommendations = panel(
@@ -659,8 +709,7 @@ export function renderAdvancedPanel(
   );
   const rs = connection('Подключение', 'smart');
   const recList = el('div');
-  const proxySettings = el('div');
-  recommendations.append(proxySettings);
+  const proxySettings = el('div', '', 'fkp-next-actions');
   const recommendationDomain = input(
     'recommendation_domain',
     'Домен для сравнения',
@@ -681,39 +730,45 @@ export function renderAdvancedPanel(
   );
   autoDetect.node.type = 'checkbox';
   autoDetect.wrap.className = 'fkp-next-check';
+  autoDetect.wrap.prepend(autoDetect.node);
   const autoResult = el('p', '', 'fkp-next-result');
   autoResult.setAttribute('aria-live', 'polite');
   scanResult.setAttribute('aria-live', 'polite');
-  const scanAction = action('Проверить другой маршрут', async () => {
-    if (!rs.node.value || rs.node.selectedOptions[0]?.disabled) {
-      scanResult.textContent =
-        'Выберите доступное подключение с настроенным локальным прокси.';
-      return;
-    }
-    const generation = ++scanGeneration;
-    const key = scanKey();
-    const context = `Цель: ${recommendationDomain.node.value.trim()} · Подключение: ${rs.node.selectedOptions[0]?.textContent || rs.node.value} · Источник: с роутера, не с клиентского устройства · ${new Date().toLocaleString()}`;
-    const r = await invoke('recommendation_scan', {
-      domain: recommendationDomain.node.value.trim(),
-      section: rs.node.value,
-    });
-    if (generation !== scanGeneration || key !== scanKey()) return;
-    if (r.success) {
-      const data = object(r.data);
-      const current = object(data.current),
-        target = object(data.section);
-      scanResult.textContent = `Текущий маршрут: ${current.reachable === true ? 'есть сетевой ответ' : current.reachable === false ? 'нет ответа' : 'см. результаты проверки'}. Выбранное подключение: ${target.reachable === true ? 'есть сетевой ответ' : target.reachable === false ? 'нет ответа' : 'см. результаты проверки'}. ${context}. Рекомендация появляется после повторных наблюдений; правила автоматически не применяются.`;
-      await refreshRecommendations();
-    } else
-      scanResult.textContent = `Сравнение не выполнено: ${r.error || 'неизвестная ошибка'}. ${context}`;
-  });
+  const scanAction = action(
+    'Проверить другой маршрут',
+    async () => {
+      if (!rs.node.value || rs.node.selectedOptions[0]?.disabled) {
+        scanResult.textContent =
+          'Выберите доступное подключение с настроенным локальным прокси.';
+        return;
+      }
+      const generation = ++scanGeneration;
+      const key = scanKey();
+      const context = `Цель: ${recommendationDomain.node.value.trim()} · Подключение: ${rs.node.selectedOptions[0]?.textContent || rs.node.value} · Источник: с роутера, не с клиентского устройства · ${new Date().toLocaleString()}`;
+      const r = await invoke('recommendation_scan', {
+        domain: recommendationDomain.node.value.trim(),
+        section: rs.node.value,
+      });
+      if (generation !== scanGeneration || key !== scanKey()) return;
+      if (r.success) {
+        const data = object(r.data);
+        const current = object(data.current),
+          target = object(data.section);
+        scanResult.textContent = `Текущий маршрут: ${current.reachable === true ? 'есть сетевой ответ' : current.reachable === false ? 'нет ответа' : 'см. результаты проверки'}. Выбранное подключение: ${target.reachable === true ? 'есть сетевой ответ' : target.reachable === false ? 'нет ответа' : 'см. результаты проверки'}. ${context}. Рекомендация появляется после повторных наблюдений; правила автоматически не применяются.`;
+        await refreshRecommendations();
+      } else
+        scanResult.textContent = `Сравнение не выполнено: ${r.error || 'неизвестная ошибка'}. ${context}`;
+    },
+    true,
+  );
   recommendationDomain.node.oninput = invalidateScan;
   rs.node.onchange = invalidateScan;
   recommendations.append(
     recommendationDomain.wrap,
     rs.wrap,
-    scanAction,
+    actionsRow(scanAction),
     scanResult,
+    proxySettings,
     recList,
   );
   recommendations.append(
@@ -722,25 +777,27 @@ export function renderAdvancedPanel(
       'p',
       'Поиск выполняется раз в минуту после включения. Маршруты меняются только после принятия рекомендации.',
     ),
-    action('Сохранить автоматический поиск', async () => {
-      if (
-        autoDetect.node.checked &&
-        (!rs.node.value || rs.node.selectedOptions[0]?.disabled)
-      ) {
-        autoResult.textContent =
-          'Выберите доступное подключение с настроенным локальным прокси.';
-        return;
-      }
-      const r = await invoke('smart_detect_configure', {
-        enabled: autoDetect.node.checked,
-        section: rs.node.value,
-      });
-      autoResult.textContent = r.success
-        ? 'Настройки автоматического поиска сохранены.'
-        : r.error === 'section_probe_unavailable'
-          ? 'Включите локальный SOCKS для выбранного подключения в расширенных настройках и повторите действие.'
-          : `Настройки не сохранены: ${r.error || 'неизвестная ошибка'}`;
-    }),
+    actionsRow(
+      action('Сохранить автоматический поиск', async () => {
+        if (
+          autoDetect.node.checked &&
+          (!rs.node.value || rs.node.selectedOptions[0]?.disabled)
+        ) {
+          autoResult.textContent =
+            'Выберите доступное подключение с настроенным локальным прокси.';
+          return;
+        }
+        const r = await invoke('smart_detect_configure', {
+          enabled: autoDetect.node.checked,
+          section: rs.node.value,
+        });
+        autoResult.textContent = r.success
+          ? 'Настройки автоматического поиска сохранены.'
+          : r.error === 'section_probe_unavailable'
+            ? 'Включите локальный SOCKS для выбранного подключения в расширенных настройках и повторите действие.'
+            : `Настройки не сохранены: ${r.error || 'неизвестная ошибка'}`;
+      }),
+    ),
     autoResult,
   );
   let statusGeneration = 0;
@@ -778,6 +835,8 @@ export function renderAdvancedPanel(
     recoveryNotice.hidden = d.recovery_pending !== true;
     recover.hidden = d.recovery_pending !== true;
     recover.disabled = d.recovery_pending !== true;
+    recovery.hidden =
+      d.recovery_pending !== true && !recoveryResult.textContent;
     sections = (Array.isArray(d.sections) ? d.sections : []).map(
       (s: unknown) => {
         const o = object(s);
@@ -847,28 +906,53 @@ export function renderAdvancedPanel(
       [probeSettings, 'probe', probeResult],
     ] as const) {
       settings.replaceChildren();
-      for (const target of targets.filter(
+      const ineligible = targets.filter(
         (t) => !targetEligibility(t, use).eligible,
-      )) {
+      );
+      const openRuleFor = (target: WorkflowTarget) => {
         const option = targetEligibility(target, use).settingsOption;
-        const supportsProxy = option === 'mixed_proxy_enabled';
-        const b = el(
-          'button',
-          `${supportsProxy ? 'Настроить локальный прокси' : 'Настроить действие правила'}: ${target.label}`,
-        );
-        b.type = 'button';
-        b.onclick = () => {
-          if (
-            !navigateToRule(root, {
-              kind: 'edit',
-              section: target.name,
-              option,
-            })
-          )
-            result.textContent =
-              'Откройте это правило и настройте действие и локальный прокси.';
+        if (
+          !navigateToRule(root, {
+            kind: 'edit',
+            section: target.name,
+            option,
+          })
+        )
+          result.textContent =
+            'Откройте это правило и настройте действие и локальный прокси.';
+      };
+      if (ineligible.length > 2) {
+        const picker = el('select');
+        picker.setAttribute('aria-label', 'Правило для настройки');
+        for (const target of ineligible) {
+          const option = targetEligibility(target, use).settingsOption;
+          const supportsProxy = option === 'mixed_proxy_enabled';
+          const opt = el(
+            'option',
+            `${supportsProxy ? 'Настроить локальный прокси' : 'Настроить действие правила'}: ${target.label}`,
+          );
+          opt.value = target.name;
+          picker.append(opt);
+        }
+        const openBtn = el('button', 'Настроить выбранное правило');
+        openBtn.type = 'button';
+        openBtn.onclick = () => {
+          const chosen = ineligible.find((t) => t.name === picker.value);
+          if (chosen) openRuleFor(chosen);
         };
-        settings.append(b);
+        settings.append(picker, openBtn);
+      } else {
+        for (const target of ineligible) {
+          const option = targetEligibility(target, use).settingsOption;
+          const supportsProxy = option === 'mixed_proxy_enabled';
+          const b = el(
+            'button',
+            `${supportsProxy ? 'Настроить локальный прокси' : 'Настроить действие правила'}: ${target.label}`,
+          );
+          b.type = 'button';
+          b.onclick = () => openRuleFor(target);
+          settings.append(b);
+        }
       }
     }
   }
@@ -883,10 +967,18 @@ export function renderAdvancedPanel(
       return;
     }
     profile.node.replaceChildren();
-    for (const p of items(r.data)) {
-      const o = el('option', String(p.name));
-      o.value = String(p.name);
-      profile.node.append(o);
+    const profileList = items(r.data);
+    if (!profileList.length) {
+      const emptyOpt = el('option', 'Нет сохранённых профилей');
+      emptyOpt.value = '';
+      emptyOpt.disabled = true;
+      profile.node.append(emptyOpt);
+    } else {
+      for (const p of profileList) {
+        const o = el('option', String(p.name));
+        o.value = String(p.name);
+        profile.node.append(o);
+      }
     }
     apply.disabled = previewName !== profile.node.value || !previewName;
   }
@@ -1022,7 +1114,22 @@ export function renderAdvancedPanel(
         'Не удалось загрузить данные. Нажмите «Обновить данные».';
     }
   };
-  header.append(action('Обновить данные', refreshVisible));
+  const refreshVisibleBtn = action('Обновить данные', refreshVisible);
+  if (area === 'devices') {
+    const devPopover = root.querySelector<HTMLElement>(
+      '.fkp-next-actions details.fkp-action-menu > .fkp-action-menu__popover',
+    );
+    if (devPopover) {
+      refreshVisibleBtn.classList.add('fkp-action-menu__item');
+      refreshVisibleBtn.setAttribute('role', 'menuitem');
+      devPopover.prepend(refreshVisibleBtn);
+      header.hidden = true;
+    } else {
+      header.append(refreshVisibleBtn);
+    }
+  } else {
+    header.append(refreshVisibleBtn);
+  }
   root.addEventListener('forkop:refresh', () => {
     void refreshVisible();
   });

@@ -157,6 +157,10 @@ function option_mode(kind, token) {
     return "unknown";
 }
 
+function token_has_external_config_prefix(token) {
+    return starts_with(token, "@") || starts_with(token, "$");
+}
+
 function unsupported_reason(kind, token) {
     let name = kind == "nfqws2" ? "nfqws2" : "nfqws";
     let action = kind == "nfqws2" ? "zapret2" : "zapret";
@@ -193,6 +197,19 @@ function unsupported_reason(kind, token) {
     if (kind == "nfqws2" && token == "--intercept=0")
         return "nfqws2 interception must stay enabled for Forkop-managed action=zapret2 rules.";
 
+    if (base == "--pidfile" || base == "--user" || base == "--uid")
+        return "Forkop manages the " + name + " process identity and pidfile itself; " + base + " is not allowed in the strategy.";
+
+    if (base == "--import" || base == "--writeable" || base == "--chdir")
+        return "Filesystem or Lua initialization option " + base + " is not allowed in Forkop-managed strategies.";
+
+    if (base == "--debug") {
+        let eq = index(token, "=");
+        let debug_val = eq >= 0 ? substr(token, eq + 1) : "";
+        if (token_has_external_config_prefix(debug_val))
+            return "Writing " + name + " debug output to external files or targets is not allowed in the strategy.";
+    }
+
     if (base == "--daemon")
         return "Forkop manages the " + name + " process lifecycle itself. The strategy must not daemonize " + name + ".";
     if (base == "--dry-run")
@@ -203,8 +220,26 @@ function unsupported_reason(kind, token) {
     return null;
 }
 
-function token_has_external_config_prefix(token) {
-    return starts_with(token, "@") || starts_with(token, "$");
+function zapret2_provider_lua_dir() {
+    let base_dir = getenv("ZAPRET2_PROVIDER_BASE_DIR") || "/opt/zapret2";
+    let dir = getenv("ZAPRET2_PROVIDER_LUA_DIR") || (base_dir + "/lua");
+    while (length(dir) > 1 && substr(dir, length(dir) - 1, 1) == "/")
+        dir = substr(dir, 0, length(dir) - 1);
+    return dir;
+}
+
+function valid_zapret2_lua_init_value(value) {
+    value = as_string(value);
+    let lua_dir = zapret2_provider_lua_dir();
+    let prefix = "@" + lua_dir + "/";
+    if (!starts_with(value, prefix))
+        return false;
+
+    let filename = substr(value, length(prefix));
+    if (filename == "" || starts_with(filename, ".") || index(filename, "/") >= 0 || index(filename, "..") >= 0)
+        return false;
+
+    return match(filename, /^[A-Za-z0-9][A-Za-z0-9._-]*\.(lua|lua\.gz)$/) != null;
 }
 
 function next_is_separate_value(next_token) {
@@ -238,6 +273,30 @@ function validate_strategy(kind, raw_opt, legacy_default) {
                 "Unsupported " + label(kind) + " token '" + token + "': External " + (kind == "nfqws2" ? "nfqws2" : "nfqws") + " config files bypass Forkop validation and queue management.",
                 [ token ]
             );
+
+        if (token == "--debug" && token_has_external_config_prefix(next_token))
+            return validation_failure(
+                "Unsupported " + label(kind) + " token '--debug " + next_token + "': Writing debug output to external files or targets is not allowed.",
+                [ "--debug", next_token ]
+            );
+
+        if (kind == "nfqws2" && base_token == "--lua-init") {
+            let lua_dir = zapret2_provider_lua_dir();
+            if (token != "--lua-init") {
+                let lua_val = substr(token, length("--lua-init="));
+                if (!valid_zapret2_lua_init_value(lua_val))
+                    return validation_failure(
+                        "Unsupported NFQWS2 token '" + token + "': --lua-init must reference a .lua or .lua.gz script inside " + lua_dir + " without inline code or path traversal.",
+                        [ "--lua-init" ]
+                    );
+            }
+            else if (next_is_separate_value(next_token) && !valid_zapret2_lua_init_value(next_token)) {
+                return validation_failure(
+                    "Unsupported NFQWS2 token '--lua-init " + next_token + "': --lua-init must reference a .lua or .lua.gz script inside " + lua_dir + " without inline code or path traversal.",
+                    [ "--lua-init", next_token ]
+                );
+            }
+        }
 
         let reason = unsupported_reason(kind, token);
         if (reason != null) {

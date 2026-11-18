@@ -43,7 +43,9 @@ export function renderSystemInfo({ items }: IRenderSystemInfoProps) {
           E('b', {}, item.key),
           E('div', {}, [
             E('span', {}, item.value),
-            E('span', { class: tagClass }, item?.tag?.label),
+            ...(item.tag?.label
+              ? [E('span', { class: tagClass }, item.tag.label)]
+              : []),
           ]),
         ],
       );

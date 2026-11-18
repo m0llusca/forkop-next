@@ -20,13 +20,16 @@ export function validateSocksUrl(url: string): ValidationResult {
     }
 
     const body = url.replace(/^socks(4|4a|5):\/\//, '');
-    const [authAndHost] = body.split('#'); // отбрасываем hash, если есть
-    const [credentials, hostPortPart] = authAndHost.includes('@')
-      ? authAndHost.split('@')
-      : [null, authAndHost];
+    const [withoutHash] = body.split('#');
+    const [authAndHost] = withoutHash.split('?');
+    const atIndex = authAndHost.lastIndexOf('@');
+    const credentials = atIndex >= 0 ? authAndHost.slice(0, atIndex) : null;
+    const hostPortPart = (
+      atIndex >= 0 ? authAndHost.slice(atIndex + 1) : authAndHost
+    ).split('/')[0];
 
-    if (credentials) {
-      const [username, _password] = credentials.split(':');
+    if (credentials !== null) {
+      const [username] = credentials.split(':');
       if (!username) {
         return {
           valid: false,

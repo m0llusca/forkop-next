@@ -113,6 +113,7 @@ function configureDnsList(option, choices, defaultValue) {
   Object.entries(choices).forEach(([key, label]) => {
     option.value(key, _(label));
   });
+  option.placeholder = _("Select or enter DNS server");
   option.default = [defaultValue];
   option.rmempty = false;
   option.validate = function (_section_id, value) {
@@ -426,7 +427,7 @@ function createSettingsContent(section, capabilities) {
     form.Flag,
     "enable_yacd",
     _("Enable YACD"),
-    `<a href="${main.getClashUIUrl()}" target="_blank">${main.getClashUIUrl()}</a><br>${_("Remote YACD access is off without a secret key, including older configurations. LuCI continues to use its authenticated connection.")}`,
+    `<a href="${main.getClashUIUrl()}" target="_blank" rel="noopener noreferrer">${main.getClashUIUrl()}</a><br>${_("Remote YACD access is off without a secret key, including older configurations. LuCI continues to use its authenticated connection.")}`,
   );
   o.default = "0";
   o.rmempty = false;
@@ -684,7 +685,15 @@ function createSettingsContent(section, capabilities) {
       return _("Path must be absolute (start with /)");
     }
 
-    if (!value.endsWith("cache.db")) {
+    if (
+      /[\u0000-\u001F\u007F]/.test(value) ||
+      value.includes("//") ||
+      value.split("/").some((part) => part === "." || part === "..")
+    ) {
+      return _("Path contains invalid segments");
+    }
+
+    if (!value.endsWith("/cache.db")) {
       return _("Path must end with cache.db");
     }
 
@@ -718,6 +727,28 @@ function createSettingsContent(section, capabilities) {
     _("Exclude NTP"),
     _(
       "Exclude NTP protocol traffic from the tunnel to prevent it from being routed through the proxy or VPN",
+    ),
+  );
+  o.default = "0";
+  o.rmempty = false;
+
+  o = section.option(
+    form.Flag,
+    "bittorrent_direct",
+    _("Direct BitTorrent bypass"),
+    _(
+      "Send sniffed BitTorrent peer traffic directly outside tunnels while keeping tracker domain rules intact.",
+    ),
+  );
+  o.default = "0";
+  o.rmempty = false;
+
+  o = section.option(
+    form.Flag,
+    "torrserver_direct",
+    _("Direct router TorrServer bypass"),
+    _(
+      "Route local TorrServer peer swarm sockets directly via cgroupv2 while preserving FakeIP tracker resolution.",
     ),
   );
   o.default = "0";

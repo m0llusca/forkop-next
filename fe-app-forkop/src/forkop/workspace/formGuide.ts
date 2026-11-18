@@ -12,19 +12,24 @@ const settingsGroups: Record<string, Group> = {
   },
   network: {
     title: 'Сетевые интерфейсы',
-    help: 'Из какой сети принимать трафик и через какой интерфейс выходить в интернет.',
+    help: 'Из какой локальной сети принимать трафик, через какой интерфейс выходить в интернет, мониторинг сбоев WAN и проверка задержки.',
+  },
+  direct: {
+    title: 'Прямой трафик и торренты',
+    help: 'Прямой обход BitTorrent, локального медиасервера TorrServer и синхронизации NTP мимо туннелей, а также отключение QUIC (HTTP/3) при зависаниях видео.',
   },
   controller: {
     title: 'Доступ к контроллеру',
-    help: 'YACD — отдельная панель управления. Для обычной работы через LuCI включать её не требуется.',
+    help: 'YACD — отдельная внешняя панель управления. Для работы через LuCI включать её не требуется.',
+    collapsed: true,
   },
   updates: {
     title: 'Обновления и загрузки',
-    help: 'Расписание проверки компонентов и загрузки списков. Источники серверов и их подписки задаются в правилах.',
+    help: 'Расписание проверки компонентов и автоматического обновления списков. Источники серверов и их подписки задаются в правилах.',
   },
   system: {
     title: 'Системные параметры',
-    help: 'Хранение конфигурации и кэша, журнал, DHCP, QUIC и NTP.',
+    help: 'Пути хранения конфигурации и кэша sing-box, уровень журнала и совместимость с DHCP.',
     collapsed: true,
   },
 };
@@ -35,12 +40,13 @@ const ruleGroups: Record<string, Group> = {
   },
   sources: {
     title: 'Источники подключения',
-    help: 'Добавьте ссылки или подписку. Также доступны VPN-интерфейс, JSON, автоматический выбор URLTest и переключение по приоритету.',
+    help: 'Добавьте ссылки, импортируйте WireGuard / AmneziaWG .conf, выпустите бесплатный Cloudflare WARP или укажите подписку с предпросмотром серверов.',
   },
   dns: { title: 'DNS для этого правила' },
   advanced: {
-    title: 'Каскад, локальный прокси и дополнительные параметры',
-    help: 'Промежуточный сервер, HTTP/SOCKS-доступ, разрешение IP и отображение серверов.',
+    title:
+      'Каскад, локальный прокси, консольный режим и дополнительные параметры',
+    help: 'Консольный режим (Open NAT: TCP через подключение, игровой UDP напрямую), промежуточный сервер, HTTP/SOCKS-доступ и фильтрация серверов.',
     collapsed: true,
   },
   other: { title: 'Параметры выбранного действия' },
@@ -65,6 +71,11 @@ const inboundGroups: Record<string, Group> = {
   transport: { title: 'Транспорт' },
   credentials: { title: 'Учётные данные и параметры протокола' },
   route: { title: 'Маршрут входящего трафика' },
+  advanced: {
+    title: 'Дополнительные параметры и таймауты',
+    help: 'Таймауты рукопожатий, тонкая настройка протоколов и низкоуровневые лимиты.',
+    collapsed: true,
+  },
 };
 
 function keyOf(field: HTMLElement): string {
@@ -73,17 +84,17 @@ function keyOf(field: HTMLElement): string {
 function settingsGroup(key: string): string {
   if (/^(dns_|bootstrap_dns)/.test(key)) return 'dns';
   if (
-    /^(source_network|https_domain_routing|enable_output|output_network|enable_badwan|badwan)/.test(
+    /^(source_network|https_domain_routing|enable_output|output_network|enable_badwan|badwan|latency_test)/.test(
       key,
     )
   )
     return 'network';
-  if (/^(enable_yacd|yacd_)/.test(key)) return 'controller';
   if (
-    /^(list_update|update_interval|component_update|download_|latency_test)/.test(
-      key,
-    )
+    /^(bittorrent_direct|torrserver_direct|disable_quic|exclude_ntp)$/.test(key)
   )
+    return 'direct';
+  if (/^(enable_yacd|yacd_)/.test(key)) return 'controller';
+  if (/^(list_update|update_interval|component_update|download_)/.test(key))
     return 'updates';
   return 'system';
 }
@@ -92,17 +103,20 @@ function ruleGroup(key: string): string {
   if (
     [
       'selector_proxy_links',
+      '_wg_warp_helper',
       'subscription_url',
+      '_subscription_preview',
       'interfaces',
       'outbound_jsons',
       'urltest',
       'priority_group',
+      '_extended_preview',
     ].includes(key)
   )
     return 'sources';
   if (/^(dns_|bootstrap_dns)/.test(key)) return 'dns';
   if (
-    /^(outbound_detour|mixed_proxy|sort_by_latency|resolve_real_ip|dashboard_filter)/.test(
+    /^(outbound_detour|mixed_proxy|sort_by_latency|resolve_real_ip|dashboard_filter|console_mode)/.test(
       key,
     )
   )
@@ -126,12 +140,18 @@ function conditionGroup(key: string): string {
   return 'other';
 }
 function inboundGroup(key: string): string {
+  if (
+    /^(mtproto_(concurrency|max_connections|domain_fronting|prefer_ip|auto_update|allow_fallback|tolerate_|idle_|handshake_)|reality_max_time_difference|tls_alpn)$/.test(
+      key,
+    )
+  )
+    return 'advanced';
   if (/^(tls_|reality_|security$|client_fingerprint)/.test(key))
     return 'security';
   if (/^transport/.test(key)) return 'transport';
   if (/^(route_|routing_|outbound|detour)/.test(key)) return 'route';
   if (
-    /^(server_(username|password)|socks_auth|shadowsocks_|vmess_|vless_|hysteria2_|mtproto_|tailscale_)/.test(
+    /^(server_(username|password|uuid)|socks_auth|shadowsocks_|vmess_|vless_|hysteria2_|mtproto_|tailscale_)/.test(
       key,
     )
   )

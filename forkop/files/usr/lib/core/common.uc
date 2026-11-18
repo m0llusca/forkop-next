@@ -61,6 +61,100 @@ function write_json_file(path, value) {
     return fs.writefile(path, sprintf("%J\n", value));
 }
 
+function secure_private_dir(path) {
+    path = as_string(path);
+    if (path == "")
+        return false;
+
+    while (length(path) > 1 && substr(path, length(path) - 1, 1) == "/")
+        path = substr(path, 0, length(path) - 1);
+
+    let leaf_stat = fs.lstat(path);
+    if (leaf_stat != null && leaf_stat.type != "directory")
+        return false;
+
+    if (leaf_stat == null) {
+        let is_abs = substr(path, 0, 1) == "/";
+        let parts = split(path, "/");
+        let cur = is_abs ? "" : ".";
+        for (let i = 0; i < length(parts) - 1; i++) {
+            let part = parts[i];
+            if (part == "" || part == ".")
+                continue;
+            cur = (cur == "" || cur == ".") ? (is_abs ? "/" + part : part) : (cur + "/" + part);
+            let st = fs.stat(cur);
+            if (st != null) {
+                if (st.type != "directory")
+                    return false;
+                continue;
+            }
+            if (!fs.mkdir(cur, 0o700)) {
+                let again = fs.stat(cur);
+                if (!again || again.type != "directory")
+                    return false;
+            }
+        }
+        if (!fs.mkdir(path, 0o700)) {
+            let check = fs.lstat(path);
+            if (!check || check.type != "directory")
+                return false;
+        }
+    }
+
+    let final_stat = fs.lstat(path);
+    if (!final_stat || final_stat.type != "directory")
+        return false;
+    if (!fs.chmod(path, 0o700))
+        return false;
+    final_stat = fs.lstat(path);
+    return final_stat != null && final_stat.type == "directory" && (final_stat.mode & 0o777) == 0o700;
+}
+
+function write_private_json_file(path, value) {
+    path = as_string(path);
+    if (path == "")
+        return false;
+
+    let existing = fs.lstat(path);
+    if (existing != null && existing.type != "file")
+        return false;
+
+    let slash = rindex(path, "/");
+    if (slash > 0) {
+        let parent = substr(path, 0, slash);
+        let pst = fs.stat(parent);
+        if (pst == null) {
+            if (!secure_private_dir(parent))
+                return false;
+        }
+        else if (pst.type != "directory") {
+            return false;
+        }
+    }
+
+    let stamp = clock();
+    let tmp = sprintf("%s.tmp.%x.%x", path, stamp[0], stamp[1]);
+    if (fs.lstat(tmp) != null && !fs.unlink(tmp))
+        return false;
+
+    let f = fs.open(tmp, "wex", 0o600);
+    if (!f)
+        return false;
+
+    fs.chmod(tmp, 0o600);
+    let content = sprintf("%J\n", value);
+    let written = f.write(content);
+    f.flush();
+    f.close();
+
+    if (written != length(content) || !fs.chmod(tmp, 0o600) || !fs.rename(tmp, path)) {
+        fs.unlink(tmp);
+        return false;
+    }
+
+    return true;
+}
+
 function strip_internal_fields(value) {
     if (type(value) == "array") {
         for (let i = 0; i < length(value); i++)
@@ -137,6 +231,8 @@ return {
     write_compact_string_array,
     csv_to_json_array,
     write_json_file,
+    secure_private_dir,
+    write_private_json_file,
     strip_internal_fields,
     array_or_empty,
     object_or_empty,

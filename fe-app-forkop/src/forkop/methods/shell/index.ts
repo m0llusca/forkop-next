@@ -23,10 +23,6 @@ function sleep(ms: number) {
   return new Promise<void>((resolve) => setTimeout(resolve, ms));
 }
 
-function translate(message: string) {
-  return typeof _ === 'function' ? _(message) : message;
-}
-
 function parseJsonObjectOutput<T>(output: string): T | null {
   if (!output) {
     return null;
@@ -657,7 +653,7 @@ export const ForkopShellMethods = {
                   success: true,
                   component,
                   action,
-                  message: translate('Forkop has been installed'),
+                  message: _('Forkop has been installed'),
                   current_version: installedVersion,
                   latest_version: expectedLatestVersion,
                   changed: true,
@@ -665,9 +661,9 @@ export const ForkopShellMethods = {
                 },
               } as Forkop.MethodSuccessResponse<Forkop.ComponentActionResult>;
             }
-          }
 
-          continue;
+            continue;
+          }
         }
 
         return failure;

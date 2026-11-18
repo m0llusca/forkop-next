@@ -43,8 +43,9 @@ define Package/forkop/prerm
 #!/usr/bin/ucode
 
 if (getenv("IPKG_INSTROOT") == null || getenv("IPKG_INSTROOT") == "") {
-	let status = system("/usr/bin/forkop package_prerm " + (ARGV[0] || "") + " >/dev/null 2>&1");
-	exit(status > 255 ? int(status / 256) : status);
+	let action = "'" + replace("" + (ARGV[0] || ""), /'/g, "'\\''") + "'";
+	let status = system("/usr/bin/forkop package_prerm " + action + " >/dev/null 2>&1");
+	exit(status > 255 ? int(status / 256) : (status < 0 ? 1 : status));
 }
 
 exit(0);
@@ -73,6 +74,7 @@ define Package/forkop/install
 
 	$(INSTALL_DIR) $(1)/etc/config
 	$(INSTALL_CONF) ./files/etc/config/forkop $(1)/etc/config/forkop
+	chmod 0600 $(1)/etc/config/forkop
 
 	$(INSTALL_DIR) $(1)/usr/bin
 	$(INSTALL_BIN) ./files/usr/bin/forkop $(1)/usr/bin/forkop

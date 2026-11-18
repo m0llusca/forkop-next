@@ -191,7 +191,7 @@ build_backend_root() {
   make_dir "$output_root/usr/lib/forkop"
 
   install -m 0755 "$ROOT_DIR/forkop/files/etc/init.d/forkop" "$output_root/etc/init.d/forkop"
-  install -m 0644 "$ROOT_DIR/forkop/files/etc/config/forkop" "$output_root/etc/config/forkop"
+  install -m 0600 "$ROOT_DIR/forkop/files/etc/config/forkop" "$output_root/etc/config/forkop"
   install -m 0755 "$ROOT_DIR/forkop/files/usr/bin/forkop" "$output_root/usr/bin/forkop"
   cp -a "$ROOT_DIR/forkop/files/usr/lib/." "$output_root/usr/lib/forkop/"
 
@@ -200,6 +200,7 @@ build_backend_root() {
 
   normalize_package_root_modes "$output_root"
   chmod 0755 "$output_root/etc/init.d/forkop" "$output_root/usr/bin/forkop"
+  chmod 0600 "$output_root/etc/config/forkop"
 }
 
 build_app_root() {
@@ -304,8 +305,9 @@ EOF
 #!/usr/bin/ucode
 
 if (getenv("IPKG_INSTROOT") == null || getenv("IPKG_INSTROOT") == "") {
-	let status = system("/usr/bin/forkop package_prerm " + (ARGV[0] || "") + " >/dev/null 2>&1");
-	exit(status > 255 ? int(status / 256) : status);
+	let action = "'" + replace("" + (ARGV[0] || ""), /'/g, "'\\''") + "'";
+	let status = system("/usr/bin/forkop package_prerm " + action + " >/dev/null 2>&1");
+	exit(status > 255 ? int(status / 256) : (status < 0 ? 1 : status));
 }
 
 exit(0);
@@ -456,8 +458,10 @@ EOF
 
   cat > "$scripts_dir/backend-pre-upgrade.sh" <<'EOF'
 #!/usr/bin/ucode
-if (getenv("IPKG_INSTROOT") == null || getenv("IPKG_INSTROOT") == "")
-    exit(system("/usr/bin/forkop package_prerm upgrade >/dev/null 2>&1"));
+if (getenv("IPKG_INSTROOT") == null || getenv("IPKG_INSTROOT") == "") {
+    let status = system("/usr/bin/forkop package_prerm upgrade >/dev/null 2>&1");
+    exit(status > 255 ? int(status / 256) : (status < 0 ? 1 : status));
+}
 exit(0);
 EOF
 

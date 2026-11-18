@@ -10,6 +10,11 @@ import {
   renderSquareChartGanttIcon24,
 } from '../../../../icons';
 import { insertIf } from '../../../../helpers';
+import {
+  actionMenuDivider,
+  actionMenuHeading,
+  createActionMenu,
+} from '../../../workspace/actionMenu';
 
 interface ActionProps {
   loading: boolean;
@@ -39,8 +44,16 @@ export function renderAvailableActions({
   viewLogs,
   showSingBoxConfig,
 }: IRenderAvailableActionsProps) {
-  return E('div', { class: 'fkp_diagnostic-page__right-bar__actions' }, [
-    E('b', {}, _('Available actions')),
+  const primaryButtons = [
+    ...insertIf(viewLogs.visible, [
+      renderButton({
+        onClick: viewLogs.onClick,
+        icon: renderSquareChartGanttIcon24,
+        text: _('View logs'),
+        loading: viewLogs.loading,
+        disabled: viewLogs.disabled,
+      }),
+    ]),
     ...insertIf(restart.visible, [
       renderButton({
         classNames: ['cbi-button-apply'],
@@ -49,16 +62,6 @@ export function renderAvailableActions({
         text: _('Restart Forkop'),
         loading: restart.loading,
         disabled: restart.disabled,
-      }),
-    ]),
-    ...insertIf(stop.visible, [
-      renderButton({
-        classNames: ['cbi-button-remove'],
-        onClick: stop.onClick,
-        icon: renderCircleStopIcon24,
-        text: _('Stop Forkop'),
-        loading: stop.loading,
-        disabled: stop.disabled,
       }),
     ]),
     ...insertIf(start.visible, [
@@ -71,24 +74,16 @@ export function renderAvailableActions({
         disabled: start.disabled,
       }),
     ]),
-    ...insertIf(disable.visible, [
+  ];
+
+  const overflowConfigButtons = [
+    ...insertIf(showSingBoxConfig.visible, [
       renderButton({
-        classNames: ['cbi-button-remove'],
-        onClick: disable.onClick,
-        icon: renderPauseIcon24,
-        text: _('Disable autostart'),
-        loading: disable.loading,
-        disabled: disable.disabled,
-      }),
-    ]),
-    ...insertIf(enable.visible, [
-      renderButton({
-        classNames: ['cbi-button-save'],
-        onClick: enable.onClick,
-        icon: renderPlayIcon24,
-        text: _('Enable autostart'),
-        loading: enable.loading,
-        disabled: enable.disabled,
+        onClick: showSingBoxConfig.onClick,
+        icon: renderCogIcon24,
+        text: _('Show sing-box config'),
+        loading: showSingBoxConfig.loading,
+        disabled: showSingBoxConfig.disabled,
       }),
     ]),
     ...insertIf(globalCheck.visible, [
@@ -100,23 +95,89 @@ export function renderAvailableActions({
         disabled: globalCheck.disabled,
       }),
     ]),
-    ...insertIf(viewLogs.visible, [
+  ];
+
+  const overflowServiceButtons = [
+    ...insertIf(enable.visible, [
       renderButton({
-        onClick: viewLogs.onClick,
-        icon: renderSquareChartGanttIcon24,
-        text: _('View logs'),
-        loading: viewLogs.loading,
-        disabled: viewLogs.disabled,
+        classNames: ['cbi-button-save'],
+        onClick: enable.onClick,
+        icon: renderPlayIcon24,
+        text: _('Enable autostart'),
+        loading: enable.loading,
+        disabled: enable.disabled,
       }),
     ]),
-    ...insertIf(showSingBoxConfig.visible, [
+    ...insertIf(disable.visible, [
       renderButton({
-        onClick: showSingBoxConfig.onClick,
-        icon: renderCogIcon24,
-        text: _('Show sing-box config'),
-        loading: showSingBoxConfig.loading,
-        disabled: showSingBoxConfig.disabled,
+        classNames: ['cbi-button-remove'],
+        onClick: disable.onClick,
+        icon: renderPauseIcon24,
+        text: _('Disable autostart'),
+        loading: disable.loading,
+        disabled: disable.disabled,
       }),
     ]),
+    ...insertIf(stop.visible, [
+      renderButton({
+        classNames: ['cbi-button-remove'],
+        onClick: stop.onClick,
+        icon: renderCircleStopIcon24,
+        text: _('Stop Forkop'),
+        loading: stop.loading,
+        disabled: stop.disabled,
+      }),
+    ]),
+  ];
+
+  const hasOverflow =
+    overflowConfigButtons.length > 0 || overflowServiceButtons.length > 0;
+  const overflowBusy = Boolean(
+    showSingBoxConfig.loading ||
+      globalCheck.loading ||
+      enable.loading ||
+      disable.loading ||
+      stop.loading,
+  );
+
+  return E('div', { class: 'fkp_diagnostic-page__right-bar__actions' }, [
+    E('b', {}, _('Available actions')),
+    ...(primaryButtons.length
+      ? [
+          E('div', { class: 'fkp_diagnostic-page__actions-group' }, [
+            ...primaryButtons,
+          ]),
+        ]
+      : []),
+    ...(hasOverflow
+      ? [
+          createActionMenu(
+            'Дополнительно',
+            [
+              ...(overflowConfigButtons.length
+                ? [
+                    actionMenuHeading('Конфигурация и отчёт'),
+                    ...overflowConfigButtons,
+                  ]
+                : []),
+              ...(overflowConfigButtons.length && overflowServiceButtons.length
+                ? [actionMenuDivider()]
+                : []),
+              ...(overflowServiceButtons.length
+                ? [
+                    actionMenuHeading('Управление сервисом'),
+                    ...overflowServiceButtons,
+                  ]
+                : []),
+            ],
+            {
+              block: true,
+              ariaLabel: 'Дополнительные действия диагностики',
+              open: overflowBusy,
+              busy: overflowBusy,
+            },
+          ),
+        ]
+      : []),
   ]);
 }

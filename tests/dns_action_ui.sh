@@ -45,7 +45,7 @@ for (const expected of [
   '_("DNS server used by the resolver")',
   '_("DNS requests through section")',
   '"Add URLs or local paths to .srs / .json lists. Only domain rules are supported."',
-  '"Add URLs or local paths to .lst lists containing domains. IP entries are ignored."',
+  '"Add URLs or local paths to .lst or Clash .yaml / .yml lists containing domains. IP entries are ignored."',
 ]) {
   requiredIndex(expected);
 }

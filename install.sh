@@ -104,8 +104,8 @@ init_tmp_dir() {
     TMP_DIR="$(mktemp -d /tmp/forkop.XXXXXX 2>/dev/null || true)"
 
     if [ -z "$TMP_DIR" ]; then
-        TMP_DIR="/tmp/forkop.$$"
-        mkdir -p "$TMP_DIR" || fail "Failed to create temporary directory: $TMP_DIR"
+        TMP_DIR="/tmp/forkop.$$.$(awk 'BEGIN{srand(); printf "%06d", int(rand()*1000000)}' 2>/dev/null || date +%s)"
+        mkdir -m 0700 "$TMP_DIR" || fail "Failed to create temporary directory: $TMP_DIR"
     fi
 }
 
@@ -284,7 +284,7 @@ http_get() {
             run_with_deadline "$METADATA_TIMEOUT_SECONDS" wget -T "$CONNECT_TIMEOUT_SECONDS" -qO- "$1"
             ;;
         curl)
-            curl --connect-timeout "$CONNECT_TIMEOUT_SECONDS" --max-time "$METADATA_TIMEOUT_SECONDS" -fsSL "$1"
+            curl --connect-timeout "$CONNECT_TIMEOUT_SECONDS" --max-time "$METADATA_TIMEOUT_SECONDS" --proto '=https' --proto-redir '=https' -fsSL "$1"
             ;;
         *)
             return 1
@@ -1405,8 +1405,11 @@ function release_asset_url(kind, ext) {
         return;
     for (let asset in release.assets) {
         if (type(asset) == "object" && asset_matches(asset.name, kind, ext, version)) {
-            print(as_string(asset.browser_download_url || ""), "\n");
-            return;
+            let url = as_string(asset.browser_download_url || "");
+            if (match(url, /^https:\/\/[^\s"'<>]+$/) != null) {
+                print(url, "\n");
+                return;
+            }
         }
     }
 }
@@ -1456,7 +1459,7 @@ download_file_once() {
             run_with_deadline "$DOWNLOAD_TIMEOUT_SECONDS" wget -T "$CONNECT_TIMEOUT_SECONDS" -q -O "$2" "$1"
             ;;
         curl)
-            curl --connect-timeout "$CONNECT_TIMEOUT_SECONDS" --max-time "$DOWNLOAD_TIMEOUT_SECONDS" -fsSL "$1" -o "$2"
+            curl --connect-timeout "$CONNECT_TIMEOUT_SECONDS" --max-time "$DOWNLOAD_TIMEOUT_SECONDS" --proto '=https' --proto-redir '=https' -fsSL "$1" -o "$2"
             ;;
         *)
             return 1
@@ -1937,7 +1940,7 @@ migrate_legacy_configuration() {
     if [ -n "$LEGACY_CONFIG_BACKUP" ]; then
         cp "$LEGACY_CONFIG_BACKUP" /etc/config/forkop ||
             fail "Failed to restore the legacy configuration for migration"
-        chmod 0644 /etc/config/forkop ||
+        chmod 0600 /etc/config/forkop ||
             fail "Failed to set permissions on the Forkop configuration"
 
         msg "Migrating the legacy configuration to Forkop"
@@ -1945,6 +1948,7 @@ migrate_legacy_configuration() {
             FORKOP_LIB="/usr/lib/forkop" \
             ucode -L /usr/lib/forkop /usr/lib/forkop/config/migration.uc migrate-podkop; then
             cp "$LEGACY_CONFIG_BACKUP" /etc/config/forkop 2>/dev/null || true
+            chmod 0600 /etc/config/forkop 2>/dev/null || true
             fail "Legacy configuration migration failed; the original configuration was restored"
         fi
     else

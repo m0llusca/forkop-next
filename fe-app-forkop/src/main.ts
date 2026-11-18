@@ -16,6 +16,7 @@ export { validateSubnet } from './validators/validateSubnet';
 export { bulkValidate } from './validators/bulkValidate';
 export { validateOutboundJson } from './validators/validateOutboundJson';
 export { validateProxyUrl } from './validators/validateProxyUrl';
+export { validateWireGuardUrl } from './validators/validateWireGuardUrl';
 export { parseValueList } from './helpers/parseValueList';
 export { getProxyUrlName } from './helpers/getProxyUrlName';
 export { injectGlobalStyles } from './helpers/injectGlobalStyles';
@@ -51,6 +52,7 @@ export {
   renderRuleIdentity,
   renderRuleRoute,
   configureRuleOrder,
+  normalizeNamedSectionTable,
 } from './forkop/workspace/rules';
 export {
   refreshRuntimeUiState,
@@ -67,3 +69,7 @@ export {
   configureRuleWorkflow,
   renderQuickSite,
 } from './forkop/next/workflows';
+export {
+  createActionMenu,
+  ensureRowOverflowMenu,
+} from './forkop/workspace/actionMenu';

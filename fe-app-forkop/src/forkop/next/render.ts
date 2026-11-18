@@ -7,6 +7,11 @@ import {
   type Request,
   type ConnectionLoader,
 } from './advanced';
+import {
+  actionMenuDivider,
+  createActionMenu,
+  decorateActionMenuItems,
+} from '../workspace/actionMenu';
 
 export interface OverviewRuntime {
   running?: boolean;
@@ -49,22 +54,7 @@ export function renderNextPanel(
     el('h2', 'Подключение'),
     el('p', 'Состояние роутера и проверка доступа в сеть.'),
   );
-  const theme = el('label', 'Тема');
-  const themes = el('select');
-  for (const [value, label] of [
-    ['auto', 'Как в LuCI'],
-    ['light', 'Светлая'],
-    ['dark', 'Тёмная'],
-  ]) {
-    const option = el('option', label);
-    option.value = value;
-    themes.append(option);
-  }
-  themes.onchange = () => {
-    root.dataset.theme = themes.value;
-  };
-  theme.append(themes);
-  if (!adapters.workspace) header.append(title, theme);
+  if (!adapters.workspace) header.append(title);
   else root.dataset.workspace = 'true';
   root.append(header);
   const service = el('p', 'Состояние сервиса неизвестно', 'fkp-next-service');
@@ -94,6 +84,53 @@ export function renderNextPanel(
   const serviceControl = el('button', 'Включить сервис');
   serviceControl.type = 'button';
   serviceControl.disabled = true;
+  const heroActions = el('div', '', 'fkp-next-hero-actions');
+  const heroOverflow = createActionMenu('Ещё', [], {
+    ariaLabel: 'Дополнительные действия',
+  });
+  const heroOverflowPopover = heroOverflow.querySelector<HTMLElement>(
+    '.fkp-action-menu__popover',
+  )!;
+  const heroOverflowDivider = actionMenuDivider();
+  const heroRefs: { add?: HTMLButtonElement; refresh?: HTMLButtonElement } = {};
+  function syncServiceControlPlacement() {
+    if (!adapters.changeService) {
+      heroOverflow.hidden = !heroOverflowPopover.querySelector('button');
+      return;
+    }
+    if (runtime?.running === false) {
+      serviceControl.classList.remove(
+        'fkp-action-menu__item',
+        'fkp-action-menu__danger',
+      );
+      serviceControl.removeAttribute('role');
+      delete serviceControl.dataset.danger;
+      heroOverflowDivider.remove();
+      if (heroRefs.add && heroRefs.add.parentElement === heroActions) {
+        heroActions.insertBefore(serviceControl, heroRefs.add);
+      } else {
+        heroActions.insertBefore(serviceControl, heroOverflow);
+      }
+    } else {
+      if (runtime?.running === true) {
+        serviceControl.dataset.danger = 'true';
+      } else {
+        delete serviceControl.dataset.danger;
+        serviceControl.classList.remove('fkp-action-menu__danger');
+      }
+      if (heroRefs.refresh && heroOverflowPopover.contains(heroRefs.refresh)) {
+        heroOverflowPopover.append(heroOverflowDivider, serviceControl);
+      } else {
+        heroOverflowDivider.remove();
+        heroOverflowPopover.append(serviceControl);
+      }
+      decorateActionMenuItems(heroOverflowPopover);
+      if (runtime?.running !== true) {
+        serviceControl.classList.remove('fkp-action-menu__danger');
+      }
+    }
+    heroOverflow.hidden = !heroOverflowPopover.querySelector('button');
+  }
   function updateServiceControl() {
     serviceControl.textContent =
       runtime?.running === true ? 'Отключить сервис' : 'Включить сервис';
@@ -106,6 +143,7 @@ export function renderNextPanel(
       'aria-busy',
       String(servicePending || runtime?.pending === true),
     );
+    syncServiceControlPlacement();
   }
   serviceControl.onclick = async () => {
     if (serviceControl.disabled || !adapters.changeService) return;
@@ -157,27 +195,24 @@ export function renderNextPanel(
     'fkp-next-summary',
   );
   const serverHeading = el('h3', 'Основное подключение');
-  server.append(
-    serverHeading,
-    selected,
-    action('Изменить сервер', async () => {
-      notice.textContent = 'Открываем выбор сервера…';
-      try {
-        if (adapters.openServers) await adapters.openServers();
-        else {
-          const tab = document.querySelector<HTMLElement>(
-            '.cbi-tabmenu [data-tab="dashboard"] a, .cbi-tabmenu [data-tab="dashboard"] button',
-          );
-          if (!tab) throw new Error('navigation_unavailable');
-          tab.click();
-        }
-        notice.textContent = '';
-      } catch {
-        notice.textContent =
-          'Не удалось открыть выбор сервера. Откройте вкладку Dashboard в LuCI.';
+  const changeServer = action('Изменить сервер', async () => {
+    notice.textContent = 'Открываем выбор сервера…';
+    try {
+      if (adapters.openServers) await adapters.openServers();
+      else {
+        const tab = document.querySelector<HTMLElement>(
+          '.cbi-tabmenu [data-tab="dashboard"] a, .cbi-tabmenu [data-tab="dashboard"] button',
+        );
+        if (!tab) throw new Error('navigation_unavailable');
+        tab.click();
       }
-    }),
-  );
+      notice.textContent = '';
+    } catch {
+      notice.textContent =
+        'Не удалось открыть выбор сервера. Откройте вкладку Dashboard в LuCI.';
+    }
+  });
+  changeServer.className = 'fkp-next-primary-action';
   const addConnection = action('Добавить подключение', async () => {
     notice.textContent = 'Открываем настройки подключения…';
     try {
@@ -192,12 +227,16 @@ export function renderNextPanel(
         'Не удалось открыть настройки. Откройте вкладку «Правила» в LuCI.';
     }
   });
+  heroRefs.add = addConnection;
+  heroActions.append(changeServer, addConnection);
+  if (adapters.workspace || adapters.changeService) {
+    heroActions.append(heroOverflow);
+  }
   const setupHelp = el(
     'p',
     'Добавьте ссылку или подписку, проверьте условия правила, сохраните и примените изменения. Затем вернитесь к выбору узла.',
     'fkp-next-help',
   );
-  server.append(addConnection, setupHelp);
   const check = el('details', '', 'fkp-next-probe');
   check.append(el('summary', 'Проверить соединение'));
   const domainLabel = el('label', 'Сайт для проверки');
@@ -207,7 +246,6 @@ export function renderNextPanel(
   domain.autocomplete = 'off';
   domain.setAttribute('aria-label', 'Сайт для проверки');
   domainLabel.append(domain);
-  check.append(domainLabel);
   const probeButton = action('Проверить соединение', async () => {
     if (!visible()) return;
     const target = domain.value.trim();
@@ -264,27 +302,171 @@ export function renderNextPanel(
     }
   });
   probeButton.className = 'fkp-next-primary-action';
+  const probeForm = el('div', '', 'fkp-next-probe-form');
+  probeForm.append(domainLabel, probeButton);
   check.append(
-    probeButton,
+    probeForm,
     el(
       'p',
       'Проверка использует текущий маршрут роутера. Состояние процесса и прежняя задержка не подтверждают доступность сайта.',
       'fkp-next-help',
     ),
   );
+  server.append(serverHeading, selected, heroActions, setupHelp, check);
+  let primarySectionName: string | undefined;
+  function activateMapTab(tabName: string): HTMLElement | null {
+    const scope = root.closest('.cbi-map') || document;
+    const tab = scope.querySelector<HTMLElement>(
+      `.cbi-tabmenu [data-tab="${tabName}"] a, .cbi-tabmenu [data-tab="${tabName}"] button`,
+    );
+    if (!tab) return null;
+    tab.click();
+    return (
+      [
+        ...scope.querySelectorAll<HTMLElement>('.cbi-map-tabbed > [data-tab]'),
+      ].find((node) => node.dataset.tab === tabName) || null
+    );
+  }
+  function createScenarioCard(
+    id: string,
+    heading: string,
+    subtitle: string,
+    onSelect: () => void | Promise<void>,
+  ): HTMLButtonElement {
+    const card = el('button', '', 'fkp-scenario-card');
+    card.type = 'button';
+    card.dataset.scenario = id;
+    card.append(
+      el('strong', heading, 'fkp-scenario-title'),
+      el('span', subtitle, 'fkp-scenario-desc'),
+    );
+    card.onclick = () => {
+      void onSelect();
+    };
+    return card;
+  }
+  const scenarios = el('section', '', 'fkp-next-panel fkp-next-scenarios');
+  scenarios.append(el('h3', 'Быстрые сценарии'));
+  const scenarioGrid = el('div', '', 'fkp-scenario-grid');
+  scenarioGrid.append(
+    createScenarioCard(
+      'vpn-warp',
+      'WireGuard, AmneziaWG или WARP',
+      'Импорт .conf или выпуск бесплатного профиля Cloudflare WARP в 1 клик.',
+      async () => {
+        const destination = primarySectionName
+          ? ({
+              kind: 'edit',
+              section: primarySectionName,
+              option: '_wg_warp_helper',
+            } as const)
+          : ({ kind: 'create', option: '_wg_warp_helper' } as const);
+        if (navigateToRule(root, destination)) {
+          notice.textContent = '';
+          return;
+        }
+        if (adapters.openRules) {
+          await adapters.openRules();
+          notice.textContent = '';
+          return;
+        }
+        notice.textContent =
+          'Откройте раздел «Правила», чтобы импортировать .conf или выпустить профиль WARP.';
+      },
+    ),
+    createScenarioCard(
+      'gaming-nat',
+      'Игры и консоли (Open NAT)',
+      'PlayStation, Xbox и ПК: обход блокировок для входа и прямой UDP без потери пинга.',
+      () => {
+        const pane = activateMapTab('devices');
+        if (pane) {
+          const gamingInput = pane.querySelector<HTMLElement>(
+            '[aria-label="Игровое устройство"], input',
+          );
+          gamingInput?.focus();
+          gamingInput?.scrollIntoView?.({ block: 'center' });
+          notice.textContent = '';
+          return;
+        }
+        if (!adapters.workspace) {
+          advanced.open = true;
+          advanced.dispatchEvent(new Event('toggle'));
+          const gamingSummary = [
+            ...advanced.querySelectorAll<HTMLElement>('summary'),
+          ].find((s) => s.textContent?.includes('Устройства'));
+          if (gamingSummary?.parentElement instanceof HTMLDetailsElement)
+            gamingSummary.parentElement.open = true;
+          gamingSummary?.focus();
+          return;
+        }
+        notice.textContent =
+          'Откройте раздел «Устройства» для выбора игрового пресета или консольного режима.';
+      },
+    ),
+    createScenarioCard(
+      'tspu-check',
+      'Не грузится видео или сайт',
+      'Диагностика по 4 этапам (DNS → TCP → TLS → лимит ТСПУ 16–20 КБ) и добавление в обход.',
+      () => {
+        const pane = activateMapTab('diagnostic');
+        if (pane) {
+          const tspuInput = pane.querySelector<HTMLElement>(
+            'input[name="tspu_domain"]',
+          );
+          tspuInput?.focus();
+          tspuInput?.scrollIntoView?.({ block: 'center' });
+          notice.textContent = '';
+          return;
+        }
+        check.open = true;
+        domain.focus();
+      },
+    ),
+    createScenarioCard(
+      'torrents-direct',
+      'Торренты и медиасервер мимо VPN',
+      'BitTorrent и локальный TorrServer идут напрямую через провайдера, не нагружая сервер.',
+      () => {
+        const pane = activateMapTab('settings');
+        if (pane) {
+          const field =
+            pane.querySelector<HTMLElement>(
+              '#cbid\\.forkop\\.settings\\.bittorrent_direct',
+            ) ||
+            pane.querySelector<HTMLElement>(
+              '#cbi-forkop-settings-bittorrent_direct input',
+            ) ||
+            pane.querySelector<HTMLElement>(
+              '#cbi-forkop-settings-bittorrent_direct',
+            );
+          let parent = field?.parentElement;
+          while (parent && parent !== pane) {
+            if (parent instanceof HTMLDetailsElement) parent.open = true;
+            parent = parent.parentElement;
+          }
+          field?.focus();
+          field?.scrollIntoView?.({ block: 'center' });
+          notice.textContent = '';
+          return;
+        }
+        notice.textContent =
+          'Откройте раздел «Настройки» → «Прямой трафик и торренты».';
+      },
+    ),
+  );
+  scenarios.append(scenarioGrid);
   const everyday = el('div', '', 'fkp-next-content');
   everyday.append(status, server);
-  root.append(everyday, check);
-  if (adapters.changeService) root.append(serviceControl);
+  root.append(everyday, scenarios);
   const traffic = el('section', '', 'fkp-next-panel fkp-next-traffic');
   const trafficOutput = el('div');
   traffic.append(el('h3', 'Трафик'), trafficOutput);
   root.append(traffic);
   const routes = el('section', '', 'fkp-next-panel fkp-next-routes');
-  routes.append(el('h3', 'Дополнительные маршруты'));
-  const routesOutput = el('div', 'Данные маршрутов пока недоступны.');
-  routes.append(
-    routesOutput,
+  const routesHead = el('div', '', 'fkp-next-section-head');
+  routesHead.append(
+    el('h3', 'Дополнительные маршруты'),
     action('Открыть правила', async () => {
       try {
         if (adapters.openRules) await adapters.openRules();
@@ -301,6 +483,12 @@ export function renderNextPanel(
       }
     }),
   );
+  const routesOutput = el(
+    'div',
+    'Данные маршрутов пока недоступны.',
+    'fkp-next-routes-list',
+  );
+  routes.append(routesHead, routesOutput);
   root.append(routes);
   const advanced = el('details', '', 'fkp-next-advanced');
   advanced.append(el('summary', 'Расширенные настройки и диагностика'));
@@ -407,6 +595,7 @@ export function renderNextPanel(
             selectedSignature = signature;
             const primary =
               groups.find((g) => g.sectionName === 'main') || groups[0];
+            primarySectionName = primary?.sectionName || undefined;
             serverHeading.textContent =
               primary && primary.sectionName !== 'main'
                 ? 'Первое подключение'
@@ -462,8 +651,14 @@ export function renderNextPanel(
     await Promise.all(tasks);
   }
   const refreshControl = action('Обновить данные', refresh);
-  if (adapters.workspace) root.append(refreshControl);
-  else header.append(refreshControl);
+  heroRefs.refresh = refreshControl;
+  if (adapters.workspace) {
+    heroOverflowPopover.prepend(refreshControl);
+    decorateActionMenuItems(heroOverflowPopover);
+  } else {
+    header.append(refreshControl);
+  }
+  syncServiceControlPlacement();
   function configurationChanged() {
     invalidateProbe();
     generation++;

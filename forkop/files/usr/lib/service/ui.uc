@@ -19,8 +19,8 @@ const COMPONENT_ACTION_DIR = getenv("FORKOP_UI_COMPONENT_ACTION_DIR") || getenv(
 const SUBSCRIPTION_ACTION_DIR = getenv("FORKOP_UI_SUBSCRIPTION_ACTION_DIR") || getenv("FORKOP_SUBSCRIPTION_UPDATE_JOB_DIR") || "/var/run/forkop/subscription-update-jobs";
 const SING_BOX_VERSION_CACHE_FILE = getenv("FORKOP_UI_SING_BOX_VERSION_CACHE_FILE") || STATE_DIR + "/sing-box-version";
 const SING_BOX_VERSION_CACHE_LOCK_DIR = getenv("FORKOP_UI_SING_BOX_VERSION_CACHE_LOCK_DIR") || SING_BOX_VERSION_CACHE_FILE + ".lock";
-const SING_BOX_VARIANT_STATE_FILE = getenv("FORKOP_UI_SING_BOX_VARIANT_STATE_FILE") || "/etc/forkop/sing-box-variant";
-const SING_BOX_BIN_PATH = getenv("FORKOP_UI_SING_BOX_BIN_PATH") || "/usr/bin/sing-box";
+const SING_BOX_VARIANT_STATE_FILE = getenv("FORKOP_UI_SING_BOX_VARIANT_STATE_FILE") || getenv("SB_VARIANT_STATE_FILE") || "/etc/forkop/sing-box-variant";
+const SING_BOX_BIN_PATH = getenv("FORKOP_UI_SING_BOX_BIN_PATH") || "";
 const SING_BOX_VERSION_PROBE_TIMEOUT_SECONDS = getenv("FORKOP_UI_SING_BOX_VERSION_PROBE_TIMEOUT_SECONDS") || "1";
 const SING_BOX_VERSION_PROBE_FAILURE_TTL_SECONDS = getenv("FORKOP_UI_SING_BOX_VERSION_PROBE_FAILURE_TTL_SECONDS") || "30";
 const ACTION_FINISHED_TTL_MINUTES = getenv("FORKOP_UI_ACTION_FINISHED_TTL_MINUTES") || "60";
@@ -623,10 +623,15 @@ function latency_action_path_allowed(path) {
     path = as_string(path);
     let prefix = LATENCY_ACTION_DIR + "/";
     let suffix = ".json";
-    return path != "" &&
-        substr(path, 0, length(prefix)) == prefix &&
-        length(path) > length(prefix) + length(suffix) &&
-        substr(path, length(path) - length(suffix)) == suffix;
+    if (path == "" ||
+        substr(path, 0, length(prefix)) != prefix ||
+        length(path) <= length(prefix) + length(suffix) ||
+        substr(path, length(path) - length(suffix)) != suffix)
+        return false;
+    let stem = substr(path, length(prefix), length(path) - length(prefix) - length(suffix));
+    return stem != "" && stem != "." && stem != ".." &&
+        index(stem, "..") < 0 &&
+        match(stem, /^[A-Za-z0-9._-]+$/) != null;
 }
 
 function update_latency_progress_state(path, completed, total, failed) {
@@ -903,8 +908,17 @@ function component_action_running_for(component) {
     return false;
 }
 
-function sing_box_signature() {
-    let stat = fs.stat(SING_BOX_BIN_PATH);
+function resolve_sing_box_bin_path() {
+    if (SING_BOX_BIN_PATH != "")
+        return SING_BOX_BIN_PATH;
+    if (file_executable("/usr/bin/sing-box"))
+        return "/usr/bin/sing-box";
+    let found = trim(command_output_from_args([ "sh", "-c", "command -v sing-box" ]));
+    return found != "" ? found : "/usr/bin/sing-box";
+}
+
+function sing_box_signature(bin_path) {
+    let stat = fs.stat(as_string(bin_path || resolve_sing_box_bin_path()));
     if (stat == null)
         return "";
 
@@ -974,11 +988,12 @@ function bounded_command_output_from_args(args, timeout_seconds) {
     return status == 0 ? output : "";
 }
 
-function sing_box_version_info() {
-    if (!file_executable(SING_BOX_BIN_PATH))
+function sing_box_version_info(bin_path) {
+    bin_path = as_string(bin_path || resolve_sing_box_bin_path());
+    if (!file_executable(bin_path))
         return null;
 
-    let signature = sing_box_signature();
+    let signature = sing_box_signature(bin_path);
     if (signature == "")
         return null;
 
@@ -998,7 +1013,7 @@ function sing_box_version_info() {
         return cached.info;
     }
 
-    let output = bounded_command_output_from_args([ SING_BOX_BIN_PATH, "version" ], SING_BOX_VERSION_PROBE_TIMEOUT_SECONDS);
+    let output = bounded_command_output_from_args([ bin_path, "version" ], SING_BOX_VERSION_PROBE_TIMEOUT_SECONDS);
     let info = sing_box_version_info_from_output(output);
     write_state_file(SING_BOX_VERSION_CACHE_FILE, {
         signature,
@@ -1028,37 +1043,53 @@ function capability_flags() {
         sing_box_tiny: 0,
         sing_box_compressed: 0,
         sing_box_tailscale: 0,
+        supports_wireguard: 0,
+        supports_amneziawg: 0,
+        supports_warp: 0,
         zapret_installed: file_executable(ZAPRET_PROVIDER_NFQWS_BIN) ? 1 : 0,
         zapret2_installed: file_executable(ZAPRET2_PROVIDER_NFQWS2_BIN) ? 1 : 0,
         byedpi_installed: file_executable(BYEDPI_BIN) ? 1 : 0,
         server_inbounds_enabled_count: 0
     };
 
-    if (file_executable(SING_BOX_BIN_PATH)) {
+    let bin_path = resolve_sing_box_bin_path();
+    if (file_executable(bin_path)) {
         if (marker_is("extended-compressed")) {
             result.sing_box_extended = 1;
             result.sing_box_compressed = 1;
             result.sing_box_tailscale = 1;
+            result.supports_wireguard = 1;
+            result.supports_amneziawg = 1;
+            result.supports_warp = 1;
         }
         else if (marker_is("extended")) {
             result.sing_box_extended = 1;
             result.sing_box_tailscale = 1;
+            result.supports_wireguard = 1;
+            result.supports_amneziawg = 1;
+            result.supports_warp = 1;
         }
         else if (marker_is("tiny") || tiny_package_installed()) {
             result.sing_box_tiny = 1;
         }
         else if (component_action_running_for("sing_box")) {
             result.sing_box_tailscale = 1;
+            result.supports_wireguard = 1;
         }
         else {
-            let info = sing_box_version_info();
+            let info = sing_box_version_info(bin_path);
             if (info != null && index(info.version, "extended") >= 0) {
                 result.sing_box_extended = 1;
                 result.sing_box_tailscale = 1;
+                result.supports_wireguard = 1;
+                result.supports_amneziawg = 1;
+                result.supports_warp = 1;
             }
             else if (info != null) {
                 if (match(info.tags, /(^|[,: \t])with_tailscale([, \t]|$)/) != null)
                     result.sing_box_tailscale = 1;
+                if (match(info.tags, /(^|[,: \t])with_wireguard([, \t]|$)/) != null)
+                    result.supports_wireguard = 1;
                 if (result.sing_box_tailscale == 0)
                     result.sing_box_tiny = 1;
             }
@@ -1564,7 +1595,7 @@ else if (mode == "service-action-finish-after-command")
 else if (mode == "service-action-wait-worker")
     service_action_wait_worker(ARGV[1], ARGV[2], ARGV[3]);
 else if (mode == "service-action-worker")
-    service_action_worker(ARGV[1], ARGV[2], ARGV[3]);
+    service_action_worker(ARGV[1], ARGV[2], ARGV[3], ARGV[4]);
 else if (mode == "service-action-async")
     service_action_async(ARGV[1]);
 else if (mode == "service-action-status")

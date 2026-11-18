@@ -33,6 +33,7 @@ const NFT_INTERFACE_SET_NAME = getenv("NFT_INTERFACE_SET_NAME") || constants.NFT
 const NFT_DISCORD_SET_NAME = getenv("NFT_DISCORD_SET_NAME") || constants.NFT_DISCORD_SET_NAME || "forkop_discord_subnets";
 const NFT_LOCALV4_SET_NAME = getenv("NFT_LOCALV4_SET_NAME") || constants.NFT_LOCALV4_SET_NAME || "localv4";
 const SB_DNS_INBOUND_ADDRESS = getenv("SB_DNS_INBOUND_ADDRESS") || constants.SB_DNS_INBOUND_ADDRESS || "127.0.0.42";
+const SB_FAKEIP_INET6_RANGE = getenv("SB_FAKEIP_INET6_RANGE") || constants.SB_FAKEIP_INET6_RANGE || "2001:2::/112";
 const SB_TPROXY_INBOUND6_ADDRESS = getenv("SB_TPROXY_INBOUND6_ADDRESS") || constants.SB_TPROXY_INBOUND6_ADDRESS || "::1";
 const SB_TPROXY_INBOUND_PORT = getenv("SB_TPROXY_INBOUND_PORT") || constants.SB_TPROXY_INBOUND_PORT || "1602";
 const SB_CLASH_API_CONTROLLER_PORT = getenv("SB_CLASH_API_CONTROLLER_PORT") || constants.SB_CLASH_API_CONTROLLER_PORT || "9090";
@@ -420,6 +421,8 @@ function valid_public_ipv6(value) {
         return false;
     if (substr(value, 0, 4) == "2001" && index(value, "2001:db8") == 0)
         return false;
+    if (core_ip.ip_in_cidr(value, "2001:2::/48"))
+        return false;
     return true;
 }
 
@@ -486,15 +489,14 @@ function get_wan_ip_addresses() {
             break;
         }
     }
-    if (iface == "")
-        return "";
-
-    let addr = command_output_from_args([ "ip", "-4", "addr", "show", "dev", iface ]);
-    for (let line in split(addr, "\n")) {
-        line = trim(as_string(line));
-        let matched = match(line, /^inet[ \t]+([0-9.]+)\//);
-        if (matched != null)
-            push_unique(result, seen, matched[1]);
+    if (iface != "") {
+        let addr = command_output_from_args([ "ip", "-4", "addr", "show", "dev", iface ]);
+        for (let line in split(addr, "\n")) {
+            line = trim(as_string(line));
+            let matched = match(line, /^inet[ \t]+([0-9.]+)\//);
+            if (matched != null)
+                push_unique(result, seen, matched[1]);
+        }
     }
 
     route = command_output_from_args([ "ip", "-6", "route", "show", "default" ]);
@@ -750,11 +752,13 @@ function check_proxy() {
 
     cleanup_check_proxy_dir(check_proxy_dir);
     ensure_dir(check_proxy_dir);
+    fs.chmod(check_proxy_dir, 0700);
     if (!status_success([ "prepare-check-proxy-config", sing_box_config_path, check_proxy_config, check_proxy_cache ], null)) {
         nolog("Failed to prepare temporary configuration");
         cleanup_check_proxy_dir(check_proxy_dir);
         return 1;
     }
+    fs.chmod(check_proxy_config, 0600);
 
     let outbound_tag = replace(status_output(
         [ "check-proxy-outbound-tag", check_proxy_config, CHECK_PROXY_IP_DOMAIN ],
@@ -1558,7 +1562,7 @@ function check_fakeip() {
         }
     }
     write_json({
-        fakeip: match(fakeip_address, /^198\.(18|19)\./) != null || match(fakeip6_address, /^fc[0-3][0-9a-f]:/) != null,
+        fakeip: match(fakeip_address, /^198\.(18|19)\./) != null || (fakeip6_address != "" && core_ip.ip_in_cidr(fakeip6_address, SB_FAKEIP_INET6_RANGE)),
         IP: fakeip_address != "" ? fakeip_address : fakeip6_address,
         IPv4: fakeip_address,
         IPv6: fakeip6_address
@@ -1579,6 +1583,8 @@ function clash_api_url() {
         if (service_address != "")
             address = service_address;
     }
+    if (core_ip.valid_ipv6(address) && substr(address, 0, 1) != "[")
+        address = "[" + address + "]";
     return address + ":" + SB_CLASH_API_CONTROLLER_PORT;
 }
 
@@ -1598,6 +1604,29 @@ function clash_json_error(message) {
     if (result.output != "")
         print(result.output);
     return 1;
+}
+
+function valid_latency_probe_url(value) {
+    value = trim(as_string(value));
+    let matched = match(value, /^https?:\/\/([^\/?#\s]+)(\/[^\s]*)?$/);
+    if (matched == null)
+        return false;
+    let authority = as_string(matched[1]);
+    if (index(authority, "@") >= 0 || substr(authority, 0, 1) == "[")
+        return false;
+    let colon = index(authority, ":");
+    let host = lc(colon >= 0 ? substr(authority, 0, colon) : authority);
+    if (colon >= 0) {
+        let port = substr(authority, colon + 1);
+        if (match(port, /^[0-9]+$/) == null || int(port) < 1 || int(port) > 65535)
+            return false;
+    }
+    if (host == "" || host == "localhost" || core_ip.valid_ip(host) || index(host, ".") <= 0)
+        return false;
+    for (let suffix in [ ".local", ".lan", ".internal", ".home", ".arpa", ".localhost" ])
+        if (length(host) >= length(suffix) && substr(host, length(host) - length(suffix)) == suffix)
+            return false;
+    return match(host, /^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$/) != null && index(host, "..") < 0;
 }
 
 function clash_proxy_type_map(base_url, auth) {
@@ -1704,6 +1733,8 @@ function clash_api(action, arg1, arg2, arg3) {
         let url = as_string(arg3 || "");
         if (url == "")
             url = test_url;
+        if (!valid_latency_probe_url(url))
+            return clash_json_error("invalid test url");
         let args = [ "curl", "-G", "-s", base_url + "/proxies/" + clash_urlencode(arg1) + "/delay" ];
         for (let item in auth) push(args, item);
         push(args, "--data-urlencode");

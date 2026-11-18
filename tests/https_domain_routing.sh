@@ -58,7 +58,7 @@ before 'https_prerouting fib daddr type local return' "$capture" 'router-owned a
 before 'https_prerouting jump priority_rules' "$capture" 'explicit priority rules must be rechecked before HTTPS capture'
 cp "$NFT_LOG" "$WORK_DIR/enabled.log"
 : > "$NFT_LOG"
-nft_apply nft-create-runtime-base ForkopTable localv4 forkop_subnets forkop_ports forkop_ip_ports forkop_interfaces br-lan 0x00100000 0x00200000 198.18.0.0/15 1602 0 localv6 forkop_subnets6 forkop_ip6_ports fc00::/18 ::1 1
+nft_apply nft-create-runtime-base ForkopTable localv4 forkop_subnets forkop_ports forkop_ip_ports forkop_interfaces br-lan 0x00100000 0x00200000 198.18.0.0/15 1602 0 localv6 forkop_subnets6 forkop_ip6_ports 2001:2::/112 ::1 1
 cmp "$NFT_LOG" "$WORK_DIR/enabled.log" || fail 'optional trailing CLI flag must match enabled UCI behavior'
 # The opt-in late chain is the only addition; all legacy commands stay identical.
 awk '$5 != "https_prerouting"' "$NFT_LOG" > "$WORK_DIR/without-capture.log"

@@ -478,7 +478,7 @@ function migrate_proxy_string(ctx, section) {
 
 function cache_section_safe(section) {
     section = as_string(section);
-    return section != "" && index(section, "/") < 0 && index(section, "..") < 0;
+    return match(section, /^[A-Za-z0-9_-]+$/) != null;
 }
 
 function subscription_cache_paths(section) {
@@ -1415,10 +1415,28 @@ function remove_legacy_server_country_cache() {
 
 function remove_cache_path(path) {
     path = as_string(path);
-    if (index(path, "*") >= 0)
-        run("rm -f " + path);
-    else
+    let star = index(path, "*");
+    if (star < 0) {
         fs.unlink(path);
+        return;
+    }
+    let slash = rindex(substr(path, 0, star), "/");
+    if (slash < 0)
+        return;
+    let dir = substr(path, 0, slash);
+    let pattern = substr(path, slash + 1);
+    let local_star = index(pattern, "*");
+    if (local_star < 0 || index(substr(pattern, local_star + 1), "*") >= 0)
+        return;
+    let prefix = substr(pattern, 0, local_star);
+    let suffix = substr(pattern, local_star + 1);
+    for (let entry in fs.lsdir(dir) || []) {
+        entry = as_string(entry);
+        if (length(entry) >= length(prefix) + length(suffix) &&
+            substr(entry, 0, length(prefix)) == prefix &&
+            substr(entry, length(entry) - length(suffix)) == suffix)
+            fs.unlink(dir + "/" + entry);
+    }
 }
 
 function apply_operations(cursor, operations) {
@@ -1504,6 +1522,10 @@ function mark_internal_config_guard() {
 function commit_cursor(cursor) {
     if (!cursor.commit(CONFIG_NAME))
         return false;
+    let cfg_dir = getenv("FORKOP_UCI_CONFIG_DIR") || "/etc/config";
+    let cfg_path = cfg_dir + "/" + CONFIG_NAME;
+    if (fs.stat(cfg_path) != null)
+        fs.chmod(cfg_path, 0600);
     mark_internal_config_guard();
     return true;
 }

@@ -42,6 +42,9 @@ function config(settings, runtime) {
     if (type(runtime) == "object" && bool_value(runtime.source_aware_dns))
         push(result.rules, { action: "reject", inbound: [ runtime_constants.SOURCE_DNS_INBOUND_TAG ] });
 
+    if (bool_option(settings, "bittorrent_direct", false))
+        push(result.rules, { action: "route", inbound: [ runtime_constants.TPROXY_INBOUND_TAG, runtime_constants.TPROXY_INBOUND6_TAG ], protocol: "bittorrent", outbound: runtime_constants.DIRECT_OUTBOUND_TAG });
+
     if (output_network_interface != "")
         result.default_interface = output_network_interface;
     if (bool_option(settings, "disable_quic", false))
@@ -52,7 +55,7 @@ function config(settings, runtime) {
 
 function target(section, outbound_tag_name) {
     if (option(section, "next_target", "") != "")
-        outbound_tag_name = option(section, "next_target", "") + "-out";
+        outbound_tag_name = runtime_constants.outbound_tag(option(section, "next_target", ""));
     let action = option(section, "action", "");
     if (connections.is_connections_action(action) ||
         action == "byedpi" || action == "zapret" || action == "zapret2")

@@ -21,41 +21,50 @@ export function validateTrojanUrl(url: string): ValidationResult {
     const [mainPart] = body.split('#');
     const [userHostPort] = mainPart.split('?');
 
-    const [userPart, hostPortPart] = userHostPort.split('@');
-
     if (!userHostPort)
       return {
         valid: false,
-        message: 'Invalid Trojan URL: missing credentials and host',
+        message: _('Invalid Trojan URL: missing credentials and host'),
       };
 
+    const atIndex = userHostPort.lastIndexOf('@');
+    const userPart = atIndex >= 0 ? userHostPort.slice(0, atIndex) : '';
+    const hostPortPart =
+      atIndex >= 0 ? userHostPort.slice(atIndex + 1).split('/')[0] : '';
+
     if (!userPart)
-      return { valid: false, message: 'Invalid Trojan URL: missing password' };
+      return {
+        valid: false,
+        message: _('Invalid Trojan URL: missing password'),
+      };
 
     if (!hostPortPart)
       return {
         valid: false,
-        message: 'Invalid Trojan URL: missing hostname and port',
+        message: _('Invalid Trojan URL: missing hostname and port'),
       };
 
     const parsedHostPort = parseHostPort(hostPortPart);
     if (!parsedHostPort)
       return {
         valid: false,
-        message: 'Invalid Trojan URL: invalid host and port',
+        message: _('Invalid Trojan URL: invalid host and port'),
       };
     const { host, port } = parsedHostPort;
 
     if (!host)
-      return { valid: false, message: 'Invalid Trojan URL: missing hostname' };
+      return {
+        valid: false,
+        message: _('Invalid Trojan URL: missing hostname'),
+      };
 
     if (!port)
-      return { valid: false, message: 'Invalid Trojan URL: missing port' };
+      return { valid: false, message: _('Invalid Trojan URL: missing port') };
 
     if (!isValidPort(port))
       return {
         valid: false,
-        message: 'Invalid Trojan URL: invalid port number',
+        message: _('Invalid Trojan URL: invalid port number'),
       };
   } catch (_e) {
     return { valid: false, message: _('Invalid Trojan URL: parsing failed') };

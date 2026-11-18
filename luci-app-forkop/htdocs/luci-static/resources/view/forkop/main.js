@@ -136,6 +136,16 @@ function validateDNS(value) {
   if (parsedHostPort && !isValidPort(parsedHostPort.port)) {
     return { valid: false, message: _("Invalid DNS server port") };
   }
+  if (pathParts.length > 0 && !pathParts.every(
+    (part) => part.length > 0 && part !== "." && part !== ".." && /^[A-Za-z0-9._~:@!$&'()*+,;=%-]+$/.test(part)
+  )) {
+    return {
+      valid: false,
+      message: _(
+        "Invalid DNS server format. Examples: 8.8.8.8 or dns.example.com or dns.example.com/nicedns for DoH"
+      )
+    };
+  }
   if (validateIP(host).valid) {
     return { valid: true, message: _("Valid") };
   }
@@ -182,7 +192,9 @@ function validatePath(value) {
     };
   }
   const pathRegex = /^\/[a-zA-Z0-9_\-/.]+$/;
-  if (pathRegex.test(value)) {
+  const segments = value.split("/").slice(1);
+  const hasInvalidSegments = value.includes("//") || segments.some((part) => part === "." || part === "..");
+  if (pathRegex.test(value) && !hasInvalidSegments) {
     return {
       valid: true,
       message: _("Valid")
@@ -241,6 +253,389 @@ function bulkValidate(values, validate) {
   };
 }
 
+// src/validators/validateWireGuardUrl.ts
+var WG_SCHEME_RE = /^(wireguard|wg|awg|amneziawg|warp):\/\//i;
+var BASE64_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+function invalid(message) {
+  return { valid: false, message };
+}
+function safeDecodePercent(raw) {
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return raw;
+  }
+}
+function decodeBase64Bytes(raw) {
+  const trimmed = `${raw || ""}`.trim().replace(/-/g, "+").replace(/_/g, "/");
+  if (!trimmed.length || /[^A-Za-z0-9+/=]/.test(trimmed)) {
+    return null;
+  }
+  const withoutPad = trimmed.replace(/=+$/, "");
+  const padLen = trimmed.length - withoutPad.length;
+  if (padLen > 2) {
+    return null;
+  }
+  const padded = withoutPad.length % 4 === 0 ? withoutPad : withoutPad + "=".repeat(4 - withoutPad.length % 4);
+  if (padded.length % 4 !== 0) {
+    return null;
+  }
+  const bytes2 = [];
+  for (let i = 0; i < padded.length; i += 4) {
+    const c0 = BASE64_ALPHABET.indexOf(padded[i]);
+    const c1 = BASE64_ALPHABET.indexOf(padded[i + 1]);
+    const c2 = padded[i + 2] === "=" ? -1 : BASE64_ALPHABET.indexOf(padded[i + 2]);
+    const c3 = padded[i + 3] === "=" ? -1 : BASE64_ALPHABET.indexOf(padded[i + 3]);
+    if (c0 < 0 || c1 < 0 || padded[i + 2] !== "=" && c2 < 0 || padded[i + 3] !== "=" && c3 < 0) {
+      return null;
+    }
+    bytes2.push(c0 << 2 | c1 >> 4);
+    if (c2 >= 0) {
+      bytes2.push((c1 & 15) << 4 | c2 >> 2);
+      if (c3 >= 0) {
+        bytes2.push((c2 & 3) << 6 | c3);
+      }
+    } else if (c3 >= 0) {
+      return null;
+    }
+  }
+  return new Uint8Array(bytes2);
+}
+function isValidCurve25519Key(raw) {
+  const decoded = safeDecodePercent(`${raw || ""}`.trim());
+  const bytes2 = decodeBase64Bytes(decoded);
+  return bytes2 !== null && bytes2.length === 32;
+}
+function parseNonNegInt(raw) {
+  if (typeof raw === "number") {
+    return Number.isInteger(raw) && raw >= 0 ? raw : null;
+  }
+  const str = `${raw ?? ""}`.trim();
+  if (!/^\d+$/.test(str)) {
+    return null;
+  }
+  const num = Number(str);
+  return Number.isSafeInteger(num) && num >= 0 ? num : null;
+}
+function parseHeaderRange(raw) {
+  if (typeof raw === "number") {
+    return Number.isInteger(raw) && raw >= 0 && raw <= 4294967295 ? [raw, raw] : null;
+  }
+  const str = `${raw ?? ""}`.trim();
+  if (!str.length) {
+    return null;
+  }
+  const match = str.match(/^(\d+)(?:-(\d+))?$/);
+  if (!match) {
+    return null;
+  }
+  const min = Number(match[1]);
+  const max = match[2] !== void 0 ? Number(match[2]) : min;
+  if (!Number.isInteger(min) || !Number.isInteger(max) || min < 0 || max > 4294967295 || min > max) {
+    return null;
+  }
+  return [min, max];
+}
+function validateAmneziaWgConfig(amnezia, oneSidedOnly = false) {
+  const allowedKeys = /* @__PURE__ */ new Set([
+    "jc",
+    "jmin",
+    "jmax",
+    "s1",
+    "s2",
+    "s3",
+    "s4",
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "i1",
+    "i2",
+    "i3",
+    "i4",
+    "i5"
+  ]);
+  for (const key of Object.keys(amnezia)) {
+    if (!allowedKeys.has(key)) {
+      return invalid(_("Unknown AmneziaWG parameter"));
+    }
+  }
+  const twoSidedKeys = ["s1", "s2", "s3", "s4", "h1", "h2", "h3", "h4"];
+  if (oneSidedOnly && twoSidedKeys.some(
+    (k) => amnezia[k] !== void 0 && `${amnezia[k]}`.trim() !== ""
+  )) {
+    return invalid(
+      _(
+        "Cloudflare WARP supports only 1-sided AmneziaWG parameters (jc, jmin, jmax, i1-i5)"
+      )
+    );
+  }
+  let jcVal = null;
+  if (amnezia.jc !== void 0 && `${amnezia.jc}`.trim() !== "") {
+    jcVal = parseNonNegInt(amnezia.jc);
+    if (jcVal === null || jcVal < 1 || jcVal > 128) {
+      return invalid(_("AmneziaWG jc must be an integer between 1 and 128"));
+    }
+  }
+  let jminVal = null;
+  if (amnezia.jmin !== void 0 && `${amnezia.jmin}`.trim() !== "") {
+    jminVal = parseNonNegInt(amnezia.jmin);
+    if (jminVal === null || jminVal > 1280) {
+      return invalid(_("AmneziaWG jmin must be an integer between 0 and 1280"));
+    }
+  }
+  let jmaxVal = null;
+  if (amnezia.jmax !== void 0 && `${amnezia.jmax}`.trim() !== "") {
+    jmaxVal = parseNonNegInt(amnezia.jmax);
+    if (jmaxVal === null || jmaxVal > 1280) {
+      return invalid(_("AmneziaWG jmax must be an integer between 0 and 1280"));
+    }
+  }
+  if ((jminVal !== null || jmaxVal !== null) && jcVal === null) {
+    return invalid(_("AmneziaWG jc is required when jmin or jmax is set"));
+  }
+  if (jminVal !== null && jmaxVal !== null && jminVal > jmaxVal) {
+    return invalid(
+      _("AmneziaWG jmin must be less than or equal to jmax (max 1280)")
+    );
+  }
+  for (const sKey of ["s1", "s2", "s3", "s4"]) {
+    if (amnezia[sKey] !== void 0 && `${amnezia[sKey]}`.trim() !== "") {
+      const sVal = parseNonNegInt(amnezia[sKey]);
+      if (sVal === null || sVal > 1280) {
+        return invalid(
+          _(
+            "AmneziaWG s1-s4 padding values must be integers between 0 and 1280"
+          )
+        );
+      }
+    }
+  }
+  const hRanges = [];
+  for (const hKey of ["h1", "h2", "h3", "h4"]) {
+    if (amnezia[hKey] !== void 0 && `${amnezia[hKey]}`.trim() !== "") {
+      const range = parseHeaderRange(amnezia[hKey]);
+      if (!range) {
+        return invalid(
+          _(
+            "AmneziaWG h1-h4 headers must be valid 32-bit integers or min-max ranges"
+          )
+        );
+      }
+      for (const existing of hRanges) {
+        if (range[0] <= existing[1] && existing[0] <= range[1]) {
+          return invalid(_("AmneziaWG h1-h4 header ranges must not overlap"));
+        }
+      }
+      hRanges.push(range);
+    }
+  }
+  for (const iKey of ["i1", "i2", "i3", "i4", "i5"]) {
+    if (amnezia[iKey] !== void 0 && amnezia[iKey] !== "") {
+      if (typeof amnezia[iKey] !== "string" || amnezia[iKey].trim().length === 0 || amnezia[iKey].length > 4096 || /[\r\n]/.test(amnezia[iKey])) {
+        return invalid(
+          _(
+            "AmneziaWG i1-i5 signature packets must be non-empty single-line strings"
+          )
+        );
+      }
+    }
+  }
+  return { valid: true, message: _("Valid") };
+}
+function validateCidrOrIpList(rawList) {
+  for (const rawItem of rawList) {
+    const item = `${rawItem || ""}`.trim();
+    if (!item || item.endsWith("/")) {
+      return invalid(_("Invalid WireGuard interface address or CIDR"));
+    }
+    const sub = validateSubnet(item);
+    if (!sub.valid) {
+      return invalid(_("Invalid WireGuard interface address or CIDR"));
+    }
+  }
+  return { valid: true, message: _("Valid") };
+}
+function parseRawQueryParams(rawQuery) {
+  const params = {};
+  if (!rawQuery) {
+    return params;
+  }
+  for (const pair of rawQuery.split("&")) {
+    if (!pair) continue;
+    const eqIndex = pair.indexOf("=");
+    const rawKey = eqIndex >= 0 ? pair.slice(0, eqIndex) : pair;
+    const rawVal = eqIndex >= 0 ? pair.slice(eqIndex + 1) : "";
+    const key = safeDecodePercent(rawKey).trim().toLowerCase();
+    if (key) {
+      params[key] = safeDecodePercent(rawVal).trim();
+    }
+  }
+  return params;
+}
+function validateReservedParam(raw) {
+  const trimmed = raw.trim();
+  if (!trimmed) return true;
+  if (/^\d+\s*,\s*\d+\s*,\s*\d+$/.test(trimmed)) {
+    return trimmed.split(",").map((part) => Number(part.trim())).every((n) => Number.isInteger(n) && n >= 0 && n <= 255);
+  }
+  const bytes2 = decodeBase64Bytes(trimmed);
+  return bytes2 !== null && bytes2.length === 3;
+}
+function validateWireGuardUrl(url) {
+  const trimmed = `${url || ""}`.trim();
+  const schemeMatch = trimmed.match(WG_SCHEME_RE);
+  if (!schemeMatch) {
+    return invalid(
+      _(
+        "URL must start with wireguard://, wg://, awg://, amneziawg://, or warp://"
+      )
+    );
+  }
+  const scheme = schemeMatch[1].toLowerCase();
+  const isWarp = scheme === "warp";
+  const rest = trimmed.slice(schemeMatch[0].length);
+  const hashIndex = rest.indexOf("#");
+  const withoutHash = hashIndex >= 0 ? rest.slice(0, hashIndex) : rest;
+  const queryIndex = withoutHash.indexOf("?");
+  const authorityPart = queryIndex >= 0 ? withoutHash.slice(0, queryIndex) : withoutHash;
+  const rawQuery = queryIndex >= 0 ? withoutHash.slice(queryIndex + 1) : "";
+  const atIndex = authorityPart.lastIndexOf("@");
+  const userinfo = atIndex >= 0 ? authorityPart.slice(0, atIndex) : "";
+  const hostPortRaw = (atIndex >= 0 ? authorityPart.slice(atIndex + 1) : authorityPart).replace(/\/+$/, "");
+  const params = parseRawQueryParams(rawQuery);
+  if (isWarp) {
+    if (hostPortRaw && hostPortRaw.toLowerCase() !== "auto") {
+      if (hostPortRaw.toLowerCase().startsWith("auto:")) {
+        const autoPort = hostPortRaw.slice(5);
+        if (!isValidPort(autoPort)) {
+          return invalid(_("Port must be a number between 1 and 65535"));
+        }
+      } else {
+        const parsedHp = parseHostPort(hostPortRaw);
+        if (parsedHp) {
+          if (!isValidPort(parsedHp.port)) {
+            return invalid(_("Port must be a number between 1 and 65535"));
+          }
+        } else if (!isValidHost(hostPortRaw)) {
+          return invalid(_("Invalid server host or port in WARP URL"));
+        }
+      }
+    }
+  } else {
+    const parsedHp = parseHostPort(hostPortRaw);
+    if (!parsedHp) {
+      return invalid(_("Invalid WireGuard server host or port"));
+    }
+    if (!isValidPort(parsedHp.port)) {
+      return invalid(_("Port must be a number between 1 and 65535"));
+    }
+  }
+  let privateKey = params.privatekey || params.private_key || params["private-key"] || "";
+  let psk = params.psk || params.presharedkey || params.pre_shared_key || params["pre-shared-key"] || "";
+  if (userinfo) {
+    const colonIdx = userinfo.indexOf(":");
+    const userPriv = colonIdx >= 0 ? userinfo.slice(0, colonIdx) : userinfo;
+    const userPsk = colonIdx >= 0 ? userinfo.slice(colonIdx + 1) : "";
+    if (userPriv && !privateKey) {
+      privateKey = userPriv;
+    }
+    if (userPsk && !psk) {
+      psk = userPsk;
+    }
+  }
+  if (!isWarp) {
+    if (!privateKey || !isValidCurve25519Key(privateKey)) {
+      return invalid(_("Invalid or missing WireGuard private key"));
+    }
+  } else if (privateKey && !isValidCurve25519Key(privateKey)) {
+    return invalid(_("Invalid WireGuard private key in WARP URL"));
+  }
+  const publicKey = params.publickey || params.public_key || params["public-key"] || params.peer_public_key || "";
+  if (!isWarp) {
+    if (!publicKey || !isValidCurve25519Key(publicKey)) {
+      return invalid(_("Invalid or missing WireGuard peer public key"));
+    }
+  } else if (publicKey && !isValidCurve25519Key(publicKey)) {
+    return invalid(_("Invalid WireGuard peer public key in WARP URL"));
+  }
+  if (psk && !isValidCurve25519Key(psk)) {
+    return invalid(_("Invalid WireGuard pre-shared key"));
+  }
+  const rawAddress = params.address || params.ip || params.local_address || "";
+  if (rawAddress) {
+    const items2 = rawAddress.split(",").map((s) => s.trim()).filter(Boolean);
+    if (!items2.length) {
+      return invalid(_("Invalid WireGuard interface address or CIDR"));
+    }
+    const addrValidation = validateCidrOrIpList(items2);
+    if (!addrValidation.valid) {
+      return addrValidation;
+    }
+  }
+  const rawAllowedIps = params.allowedips || params.allowed_ips || "";
+  if (rawAllowedIps) {
+    const items2 = rawAllowedIps.split(",").map((s) => s.trim()).filter(Boolean);
+    const allowedValidation = validateCidrOrIpList(items2);
+    if (!allowedValidation.valid) {
+      return invalid(_("Invalid WireGuard AllowedIPs CIDR"));
+    }
+  }
+  if (params.mtu !== void 0 && params.mtu !== "") {
+    const mtu = parseNonNegInt(params.mtu);
+    if (mtu === null || mtu < 576 || mtu > 65535) {
+      return invalid(_("WireGuard MTU must be between 576 and 65535"));
+    }
+  }
+  const rawKeepalive = params.keepalive || params.persistent_keepalive || "";
+  if (rawKeepalive) {
+    const ka = parseNonNegInt(rawKeepalive);
+    if (ka === null || ka > 65535) {
+      return invalid(_("WireGuard keepalive must be between 0 and 65535"));
+    }
+  }
+  if (params.reserved !== void 0 && params.reserved !== "") {
+    if (!validateReservedParam(params.reserved)) {
+      return invalid(
+        _("WireGuard reserved field must be 3 comma-separated bytes or base64")
+      );
+    }
+  }
+  const awgKeys = [
+    "jc",
+    "jmin",
+    "jmax",
+    "s1",
+    "s2",
+    "s3",
+    "s4",
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "i1",
+    "i2",
+    "i3",
+    "i4",
+    "i5"
+  ];
+  const awgObj = {};
+  let hasAwg = false;
+  for (const key of awgKeys) {
+    if (params[key] !== void 0 && params[key] !== "") {
+      awgObj[key] = params[key];
+      hasAwg = true;
+    }
+  }
+  if (hasAwg) {
+    const awgValidation = validateAmneziaWgConfig(awgObj, isWarp);
+    if (!awgValidation.valid) {
+      return awgValidation;
+    }
+  }
+  return { valid: true, message: _("Valid") };
+}
+
 // src/validators/validateOutboundJson.ts
 var SERVER_OUTBOUND_TYPES = /* @__PURE__ */ new Set([
   "vless",
@@ -252,7 +647,7 @@ var SERVER_OUTBOUND_TYPES = /* @__PURE__ */ new Set([
   "hysteria2",
   "hysteria"
 ]);
-function invalid(message) {
+function invalid2(message) {
   return { valid: false, message };
 }
 function isPlainObject(value) {
@@ -264,13 +659,37 @@ function nonEmptyString(value) {
 function validateServerPort(value) {
   return typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= 65535;
 }
+function validatePortString(value) {
+  if (!/^[0-9]+$/.test(value)) {
+    return null;
+  }
+  const port = Number(value);
+  return Number.isInteger(port) && port >= 1 && port <= 65535 ? port : null;
+}
+function validateHysteria2ServerPorts(value) {
+  if (!Array.isArray(value) || value.length === 0) {
+    return false;
+  }
+  return value.every((entry) => {
+    if (typeof entry !== "string") {
+      return false;
+    }
+    const parts = entry.trim().split(":");
+    if (parts.length !== 2) {
+      return false;
+    }
+    const start = validatePortString(parts[0]);
+    const end = validatePortString(parts[1]);
+    return start !== null && end !== null && start <= end;
+  });
+}
 function validateOutbounds(value) {
   return Array.isArray(value) && value.length > 0 && value.every((item) => nonEmptyString(item));
 }
 function validateOutboundJson(value, usedTags = []) {
   const normalized = `${value || ""}`.trim();
   if (!normalized.length) {
-    return invalid(_("JSON outbound cannot be empty"));
+    return invalid2(_("JSON outbound cannot be empty"));
   }
   let parsed;
   try {
@@ -279,21 +698,122 @@ function validateOutboundJson(value, usedTags = []) {
     return { valid: false, message: _("Invalid JSON format") };
   }
   if (!isPlainObject(parsed)) {
-    return invalid(_("JSON outbound must be a JSON object"));
+    return invalid2(_("JSON outbound must be a JSON object"));
   }
   if (!nonEmptyString(parsed.type)) {
-    return invalid(_("JSON outbound must contain a non-empty type field"));
+    return invalid2(_("JSON outbound must contain a non-empty type field"));
   }
   if (!nonEmptyString(parsed.tag)) {
-    return invalid(_("JSON outbound must contain a non-empty tag field"));
+    return invalid2(_("JSON outbound must contain a non-empty tag field"));
   }
   const tag = parsed.tag.trim();
   if (usedTags.some((usedTag) => `${usedTag || ""}`.trim() === tag)) {
-    return invalid(_("Duplicate JSON outbound tag"));
+    return invalid2(_("Duplicate JSON outbound tag"));
   }
   const type = parsed.type.trim().toLowerCase();
+  if (type === "wireguard") {
+    if (!nonEmptyString(parsed.private_key) || !isValidCurve25519Key(parsed.private_key)) {
+      return invalid2(
+        _("WireGuard outbound requires a valid Curve25519 private_key")
+      );
+    }
+    const rawAddr = parsed.address ?? parsed.local_address;
+    const addrList = typeof rawAddr === "string" ? [rawAddr] : Array.isArray(rawAddr) && rawAddr.every((item) => nonEmptyString(item)) ? rawAddr : [];
+    if (!addrList.length) {
+      return invalid2(
+        _("WireGuard outbound requires a non-empty address string or array")
+      );
+    }
+    const addrCheck = validateCidrOrIpList(addrList);
+    if (!addrCheck.valid) {
+      return addrCheck;
+    }
+    if (!Array.isArray(parsed.peers) || parsed.peers.length === 0) {
+      return invalid2(_("WireGuard outbound requires a non-empty peers array"));
+    }
+    for (const peer of parsed.peers) {
+      if (!isPlainObject(peer)) {
+        return invalid2(_("Each WireGuard peer must be a JSON object"));
+      }
+      if (!nonEmptyString(peer.address) || !isValidHost(peer.address.trim())) {
+        return invalid2(_("Each WireGuard peer requires a valid address"));
+      }
+      if (!validateServerPort(peer.port)) {
+        return invalid2(
+          _("Each WireGuard peer requires a numeric port from 1 to 65535")
+        );
+      }
+      if (!nonEmptyString(peer.public_key) || !isValidCurve25519Key(peer.public_key)) {
+        return invalid2(
+          _("Each WireGuard peer requires a valid Curve25519 public_key")
+        );
+      }
+      if (peer.pre_shared_key !== void 0 && (!nonEmptyString(peer.pre_shared_key) || !isValidCurve25519Key(peer.pre_shared_key))) {
+        return invalid2(
+          _("WireGuard peer pre_shared_key must be a valid Curve25519 key")
+        );
+      }
+      if (peer.allowed_ips !== void 0) {
+        if (!Array.isArray(peer.allowed_ips) || peer.allowed_ips.length === 0 || !peer.allowed_ips.every((ip) => nonEmptyString(ip))) {
+          return invalid2(
+            _("WireGuard peer allowed_ips must be a non-empty array of CIDRs")
+          );
+        }
+        const allowedCheck = validateCidrOrIpList(peer.allowed_ips);
+        if (!allowedCheck.valid) {
+          return allowedCheck;
+        }
+      }
+    }
+    if (parsed.mtu !== void 0) {
+      if (typeof parsed.mtu !== "number" || !Number.isInteger(parsed.mtu) || parsed.mtu < 576 || parsed.mtu > 65535) {
+        return invalid2(_("WireGuard MTU must be between 576 and 65535"));
+      }
+    }
+    if (parsed.amnezia !== void 0) {
+      if (!isPlainObject(parsed.amnezia)) {
+        return invalid2(_("WireGuard amnezia field must be a JSON object"));
+      }
+      const awgCheck = validateAmneziaWgConfig(parsed.amnezia, false);
+      if (!awgCheck.valid) {
+        return awgCheck;
+      }
+    }
+  }
+  if (type === "warp") {
+    if (parsed.mtu !== void 0) {
+      return invalid2(_("WARP outbound does not accept manual mtu override"));
+    }
+    const forbiddenTopKeys = ["s1", "s2", "s3", "s4", "h1", "h2", "h3", "h4"];
+    if (forbiddenTopKeys.some((k) => parsed[k] !== void 0)) {
+      return invalid2(
+        _(
+          "Cloudflare WARP supports only 1-sided AmneziaWG parameters (jc, jmin, jmax, i1-i5)"
+        )
+      );
+    }
+    if (parsed.profile !== void 0) {
+      if (!isPlainObject(parsed.profile)) {
+        return invalid2(_("WARP profile field must be a JSON object"));
+      }
+      if (parsed.profile.private_key !== void 0 && (!nonEmptyString(parsed.profile.private_key) || !isValidCurve25519Key(parsed.profile.private_key))) {
+        return invalid2(
+          _("WARP profile private_key must be a valid Curve25519 key")
+        );
+      }
+    }
+    if (parsed.amnezia !== void 0) {
+      if (!isPlainObject(parsed.amnezia)) {
+        return invalid2(_("WARP amnezia field must be a JSON object"));
+      }
+      const awgCheck = validateAmneziaWgConfig(parsed.amnezia, true);
+      if (!awgCheck.valid) {
+        return awgCheck;
+      }
+    }
+  }
   if ((type === "selector" || type === "urltest") && !validateOutbounds(parsed.outbounds)) {
-    return invalid(
+    return invalid2(
       _(
         "Selector and URLTest outbounds must contain a non-empty outbounds array"
       )
@@ -301,23 +821,34 @@ function validateOutboundJson(value, usedTags = []) {
   }
   if (SERVER_OUTBOUND_TYPES.has(type)) {
     if (!nonEmptyString(parsed.server)) {
-      return invalid(
+      return invalid2(
         _("Server outbound must contain a non-empty server field")
       );
     }
-    if (!validateServerPort(parsed.server_port)) {
-      return invalid(
+    if (type === "hysteria2" && parsed.server_ports !== void 0) {
+      if (!validateHysteria2ServerPorts(parsed.server_ports)) {
+        return invalid2(_("server_port must be a number from 1 to 65535"));
+      }
+      if (parsed.server_port !== void 0 && !validateServerPort(parsed.server_port)) {
+        return invalid2(
+          _(
+            "Server outbound must contain a numeric server_port from 1 to 65535"
+          )
+        );
+      }
+    } else if (!validateServerPort(parsed.server_port)) {
+      return invalid2(
         _("Server outbound must contain a numeric server_port from 1 to 65535")
       );
     }
   } else if (parsed.server_port !== void 0 && !validateServerPort(parsed.server_port)) {
-    return invalid(_("server_port must be a number from 1 to 65535"));
+    return invalid2(_("server_port must be a number from 1 to 65535"));
   }
   if (parsed.outbounds !== void 0 && !validateOutbounds(parsed.outbounds)) {
-    return invalid(_("outbounds must be a non-empty array of strings"));
+    return invalid2(_("outbounds must be a non-empty array of strings"));
   }
   if (parsed.detour !== void 0 && !nonEmptyString(parsed.detour)) {
-    return invalid(_("detour must be a non-empty string"));
+    return invalid2(_("detour must be a non-empty string"));
   }
   return { valid: true, message: _("Valid") };
 }
@@ -337,26 +868,49 @@ function validateShadowsocksUrl(url) {
         message: _("Invalid Shadowsocks URL: must not contain spaces")
       };
     }
-    const mainPart = url.includes("?") ? url.split("?")[0] : url.split("#")[0];
-    const encryptedPart = mainPart.split("/")[2]?.split("@")[0];
-    if (!encryptedPart) {
+    const withoutFragment = url.split("#")[0];
+    const [mainPart, queryPart] = withoutFragment.split("?");
+    const body = mainPart.slice("ss://".length);
+    const atIndex = body.lastIndexOf("@");
+    if (atIndex <= 0) {
       return {
         valid: false,
         message: _("Invalid Shadowsocks URL: missing credentials")
       };
     }
+    const encryptedPart = body.slice(0, atIndex);
+    const serverPart = body.slice(atIndex + 1).split("/")[0];
+    let decodedCredentials = "";
     try {
-      const decoded = atob(encryptedPart);
-      if (!decoded.includes(":")) {
+      decodedCredentials = decodeURIComponent(encryptedPart);
+    } catch {
+      decodedCredentials = encryptedPart;
+    }
+    if (!decodedCredentials.includes(":")) {
+      if (!/^[A-Za-z0-9+/_-]+={0,2}$/.test(encryptedPart)) {
         return {
           valid: false,
           message: _(
-            "Invalid Shadowsocks URL: decoded credentials must contain method:password"
+            'Invalid Shadowsocks URL: missing method and password separator ":"'
           )
         };
       }
-    } catch (_e) {
-      if (!encryptedPart.includes(":") && !encryptedPart.includes("-")) {
+      try {
+        const normalized = encryptedPart.replace(/-/g, "+").replace(/_/g, "/");
+        const padded = normalized.padEnd(
+          normalized.length + (4 - normalized.length % 4) % 4,
+          "="
+        );
+        const decoded = atob(padded);
+        if (!decoded.includes(":")) {
+          return {
+            valid: false,
+            message: _(
+              "Invalid Shadowsocks URL: decoded credentials must contain method:password"
+            )
+          };
+        }
+      } catch (_e) {
         return {
           valid: false,
           message: _(
@@ -365,7 +919,6 @@ function validateShadowsocksUrl(url) {
         };
       }
     }
-    const serverPart = url.split("@")[1];
     if (!serverPart) {
       return {
         valid: false,
@@ -379,14 +932,13 @@ function validateShadowsocksUrl(url) {
         message: _("Invalid Shadowsocks URL: invalid server and port")
       };
     }
-    const { host: server, port: portAndRest } = parsedHostPort;
+    const { host: server, port } = parsedHostPort;
     if (!server) {
       return {
         valid: false,
         message: _("Invalid Shadowsocks URL: missing server")
       };
     }
-    const port = portAndRest ? portAndRest.split(/[?#]/)[0] : null;
     if (!port) {
       return {
         valid: false,
@@ -399,6 +951,7 @@ function validateShadowsocksUrl(url) {
         message: _("Invalid port number. Must be between 1 and 65535")
       };
     }
+    void queryPart;
   } catch (_e) {
     return {
       valid: false,
@@ -409,16 +962,25 @@ function validateShadowsocksUrl(url) {
 }
 
 // src/helpers/parseQueryString.ts
+function safeDecodeComponent(value) {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
 function parseQueryString(query) {
   const clean = query.startsWith("?") ? query.slice(1) : query;
   return clean.split("&").filter(Boolean).reduce(
     (acc, pair) => {
-      const [rawKey, rawValue = ""] = pair.split("=");
+      const eqIdx = pair.indexOf("=");
+      const rawKey = eqIdx >= 0 ? pair.slice(0, eqIdx) : pair;
+      const rawValue = eqIdx >= 0 ? pair.slice(eqIdx + 1) : "";
       if (!rawKey) {
         return acc;
       }
-      const key = decodeURIComponent(rawKey);
-      const value = decodeURIComponent(rawValue);
+      const key = safeDecodeComponent(rawKey);
+      const value = safeDecodeComponent(rawValue);
       return { ...acc, [key]: value };
     },
     {}
@@ -431,47 +993,56 @@ function validateVlessUrl(url) {
     if (!url.startsWith("vless://"))
       return {
         valid: false,
-        message: "Invalid VLESS URL: must start with vless://"
+        message: _("Invalid VLESS URL: must start with vless://")
       };
     if (/\s/.test(url))
       return {
         valid: false,
-        message: "Invalid VLESS URL: must not contain spaces"
+        message: _("Invalid VLESS URL: must not contain spaces")
       };
     const body = url.slice("vless://".length);
     const [mainPart] = body.split("#");
-    const [userHostPort, queryString] = mainPart.split("?");
+    const hasQuery = mainPart.includes("?");
+    const [userHostPort, queryString = ""] = mainPart.split("?");
     if (!userHostPort)
       return {
         valid: false,
-        message: "Invalid VLESS URL: missing host and UUID"
+        message: _("Invalid VLESS URL: missing host and UUID")
       };
-    const [userPart, hostPortPart] = userHostPort.split("@");
+    const atIndex = userHostPort.lastIndexOf("@");
+    const userPart = atIndex >= 0 ? userHostPort.slice(0, atIndex) : "";
+    const hostPortPart = atIndex >= 0 ? userHostPort.slice(atIndex + 1).split("/")[0] : "";
     if (!userPart)
-      return { valid: false, message: "Invalid VLESS URL: missing UUID" };
+      return { valid: false, message: _("Invalid VLESS URL: missing UUID") };
     if (!hostPortPart)
-      return { valid: false, message: "Invalid VLESS URL: missing server" };
+      return { valid: false, message: _("Invalid VLESS URL: missing server") };
     const parsedHostPort = parseHostPort(hostPortPart);
     if (!parsedHostPort)
       return {
         valid: false,
-        message: "Invalid VLESS URL: invalid host and port"
+        message: _("Invalid VLESS URL: invalid host and port")
       };
     const { host, port } = parsedHostPort;
     if (!host)
-      return { valid: false, message: "Invalid VLESS URL: missing hostname" };
+      return {
+        valid: false,
+        message: _("Invalid VLESS URL: missing hostname")
+      };
     if (!port)
-      return { valid: false, message: "Invalid VLESS URL: missing port" };
+      return { valid: false, message: _("Invalid VLESS URL: missing port") };
     const cleanedPort = port.replace("/", "");
     if (!isValidPort(cleanedPort))
       return {
         valid: false,
-        message: "Invalid VLESS URL: invalid port number"
+        message: _("Invalid VLESS URL: invalid port number")
       };
+    if (!hasQuery) {
+      return { valid: true, message: _("Valid") };
+    }
     if (!queryString)
       return {
         valid: false,
-        message: "Invalid VLESS URL: missing query parameters"
+        message: _("Invalid VLESS URL: missing query parameters")
       };
     const params = parseQueryString(queryString);
     const validTypes = [
@@ -490,29 +1061,31 @@ function validateVlessUrl(url) {
     if (!validTypes.includes(transportType))
       return {
         valid: false,
-        message: "Invalid VLESS URL: unsupported or missing type"
+        message: _("Invalid VLESS URL: unsupported or missing type")
       };
     if (!params.security || !validSecurities.includes(params.security))
       return {
         valid: false,
-        message: "Invalid VLESS URL: unsupported or missing security"
+        message: _("Invalid VLESS URL: unsupported or missing security")
       };
     if (params.security === "reality") {
       if (!params.pbk)
         return {
           valid: false,
-          message: "Invalid VLESS URL: missing pbk for reality"
+          message: _("Invalid VLESS URL: missing pbk for reality")
         };
       if (!params.fp)
         return {
           valid: false,
-          message: "Invalid VLESS URL: missing fp for reality"
+          message: _("Invalid VLESS URL: missing fp for reality")
         };
     }
     if (params.flow === "xtls-rprx-vision-udp443") {
       return {
         valid: false,
-        message: "Invalid VLESS URL: flow xtls-rprx-vision-udp443 is not supported"
+        message: _(
+          "Invalid VLESS URL: flow xtls-rprx-vision-udp443 is not supported"
+        )
       };
     }
     return { valid: true, message: _("Valid") };
@@ -539,13 +1112,13 @@ function validateVmessUrl(url) {
     if (!url.startsWith("vmess://")) {
       return {
         valid: false,
-        message: "Invalid VMess URL: must start with vmess://"
+        message: _("Invalid VMess URL: must start with vmess://")
       };
     }
     if (/\s/.test(url)) {
       return {
         valid: false,
-        message: "Invalid VMess URL: must not contain spaces"
+        message: _("Invalid VMess URL: must not contain spaces")
       };
     }
     const body = url.slice("vmess://".length);
@@ -553,25 +1126,25 @@ function validateVmessUrl(url) {
     if (!encoded) {
       return {
         valid: false,
-        message: "Invalid VMess URL: missing encoded config"
+        message: _("Invalid VMess URL: missing encoded config")
       };
     }
     const config = decodeBase64Json(encoded);
     if (!config || typeof config !== "object") {
-      return { valid: false, message: "Invalid VMess URL: invalid config" };
+      return { valid: false, message: _("Invalid VMess URL: invalid config") };
     }
     const { add, port, id } = config;
     if (!add || typeof add !== "string" || !isValidHost(add)) {
-      return { valid: false, message: "Invalid VMess URL: invalid server" };
+      return { valid: false, message: _("Invalid VMess URL: invalid server") };
     }
     if (!isValidPort(port)) {
       return {
         valid: false,
-        message: "Invalid VMess URL: invalid port number"
+        message: _("Invalid VMess URL: invalid port number")
       };
     }
     if (!id || typeof id !== "string") {
-      return { valid: false, message: "Invalid VMess URL: missing UUID" };
+      return { valid: false, message: _("Invalid VMess URL: missing UUID") };
     }
     return { valid: true, message: _("Valid") };
   } catch (_e) {
@@ -597,34 +1170,42 @@ function validateTrojanUrl(url) {
     const body = url.slice("trojan://".length);
     const [mainPart] = body.split("#");
     const [userHostPort] = mainPart.split("?");
-    const [userPart, hostPortPart] = userHostPort.split("@");
     if (!userHostPort)
       return {
         valid: false,
-        message: "Invalid Trojan URL: missing credentials and host"
+        message: _("Invalid Trojan URL: missing credentials and host")
       };
+    const atIndex = userHostPort.lastIndexOf("@");
+    const userPart = atIndex >= 0 ? userHostPort.slice(0, atIndex) : "";
+    const hostPortPart = atIndex >= 0 ? userHostPort.slice(atIndex + 1).split("/")[0] : "";
     if (!userPart)
-      return { valid: false, message: "Invalid Trojan URL: missing password" };
+      return {
+        valid: false,
+        message: _("Invalid Trojan URL: missing password")
+      };
     if (!hostPortPart)
       return {
         valid: false,
-        message: "Invalid Trojan URL: missing hostname and port"
+        message: _("Invalid Trojan URL: missing hostname and port")
       };
     const parsedHostPort = parseHostPort(hostPortPart);
     if (!parsedHostPort)
       return {
         valid: false,
-        message: "Invalid Trojan URL: invalid host and port"
+        message: _("Invalid Trojan URL: invalid host and port")
       };
     const { host, port } = parsedHostPort;
     if (!host)
-      return { valid: false, message: "Invalid Trojan URL: missing hostname" };
+      return {
+        valid: false,
+        message: _("Invalid Trojan URL: missing hostname")
+      };
     if (!port)
-      return { valid: false, message: "Invalid Trojan URL: missing port" };
+      return { valid: false, message: _("Invalid Trojan URL: missing port") };
     if (!isValidPort(port))
       return {
         valid: false,
-        message: "Invalid Trojan URL: invalid port number"
+        message: _("Invalid Trojan URL: invalid port number")
       };
   } catch (_e) {
     return { valid: false, message: _("Invalid Trojan URL: parsing failed") };
@@ -650,10 +1231,13 @@ function validateSocksUrl(url) {
       };
     }
     const body = url.replace(/^socks(4|4a|5):\/\//, "");
-    const [authAndHost] = body.split("#");
-    const [credentials, hostPortPart] = authAndHost.includes("@") ? authAndHost.split("@") : [null, authAndHost];
-    if (credentials) {
-      const [username, _password] = credentials.split(":");
+    const [withoutHash] = body.split("#");
+    const [authAndHost] = withoutHash.split("?");
+    const atIndex = authAndHost.lastIndexOf("@");
+    const credentials = atIndex >= 0 ? authAndHost.slice(0, atIndex) : null;
+    const hostPortPart = (atIndex >= 0 ? authAndHost.slice(atIndex + 1) : authAndHost).split("/")[0];
+    if (credentials !== null) {
+      const [username] = credentials.split(":");
       if (!username) {
         return {
           valid: false,
@@ -722,7 +1306,9 @@ function validateHysteria2Url(url) {
         valid: false,
         message: _("Invalid HY2 URL: missing credentials/server")
       };
-    const [passwordPart, hostPortPart] = authHostPort.split("@");
+    const atIndex = authHostPort.lastIndexOf("@");
+    const passwordPart = atIndex >= 0 ? authHostPort.slice(0, atIndex) : "";
+    const hostPortPart = atIndex >= 0 ? authHostPort.slice(atIndex + 1).split("/")[0] : "";
     if (!passwordPart)
       return { valid: false, message: _("Invalid HY2 URL: missing password") };
     if (!hostPortPart)
@@ -830,10 +1416,13 @@ function validateProxyUrl(url) {
   if (trimmedUrl.startsWith("hysteria2://") || trimmedUrl.startsWith("hy2://")) {
     return validateHysteria2Url(trimmedUrl);
   }
+  if (/^(wireguard|wg|awg|amneziawg|warp):\/\//i.test(trimmedUrl)) {
+    return validateWireGuardUrl(trimmedUrl);
+  }
   return {
     valid: false,
     message: _(
-      "URL must start with vless://, vmess://, ss://, trojan://, socks4://, socks4a://, socks5://, hysteria2://, or hy2://"
+      "URL must start with vless://, vmess://, ss://, trojan://, socks4://, socks4a://, socks5://, hysteria2://, hy2://, wireguard://, wg://, awg://, amneziawg://, or warp://"
     )
   };
 }
@@ -861,27 +1450,70 @@ var nextStyles = `
 .fkp-next-overview>.fkp-next-heading:empty{display:none}
 .fkp-next-overview[data-workspace=true] .fkp-next-service,.fkp-next-overview[data-workspace=true] .fkp-next-connection{display:none}
 .fkp-next-overview[data-workspace=true] .fkp-next-status-block:has(>.fkp-next-notice:empty):not(:has(button)){display:none}
-.fkp-next-overview .fkp-next-content{grid-template-columns:minmax(0,1fr)}
-.fkp-next-overview .fkp-next-probe>summary{min-height:44px;cursor:pointer;font-weight:650;padding:10px 0;color:var(--next-accent);overflow-wrap:anywhere}
-.fkp-next-overview .fkp-next-probe>label{margin-top:12px}
-.fkp-next-overview .fkp-next-probe>summary:focus-visible{outline:2px solid var(--next-accent);outline-offset:3px}
-.fkp-next-overview .fkp-next-primary>h3{margin-bottom:8px}
-.fkp-next-heading{display:flex;align-items:center;justify-content:flex-end;gap:16px;flex-wrap:wrap;margin-bottom:24px}.fkp-next-heading>div{flex:1;min-width:200px}.fkp-next-heading>div>p{color:var(--next-muted)}.fkp-next-heading label{display:flex;flex-direction:column;gap:6px;font-size:14px;color:var(--next-muted)}
-.fkp-next-overview .fkp-next-content{align-items:start;gap:32px}.fkp-next-overview .fkp-next-content>section{min-width:0}.fkp-next.fkp-next-overview h3{font-size:16px;line-height:1.4;color:var(--next-muted);margin:0 0 16px}.fkp-next-overview .fkp-next-service{font-size:22px;line-height:1.3;font-weight:650;margin:0 0 12px;letter-spacing:-.02em}.fkp-next-overview .fkp-next-connection{font-size:14px;line-height:1.6;margin-bottom:16px}.fkp-next-overview .fkp-next-selected-name{font-size:24px;line-height:1.35;font-weight:650;letter-spacing:-.025em;overflow-wrap:anywhere}.fkp-next-overview .fkp-next-probe{margin-top:16px}.fkp-next-probe label{display:flex;flex-direction:column;gap:8px;color:var(--next-muted);font-size:13px;font-weight:550;max-width:34ch}.fkp-next-probe input{margin:0}.fkp-next-probe .fkp-next-help{font-size:12px;line-height:1.6;margin:12px 0 0}.fkp-next .fkp-next-primary-action,.fkp-workspace .fkp-next .fkp-next-primary-action{background:var(--next-accent);border-color:var(--next-accent);color:var(--next-bg)}.fkp-next .fkp-next-primary-action:hover,.fkp-workspace .fkp-next .fkp-next-primary-action:hover{background:var(--next-accent);filter:brightness(.93)}
-.fkp-workspace [data-tab=next]>h3{display:none}
-.fkp-next-metrics{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:24px;margin:0 0 16px;padding:0;font-variant-numeric:tabular-nums}.fkp-next-metrics>div{min-width:0}.fkp-next-metrics dt{font-size:12px;line-height:1.5;font-weight:500;color:var(--next-muted);margin:0 0 8px}.fkp-next-metrics dd{font-size:18px;line-height:1.5;font-weight:600;color:var(--next-fg);margin:0;overflow-wrap:anywhere}.fkp-next-traffic .fkp-next-traffic-status{font-size:12px;margin:0}.fkp-next-overview .fkp-next-route+.fkp-next-route{margin-top:16px;padding-top:16px;border-top:1px solid var(--next-line)}.fkp-next-routes{margin-top:32px}.fkp-next-routes .fkp-next-route p:first-child{font-weight:550;margin-bottom:4px}.fkp-next-routes .fkp-next-help{font-size:12px}.fkp-next-routes>div{margin-bottom:12px}.fkp-next{scrollbar-color:var(--next-line) var(--next-bg)}.fkp-next a{text-underline-offset:3px}.fkp-next-overview .fkp-next-heading:has(>button:only-child){margin-top:-8px;margin-bottom:16px}
-.fkp-workspace .fkp_dashboard-page__outbound-grid__item .fkp_dashboard-page__outbound-grid__item__select{width:100%;margin:16px 0 0;min-height:42px;background:transparent;color:var(--next-accent);border:1px solid var(--next-line);font-size:13px;text-align:center}.fkp-workspace .fkp_dashboard-page__outbound-grid__item .fkp_dashboard-page__outbound-grid__item__select:disabled{color:var(--next-muted);opacity:1;cursor:default}.fkp-workspace .fkp_dashboard-page__outbound-grid__item .fkp_dashboard-page__outbound-grid__item__select:not(:disabled):hover{background:var(--fkp-hover);border-color:var(--next-accent)}.fkp-workspace .fkp_dashboard-page__widgets-section{margin-top:24px}
-@media(max-width:900px){.fkp-next-metrics{gap:16px;grid-template-columns:repeat(3,minmax(0,1fr))}}
-@media(max-width:720px){.fkp-next-heading{gap:8px;margin-bottom:24px}.fkp-next-heading>div{flex-basis:100%}.fkp-next-heading label{flex:1}.fkp-next-overview .fkp-next-content{gap:16px}.fkp-next-metrics{grid-template-columns:repeat(2,minmax(0,1fr));gap:24px 16px}.fkp-next-metrics dd{font-size:18px}.fkp-next-overview .fkp-next-selected-name{font-size:22px}.fkp-next-probe label{max-width:none}}
-.fkp-next-overview>.fkp-next-service{font-size:22px;font-weight:650;line-height:1.3;margin:24px 0 8px}.fkp-next-connection{font-variant-numeric:tabular-nums;overflow-wrap:anywhere}.fkp-next-traffic{margin-top:32px}.fkp-next details{min-width:0}.fkp-next summary{cursor:pointer;padding:14px 4px;min-height:48px;font-weight:600;overflow-wrap:anywhere}.fkp-next details>summary:hover{color:var(--next-accent)}.fkp-next-advanced{margin-top:32px;border-top:1px solid var(--next-line)}.fkp-next-advanced-content{padding-top:24px}.fkp-next-advanced-content>.fkp-next-content{display:block}.fkp-next-disclosure{border-top:1px solid var(--next-line);padding-bottom:8px}.fkp-next-disclosure>.fkp-next-panel{border:0;padding:8px 0 24px}.fkp-next-overview .fkp-next-advanced-content .fkp-next-tools{padding:16px 0}.fkp-next summary::marker{color:var(--next-muted)}
-.fkp-next{--next-bg:#f6f7f8;--next-fg:#17252d;--next-muted:#455863;--next-line:#ced7dc;--next-accent:#14635e;--next-field:#fff;color:var(--next-fg);background:var(--next-bg);padding:24px;border-radius:12px;font-family:inherit;line-height:1.5;accent-color:var(--next-accent);color-scheme:light}
-.fkp-next[data-theme=dark]{--next-bg:#16232b;--next-fg:#eef4f6;--next-muted:#b8c8d0;--next-line:#455963;--next-accent:#8bd6c8;--next-field:#21333e;color-scheme:dark}
-@media(prefers-color-scheme:dark){.fkp-next:not([data-theme=light]){--next-bg:#16232b;--next-fg:#eef4f6;--next-muted:#b8c8d0;--next-line:#455963;--next-accent:#8bd6c8;--next-field:#21333e;color-scheme:dark}}
-.fkp-next input::placeholder,.fkp-next textarea::placeholder{color:var(--next-muted);opacity:1}.fkp-next .fkp-next-check{flex-direction:row;align-items:center}.fkp-next input[type=checkbox]{width:20px;min-height:20px;margin:0 6px;flex-shrink:0}.fkp-next *{box-sizing:border-box}.fkp-next ::selection{background:var(--next-accent);color:var(--next-bg)}
-.fkp-next header{display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin-bottom:20px}.fkp-next header>div{flex:1;min-width:200px}.fkp-next h2{font-size:26px;line-height:1.2;margin:0 0 8px;font-weight:650}.fkp-next h3{font-size:19px;line-height:1.3;margin:0 0 8px;font-weight:650}.fkp-next p{margin:0 0 12px;max-width:70ch}.fkp-next header p,.fkp-next-help{color:var(--next-muted)}
-.fkp-next-compatibility{grid-column:1/-1}.fkp-next-compatibility label{max-width:70ch}.fkp-next-tools{grid-column:1/-1;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:32px}.fkp-next-content{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:32px}.fkp-next-panel{min-width:0;border-top:1px solid var(--next-line);padding-top:24px}.fkp-next-panel>h3:not(:first-child){margin-top:28px}.fkp-next-panel label,.fkp-next header label{display:flex;flex-direction:column;gap:6px;margin:12px 0;color:var(--next-muted);font-size:14px;font-weight:550}.fkp-next input,.fkp-next select,.fkp-next textarea{border:1px solid var(--next-line);border-radius:6px;background:var(--next-field);color:var(--next-fg);min-height:42px;padding:9px 10px;width:100%;max-width:100%;font:inherit;caret-color:var(--next-accent)}
-.fkp-next button{border:1px solid var(--next-line);border-radius:6px;background:var(--next-field);color:var(--next-fg);min-height:42px;padding:8px 12px;font:inherit;font-weight:550;margin:4px 8px 4px 0;white-space:normal;text-align:left;cursor:pointer;transition:background-color .15s ease-out}.fkp-next button:hover{background:var(--next-line)}.fkp-next button:disabled{opacity:.55;cursor:default}.fkp-next :focus-visible{outline:2px solid var(--next-accent);outline-offset:3px}.fkp-next-summary{font-variant-numeric:tabular-nums}.fkp-next-summary>span{display:block;margin-bottom:6px}.fkp-next-summary:empty{display:none}.fkp-next-status{font-variant-numeric:tabular-nums;color:var(--next-accent);padding:12px 0;border-top:1px solid var(--next-line)}.fkp-next-notice:empty{display:none}.fkp-next-notice{font-weight:600}.fkp-next-result{white-space:pre-wrap;overflow-wrap:anywhere;max-height:320px;overflow:auto;font-size:14px;font-variant-numeric:tabular-nums;margin-top:12px}.fkp-next-row{padding:12px 0;border-bottom:1px solid var(--next-line);overflow-wrap:anywhere}.fkp-next-row>span{display:block}.fkp-next output{display:block;white-space:pre-wrap;overflow-wrap:anywhere;margin:8px 0}.fkp-next[data-mode=simple] pre.fkp-next-result{max-height:130px}.fkp-next [data-detail]{display:none}.fkp-next[data-mode=detailed] [data-detail]{display:block}
-@media(max-width:720px){.fkp-next-tools{grid-template-columns:minmax(0,1fr);gap:24px}.fkp-next{padding:16px;border-radius:8px}.fkp-next-content{grid-template-columns:minmax(0,1fr);gap:24px}.fkp-next header{gap:8px}.fkp-next header>div{flex-basis:100%}.fkp-next header label{flex:1;margin:0}.fkp-next h2{font-size:24px}.fkp-next button{max-width:100%}.fkp-next input,.fkp-next select,.fkp-next textarea{font-size:16px}}
+.fkp-next-overview .fkp-next-content{grid-template-columns:minmax(0,1fr);align-items:start;gap:20px}
+.fkp-next-overview .fkp-next-content>section{min-width:0}
+.fkp-next-overview .fkp-next-primary{padding:22px 24px;border:1px solid var(--next-line);border-radius:12px;background:var(--next-surface,var(--next-field));box-shadow:0 2px 10px rgba(15,28,36,.04)}
+.fkp-next-overview .fkp-next-primary>h3{font-size:12px!important;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--next-muted);margin:0 0 8px!important}
+.fkp-next-overview .fkp-next-selected-name{font-size:22px;line-height:1.3;font-weight:700;letter-spacing:-.02em;color:var(--next-fg);margin:0 0 4px;overflow-wrap:anywhere}
+.fkp-next-hero-actions{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-top:16px}
+.fkp-next-hero-actions>button{margin:0!important;display:inline-flex;align-items:center;justify-content:center;text-align:center!important}
+.fkp-next-overview .fkp-next-probe{margin-top:16px;padding-top:12px;border-top:1px solid var(--next-line)}
+.fkp-next-overview .fkp-next-probe>summary{min-height:44px;cursor:pointer;font-size:13.5px;font-weight:650;padding:8px 0;color:var(--next-accent);overflow-wrap:anywhere;display:flex;align-items:center;gap:6px;list-style:none}
+.fkp-next-overview .fkp-next-probe>summary::-webkit-details-marker{display:none}
+.fkp-next-overview .fkp-next-probe>summary::before{content:"\u25B8";font-size:12px;transition:transform .14s ease}
+.fkp-next-overview .fkp-next-probe[open]>summary::before{transform:rotate(90deg)}
+.fkp-next-overview .fkp-next-probe>summary:focus-visible{outline:2px solid var(--next-accent);outline-offset:2px}
+.fkp-next-probe-form{display:flex;flex-wrap:wrap;align-items:flex-end;gap:10px;margin-top:10px}
+.fkp-next-probe-form>label{flex:1 1 240px;max-width:28rem;margin:0!important}
+.fkp-next-probe-form>button{margin:0!important;flex-shrink:0;text-align:center!important}
+.fkp-next-probe label{display:flex;flex-direction:column;gap:6px;color:var(--next-muted);font-size:13px;font-weight:550;max-width:34ch}
+.fkp-next-probe input{margin:0}
+.fkp-next-probe .fkp-next-help{font-size:12px;line-height:1.55;margin:10px 0 0}
+.fkp-next-heading{display:flex;align-items:center;justify-content:flex-end;gap:16px;flex-wrap:wrap;margin-bottom:20px}.fkp-next-heading>div{flex:1;min-width:200px}.fkp-next-heading>div>p{color:var(--next-muted)}.fkp-next-heading label{display:flex;flex-direction:column;gap:6px;font-size:14px;color:var(--next-muted)}
+.fkp-next.fkp-next-overview h3{font-size:15px;font-weight:650;line-height:1.35;color:var(--next-fg);margin:0 0 12px}
+.fkp-next-overview .fkp-next-service{font-size:20px;line-height:1.3;font-weight:650;margin:0 0 10px;letter-spacing:-.02em}
+.fkp-next-overview .fkp-next-connection{font-size:14px;line-height:1.6;margin-bottom:14px}
+.fkp-next .fkp-next-primary-action,.fkp-workspace .fkp-next .fkp-next-primary-action{background:var(--next-accent);border-color:var(--next-accent);color:var(--next-bg);font-weight:600}
+.fkp-next .fkp-next-primary-action:hover,.fkp-workspace .fkp-next .fkp-next-primary-action:hover{background:var(--next-accent);filter:brightness(.94);color:var(--next-bg)}
+.fkp-workspace :is([data-tab=next],[data-tab=devices],[data-tab=rule_tools],[data-tab=route_tools],[data-tab=advanced])>h3{display:none}
+.fkp-next-overview .fkp-next-traffic{margin-top:22px;padding-top:0;border-top:0}
+.fkp-next-metrics{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin:0 0 8px;padding:0;font-variant-numeric:tabular-nums}
+.fkp-next-metrics>div{min-width:0;padding:12px 14px;border:1px solid var(--next-line);border-radius:10px;background:var(--next-surface,var(--next-field))}
+.fkp-next-metrics dt{font-size:11.5px;line-height:1.4;font-weight:550;color:var(--next-muted);margin:0 0 4px}
+.fkp-next-metrics dd{font-size:17px;line-height:1.35;font-weight:700;color:var(--next-fg);margin:0;overflow-wrap:anywhere}
+.fkp-next-traffic .fkp-next-traffic-status{font-size:12px;color:var(--next-muted);margin:6px 0 0}
+.fkp-next-overview .fkp-next-routes{margin-top:22px;padding:18px 20px;border:1px solid var(--next-line);border-radius:12px;background:var(--next-surface,var(--next-field))}
+.fkp-next-section-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+.fkp-next-section-head>h3{margin:0!important}
+.fkp-next-section-head>button{margin:0!important;text-align:center!important}
+.fkp-next-routes-list{font-size:13.5px;color:var(--next-muted)}
+.fkp-next-overview .fkp-next-route{color:var(--next-fg)}
+.fkp-next-overview .fkp-next-route+.fkp-next-route{margin-top:12px;padding-top:12px;border-top:1px solid var(--next-line)}
+.fkp-next-routes .fkp-next-route p:first-child{font-weight:600;margin-bottom:2px}
+.fkp-next-routes .fkp-next-help{font-size:12px;margin:0}
+.fkp-next{scrollbar-color:var(--next-line) var(--next-bg)}.fkp-next a{text-underline-offset:3px}
+.fkp-next-overview .fkp-next-heading:has(>button:only-child){margin-top:-8px;margin-bottom:16px}
+.fkp-workspace .fkp_dashboard-page__outbound-grid__item .fkp_dashboard-page__outbound-grid__item__select{width:100%;margin:14px 0 0;min-height:42px;background:transparent;color:var(--next-accent);border:1px solid var(--next-line);font-size:13px;text-align:center}.fkp-workspace .fkp_dashboard-page__outbound-grid__item .fkp_dashboard-page__outbound-grid__item__select[aria-pressed=true]{background:var(--next-accent)!important;border-color:var(--next-accent)!important;color:var(--next-bg)!important;font-weight:600;opacity:1}.fkp-workspace .fkp_dashboard-page__outbound-grid__item .fkp_dashboard-page__outbound-grid__item__select:disabled:not([aria-pressed=true]){color:var(--next-muted);opacity:1;cursor:default}.fkp-workspace .fkp_dashboard-page__outbound-grid__item .fkp_dashboard-page__outbound-grid__item__select:not(:disabled):hover{background:var(--fkp-hover);border-color:var(--next-accent)}
+@media(max-width:900px){.fkp-next-metrics{gap:10px;grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:720px){.fkp-next-heading{gap:8px;margin-bottom:16px}.fkp-next-heading>div{flex-basis:100%}.fkp-next-heading label{flex:1}.fkp-next-overview .fkp-next-content{gap:14px}.fkp-next-overview .fkp-next-primary{padding:16px}.fkp-next-hero-actions>button{flex:1 1 150px;min-height:44px}.fkp-next-hero-actions:not(:has(>.fkp-action-menu))>button.fkp-next-primary-action{flex-basis:100%}.fkp-next-probe-form>label,.fkp-next-probe-form>button{flex-basis:100%;max-width:none;width:100%}.fkp-next-metrics{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.fkp-next-metrics>div:nth-child(5):last-child{grid-column:1 / -1}.fkp-next-metrics dd{font-size:16px}.fkp-next-overview .fkp-next-selected-name{font-size:19px}.fkp-next-probe label{max-width:none}.fkp-next-overview .fkp-next-routes{padding:16px}}
+.fkp-next-overview>.fkp-next-service{font-size:20px;font-weight:650;line-height:1.3;margin:20px 0 8px}.fkp-next-connection{font-variant-numeric:tabular-nums;overflow-wrap:anywhere}.fkp-next details{min-width:0}.fkp-next summary{cursor:pointer;padding:12px 4px;min-height:44px;font-weight:600;overflow-wrap:anywhere}.fkp-next details>summary:hover{color:var(--next-accent)}.fkp-next-advanced{margin-top:24px;border-top:1px solid var(--next-line)}.fkp-next-advanced-content{padding-top:20px}.fkp-next-advanced-content>.fkp-next-content{display:block}.fkp-next-disclosure{border-top:1px solid var(--next-line);padding-bottom:8px}.fkp-next-disclosure>.fkp-next-panel{border:0;padding:8px 0 20px}.fkp-next-overview .fkp-next-advanced-content .fkp-next-tools{padding:14px 0}.fkp-next summary::marker{color:var(--next-muted)}
+.fkp-next{--next-bg:#f6f7f8;--next-fg:#17252d;--next-muted:#455863;--next-line:#ced7dc;--next-accent:#14635e;--next-field:#fff;--next-surface:#fff;--next-subtle:#eef2f4;--fkp-hover:#e6eeed;--fkp-danger:#a02b32;--warn-color-medium:#815210;color:var(--next-fg);background:var(--next-bg);padding:24px;border-radius:12px;font-family:inherit;line-height:1.5;accent-color:var(--next-accent);color-scheme:light}
+.fkp-next[data-theme=dark]{--next-bg:#16232b;--next-fg:#eef4f6;--next-muted:#b8c8d0;--next-line:#455963;--next-accent:#8bd6c8;--next-field:#21333e;--next-surface:#21333e;--next-subtle:#1b2b35;--fkp-hover:#29423f;--fkp-danger:#ffb4b8;--warn-color-medium:#f2ca87;color-scheme:dark}
+@media(prefers-color-scheme:dark){.fkp-next:not([data-theme=light]):not(.fkp-workspace *){--next-bg:#16232b;--next-fg:#eef4f6;--next-muted:#b8c8d0;--next-line:#455963;--next-accent:#8bd6c8;--next-field:#21333e;--next-surface:#21333e;--next-subtle:#1b2b35;--fkp-hover:#29423f;--fkp-danger:#ffb4b8;--warn-color-medium:#f2ca87;color-scheme:dark}}
+.fkp-next input::placeholder,.fkp-next textarea::placeholder{color:var(--next-muted);opacity:.78}.fkp-next .fkp-next-check{display:flex;flex-direction:row;align-items:center;gap:10px;min-height:44px;margin:8px 0;cursor:pointer;color:var(--next-fg)}.fkp-next input[type=checkbox],.fkp-next input[type=radio]{appearance:auto;-webkit-appearance:auto;width:19px;height:19px;min-height:19px;padding:0;margin:0;flex:0 0 19px;border:0;background:transparent}.fkp-next *{box-sizing:border-box}.fkp-next ::selection{background:var(--next-accent);color:var(--next-bg)}
+.fkp-next header{display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin-bottom:20px}.fkp-next header>div{flex:1;min-width:200px}.fkp-next h2{font-size:24px;line-height:1.2;margin:0 0 6px;font-weight:700}.fkp-next h3{font-size:17px;line-height:1.3;margin:0 0 8px;font-weight:650}.fkp-next p{margin:0 0 10px;max-width:70ch}.fkp-next header p,.fkp-next-help{color:var(--next-muted)}
+.fkp-next-compatibility{grid-column:1/-1}.fkp-next-compatibility label{max-width:70ch}.fkp-next-tools{grid-column:1/-1;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px}.fkp-next-content{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);align-items:start;gap:20px}.fkp-next-panel{min-width:0;border-top:1px solid var(--next-line);padding-top:20px}.fkp-next-panel>h3:not(:first-child){margin-top:24px}.fkp-next-panel label,.fkp-next header label{display:flex;flex-direction:column;gap:6px;margin:10px 0;color:var(--next-muted);font-size:13.5px;font-weight:550}.fkp-next input:not([type=checkbox]):not([type=radio]):not([type=button]):not([type=submit]):not([type=file]),.fkp-next select,.fkp-next textarea{border:1px solid var(--next-line);border-radius:8px;background:var(--next-field);color:var(--next-fg);min-height:42px;padding:9px 12px;width:100%;max-width:100%;font:inherit;caret-color:var(--next-accent)}
+.fkp-next button{border:1px solid var(--next-line);border-radius:8px;background:var(--next-field);color:var(--next-fg);min-height:42px;padding:8px 14px;font:inherit;font-weight:550;margin:4px 8px 4px 0;white-space:normal;word-break:normal;overflow-wrap:break-word;text-align:left;cursor:pointer;transition:background-color .15s ease-out,border-color .15s ease-out}.fkp-next button:hover{background:var(--fkp-hover);border-color:var(--next-accent)}.fkp-next button:disabled{opacity:.5;cursor:default}.fkp-next :focus-visible{outline:2px solid var(--next-accent);outline-offset:2px}.fkp-next-summary{font-variant-numeric:tabular-nums}.fkp-next-summary>span{display:block;margin-bottom:6px}.fkp-next-summary:empty{display:none}.fkp-next-status{font-variant-numeric:tabular-nums;color:var(--next-accent);padding:12px 0;border-top:1px solid var(--next-line)}.fkp-next-status:empty,.fkp-next-status[hidden]{display:none!important}.fkp-next-notice:empty{display:none}.fkp-next-notice{font-weight:600}.fkp-next-result{white-space:pre-wrap;overflow-wrap:break-word;max-height:320px;overflow:auto;font-size:13px;line-height:1.55;font-variant-numeric:tabular-nums;margin-top:12px}.fkp-next-result:empty{display:none}.fkp-next-result:not(:empty){padding:12px 14px;border:1px solid var(--next-line);border-radius:8px;background:var(--next-subtle,var(--next-bg))}.fkp-next-tools ul{list-style:none;padding:0;margin:12px 0;display:flex;flex-direction:column;gap:8px;font-size:13px;color:var(--next-muted)}.fkp-next-tools li{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 12px;padding:10px 12px;border:1px solid var(--next-line);border-radius:8px;background:var(--next-subtle,var(--next-bg));color:var(--next-fg);font-size:13.5px;max-width:none}.fkp-next-tools li>span{flex:1 1 180px;min-width:0}.fkp-next-item-actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-left:auto}.fkp-next-tools li button{margin:0!important;min-height:36px;padding:5px 12px;font-size:12.5px;text-align:center!important}.fkp-next-row{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px 14px;padding:10px 12px;margin-top:8px;border:1px solid var(--next-line);border-radius:8px;background:var(--next-subtle,var(--next-bg));overflow-wrap:break-word}.fkp-next-row>span{flex:1 1 220px;min-width:0;font-size:13.5px;color:var(--next-fg)}.fkp-next-row>button{margin:0!important;flex:0 0 auto;min-height:36px;padding:6px 12px;font-size:12.5px;text-align:center!important}.fkp-next output{display:block;white-space:pre-wrap;overflow-wrap:break-word;margin:8px 0;font-size:13px;color:var(--next-muted)}.fkp-next output:empty{display:none}.fkp-next[data-mode=simple] pre.fkp-next-result{max-height:130px}.fkp-next [data-detail]{display:none}.fkp-next[data-mode=detailed] [data-detail]{display:block}
+.fkp-next-actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;margin-top:10px}.fkp-next-actions:empty,.fkp-next [hidden]{display:none!important}.fkp-next-actions>button{margin:0!important;text-align:center!important}
+.fkp-next-overview .fkp-next-scenarios{margin-top:22px;padding-top:0;border-top:0}
+.fkp-scenario-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.fkp-next .fkp-scenario-card,.fkp-workspace .fkp-next .fkp-scenario-card{position:relative;display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:4px;margin:0;padding:16px 40px 16px 18px;min-height:74px;width:100%;border:1px solid var(--next-line);border-radius:10px;background:var(--next-surface,var(--next-field));color:var(--next-fg);text-align:left;word-break:normal;overflow-wrap:break-word;box-shadow:0 1px 3px rgba(15,28,36,.03)}
+.fkp-next .fkp-scenario-card::after,.fkp-workspace .fkp-next .fkp-scenario-card::after{content:"\u2192";position:absolute;right:16px;top:50%;transform:translateY(-50%);color:var(--next-accent);font-size:15px;font-weight:650;opacity:.75;transition:transform .14s ease,opacity .14s ease}
+.fkp-next .fkp-scenario-card:hover:not(:disabled),.fkp-workspace .fkp-next .fkp-scenario-card:hover:not(:disabled){border-color:var(--next-accent);background:var(--fkp-hover);color:var(--next-fg)}
+.fkp-next .fkp-scenario-card:hover:not(:disabled)::after,.fkp-workspace .fkp-next .fkp-scenario-card:hover:not(:disabled)::after{transform:translate(2px,-50%);opacity:1}
+.fkp-scenario-title{font-size:14px;line-height:1.35;font-weight:650;color:var(--next-fg)}
+.fkp-scenario-desc{font-size:12.5px;line-height:1.45;font-weight:400;color:var(--next-muted)}
+@media(max-width:720px){.fkp-next-tools,.fkp-scenario-grid{grid-template-columns:minmax(0,1fr)}.fkp-next-tools{gap:16px}.fkp-next{padding:16px;border-radius:10px}.fkp-next-content{grid-template-columns:minmax(0,1fr);gap:16px}.fkp-next header{gap:8px}.fkp-next header>div{flex-basis:100%}.fkp-next header label{flex:1;margin:0}.fkp-next h2{font-size:22px}.fkp-next button{max-width:100%}.fkp-next-actions>button{flex:1 1 140px;min-height:42px}.fkp-next input:not([type=checkbox]):not([type=radio]),.fkp-next select,.fkp-next textarea{font-size:16px}.fkp-next-item-actions{margin-left:0;width:100%}.fkp-next-tools li button,.fkp-next-row>button{min-height:42px;flex:1 1 auto}}
 .fkp-workspace .fkp-next[data-area] > .fkp-next-status{width:100%;max-width:none}
 .fkp-workspace .fkp-next[data-area] > .fkp-next-content{width:100%;min-width:0}
 .fkp-workspace .fkp-next[data-area=devices] > .fkp-next-content,.fkp-workspace .fkp-next[data-area=diagnostics] > .fkp-next-content{grid-template-columns:minmax(0,1fr)}
@@ -889,14 +1521,91 @@ var nextStyles = `
 .fkp-workspace .fkp-next[data-area=settings] > .fkp-next-content > .fkp-next-compatibility{grid-column:auto}
 .fkp-workspace .fkp-next[data-area=settings] .fkp-next-tools{grid-template-columns:minmax(0,1fr)}
 .fkp-workspace .fkp-next[data-area] > header:empty{display:none}
-@media (max-width:720px){.fkp-workspace .fkp-next[data-area] > .fkp-next-content,.fkp-workspace .fkp-next[data-area=devices] .fkp-next-tools{grid-template-columns:minmax(0,1fr)}}
-@media(prefers-reduced-motion:reduce){.fkp-next button{transition:none}}
+.fkp-workspace .fkp-next[data-area] > header:has(>button:only-child){justify-content:flex-end;margin:-6px 0 12px}
+.fkp-workspace .fkp-next[data-area] > header:has(>button:only-child)>button{margin:0;min-height:36px;padding:6px 12px;font-size:12.5px}
+.fkp-workspace .fkp-next[data-area] .fkp-next-panel{border:1px solid var(--next-line);border-radius:12px;padding:18px 20px;background:var(--next-surface)}
+.fkp-workspace .fkp-next[data-area] .fkp-next-panel>h3:first-child{margin-top:0}
+@media (max-width:900px){.fkp-workspace .fkp-next[data-area=devices] .fkp-next-tools{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:720px){.fkp-workspace .fkp-next[data-area] > .fkp-next-content,.fkp-workspace .fkp-next[data-area=devices] .fkp-next-tools{grid-template-columns:minmax(0,1fr)}.fkp-workspace .fkp-next[data-area] .fkp-next-panel{padding:16px}}
+.fkp-symptom-actions{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:14px 0 12px}
+.fkp-symptom-actions>button{margin:0!important;text-align:center!important}
+[data-symptom-result]{padding:12px 14px;border-radius:8px;border:1px solid var(--next-line);background:var(--next-subtle,var(--next-bg));font-size:13px;line-height:1.55}
+.fkp-tspu-card{margin-top:20px;padding-top:20px;border-top:1px solid var(--next-line);max-width:100%}
+.fkp-tspu-card>h4{font-size:16px;line-height:1.35;margin:0 0 6px;font-weight:650;color:var(--next-fg)}
+.fkp-tspu-controls{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.08fr);gap:10px 14px;align-items:end;margin:12px 0 14px}
+.fkp-tspu-controls>label{margin:0!important;width:100%;max-width:none}
+.fkp-tspu-controls :is(input,select){width:100%!important;max-width:100%!important}
+.fkp-tspu-presets{grid-column:1 / -1;order:3;display:flex;flex-wrap:wrap;gap:6px;margin:0}
+.fkp-next .fkp-tspu-preset,.fkp-workspace .fkp-next .fkp-tspu-preset{min-height:34px;padding:4px 12px;margin:0;border-radius:999px;font-size:12px;font-weight:550;text-align:center!important}
+.fkp-tspu-card>[data-tspu-run]{margin:0!important;text-align:center!important}
+.fkp-tspu-result{white-space:pre-wrap;overflow-wrap:break-word;font-size:13.5px;line-height:1.55;font-variant-numeric:tabular-nums;margin-top:14px;padding:14px 16px;border:1px solid var(--next-line);border-radius:10px;background:var(--next-subtle,var(--next-bg))}
+.fkp-tspu-result>strong{display:block;font-size:14.5px;margin-bottom:6px;color:var(--next-fg)}
+.fkp-tspu-stages{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:12px 0;max-width:100%}
+.fkp-tspu-stage{display:flex;flex-direction:column;gap:4px;padding:10px 12px;border:1px solid var(--next-line);border-radius:8px;background:var(--next-field);min-width:0;max-width:100%;word-break:normal;overflow-wrap:break-word}
+.fkp-tspu-stage > strong{font-size:13px;font-weight:650;color:var(--next-fg)}
+.fkp-tspu-stage > span{font-size:12px;color:var(--next-muted)}
+.fkp-tspu-stage[data-tspu-status="ok"]{border-color:var(--next-accent)}
+.fkp-tspu-stage[data-tspu-status="failed"]{border-color:var(--fkp-danger)}
+.fkp-tspu-stage[data-tspu-status="failed"] > strong{color:var(--fkp-danger)}
+.fkp-tspu-stage[data-tspu-status="warning"]{border-color:var(--warn-color-medium)}
+.fkp-tspu-comparison{font-weight:550;margin:8px 0 0}
+.fkp-tspu-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:12px}
+.fkp-tspu-actions>button{margin:0!important;text-align:center!important}
+.fkp-tier2-toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:10px;max-width:100%;margin:6px 0}
+.fkp-tier2-toolbar .btn,.fkp-wg-warp-subview .btn{min-height:42px;max-width:100%;white-space:normal;word-break:normal;overflow-wrap:break-word}
+.fkp-tier2-badge{display:inline-flex;align-items:center;padding:5px 12px;border-radius:999px;font-size:12px;font-weight:600;border:1px solid var(--next-line,rgba(127,127,127,.35));background:var(--next-subtle,var(--next-field));color:var(--next-fg,inherit);max-width:100%;overflow-wrap:anywhere}
+.fkp-sub-preview-wrap,.fkp-sub-preview-host{width:100%;max-width:100%;min-width:0}
+.fkp-sub-preview-details{width:100%;max-width:100%;margin-top:8px;padding:10px 14px;border:1px solid var(--next-line);border-radius:10px;background:var(--next-subtle,var(--next-bg))}
+.fkp-sub-preview-details>summary{cursor:pointer;min-height:44px;padding:6px 0;display:flex;align-items:center;font-weight:600;overflow-wrap:anywhere}
+.fkp-sub-preview-search{box-sizing:border-box;margin-top:8px;width:100%;max-width:min(28rem,100%);min-height:42px}
+.fkp-sub-preview-list{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;max-width:100%}
+.fkp-sub-preview-chip{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:8px;border:1px solid var(--next-line,rgba(127,127,127,.3));background:var(--next-field,transparent);color:var(--next-fg,inherit);font-size:12px;font-weight:500;max-width:100%;overflow-wrap:anywhere}
+.fkp-sub-preview-chip[hidden]{display:none!important}
+.fkp-wg-warp-subview{display:flex;flex-direction:column;gap:16px;max-width:100%;width:100%}
+.fkp-wg-warp-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;width:100%;max-width:100%;align-items:stretch}
+.fkp-wg-warp-card{border:1px solid var(--next-line,rgba(127,127,127,.28));background:var(--next-surface,var(--next-field));border-radius:12px;padding:18px;display:flex;flex-direction:column;gap:12px;max-width:100%;min-width:0}
+.fkp-wg-warp-card h5{margin:0;font-size:16px;font-weight:650;color:var(--next-fg,inherit)}
+.fkp-wg-warp-lead,.fkp-wg-warp-hint{margin:0;font-size:13px;line-height:1.5;color:var(--next-muted,inherit)}
+.fkp-wg-warp-hint{font-weight:550;padding:8px 10px;border-radius:8px;background:var(--next-subtle,transparent)}
+.fkp-wg-warp-card label{display:flex;flex-direction:column;gap:6px;max-width:100%;font-size:13.5px;font-weight:550;color:var(--next-fg)}
+.fkp-wg-warp-card label.fkp-wg-warp-check{flex-direction:row;align-items:center;gap:10px;min-height:42px;margin:2px 0;cursor:pointer;font-weight:500}
+.fkp-wg-warp-card input[type=checkbox]{width:20px;height:20px;min-height:20px;margin:0!important;flex-shrink:0}
+.fkp-wg-warp-card input:not([type=checkbox]):not([type=file]),.fkp-wg-warp-card select,.fkp-wg-warp-card textarea{width:100%;max-width:100%;min-height:42px;box-sizing:border-box;padding:8px 12px;border-radius:8px;border:1px solid var(--next-line,rgba(127,127,127,.35));font:inherit}
+.fkp-wg-warp-card input[type=file]{width:100%;max-width:100%;min-height:42px;padding:5px 8px;border:1px dashed var(--next-line);border-radius:8px;background:var(--next-subtle,transparent);color:var(--next-muted);font-size:12.5px}
+.fkp-wg-warp-card input[type=file]::file-selector-button{margin-right:10px;padding:6px 12px;border:1px solid var(--next-line);border-radius:6px;background:var(--next-field);color:var(--next-fg);font:inherit;font-size:12.5px;font-weight:600;cursor:pointer}
+.fkp-wg-warp-card textarea{min-height:132px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12.5px}
+.fkp-wg-warp-actions{display:flex;flex-wrap:wrap;gap:10px;justify-content:stretch;max-width:100%;margin-top:auto;padding-top:6px}
+.fkp-wg-warp-actions>.btn,.fkp-wg-warp-actions>button{flex:1 1 auto;width:100%;display:inline-flex;align-items:center;justify-content:center;text-align:center!important;margin:0!important;font-weight:600}
+@media(max-width:760px){.fkp-wg-warp-grid,.fkp-tspu-controls{grid-template-columns:minmax(0,1fr)}.fkp-tspu-presets{order:0}.fkp-next .fkp-tspu-preset,.fkp-workspace .fkp-next .fkp-tspu-preset{min-height:42px;padding:6px 14px}}
+@media(max-width:560px){.fkp-tspu-stages{grid-template-columns:minmax(0,1fr)}.fkp-wg-warp-card input:not([type=checkbox]),.fkp-wg-warp-card select,.fkp-wg-warp-card textarea{font-size:16px}}
+.fkp-next .fkp-action-menu{position:relative;display:inline-block;vertical-align:middle;flex:0 0 auto;margin:4px 8px 4px 0}
+.fkp-workspace .fkp-next .fkp-action-menu{margin:0}
+.fkp-next .fkp-action-menu[hidden]{display:none!important}
+.fkp-next .fkp-action-menu--block{display:block;width:100%;margin:6px 0 0}
+.fkp-next .fkp-action-menu>summary.fkp-action-menu__trigger{box-sizing:border-box;min-height:44px;min-width:44px;margin:0;padding:8px 14px;border:1px solid var(--next-line);border-radius:8px;background:var(--next-field);color:var(--next-fg);font:inherit;font-size:13.5px;font-weight:600;line-height:1.2;display:inline-flex;align-items:center;justify-content:center;gap:6px;cursor:pointer;list-style:none;user-select:none;white-space:nowrap}
+.fkp-next .fkp-action-menu>summary.fkp-action-menu__trigger::-webkit-details-marker{display:none}
+.fkp-next .fkp-action-menu>summary.fkp-action-menu__trigger::marker{content:""}
+.fkp-next .fkp-action-menu:not(.fkp-action-menu--compact)>summary.fkp-action-menu__trigger::after{content:"\u25BE";font-size:11px;line-height:1;color:var(--next-muted);transition:transform .15s ease}
+.fkp-next .fkp-action-menu[open]:not(.fkp-action-menu--compact)>summary.fkp-action-menu__trigger::after{transform:rotate(180deg);color:var(--next-accent)}
+.fkp-next .fkp-action-menu--compact>summary.fkp-action-menu__trigger{padding:0 10px;font-size:18px;font-weight:700;line-height:1;letter-spacing:1px}
+.fkp-next .fkp-action-menu__popover{box-sizing:border-box;position:absolute;top:calc(100% + 6px);right:0;z-index:80;min-width:210px;max-width:min(284px,calc(100vw - 28px));padding:6px;border:1px solid var(--next-line);border-radius:10px;background:var(--next-surface,var(--next-field));box-shadow:0 12px 30px rgba(15,28,36,.16);display:flex;flex-direction:column;gap:2px;text-align:left}
+.fkp-next .fkp-action-menu[data-align="start"]>.fkp-action-menu__popover{left:0;right:auto}
+.fkp-next .fkp-action-menu__popover button.fkp-action-menu__item{box-sizing:border-box;width:100%!important;min-height:40px;margin:0!important;padding:8px 12px!important;border:0!important;border-radius:7px!important;background:transparent!important;color:var(--next-fg)!important;font-size:13.5px;font-weight:500;display:flex!important;align-items:center;justify-content:flex-start!important;gap:8px;text-align:left!important;white-space:normal;box-shadow:none!important;flex:0 0 auto!important}
+.fkp-next .fkp-action-menu__popover button.fkp-action-menu__item:hover:not(:disabled){background:var(--fkp-hover)!important;color:var(--next-accent)!important}
+.fkp-next .fkp-action-menu__popover button.fkp-action-menu__danger{color:var(--fkp-danger)!important}
+.fkp-next .fkp-action-menu__popover button.fkp-action-menu__danger:hover:not(:disabled){color:var(--fkp-danger)!important;background:rgba(209,67,67,.1)!important}
+.fkp-next .fkp-action-menu__divider{border:0;border-top:1px solid var(--next-line);margin:4px 2px;width:auto}
+@media(prefers-reduced-motion:reduce){.fkp-next button,.fkp-tier2-toolbar .btn,.fkp-wg-warp-subview .btn,.fkp-next .fkp-action-menu>summary::after{transition:none!important;animation:none!important}}
 `;
 
 // src/forkop/workspace/styles.ts
 var workspaceStyles = `
-.fkp-workspace,.fkp-workspace-modal {
+#maincontent.container:has(#cbi-forkop.fkp-workspace) {
+  max-width:1180px;width:100%;padding-inline:clamp(12px,2.5vw,24px);
+}
+.fkp-workspace,.fkp-workspace .fkp-next,.fkp-workspace-modal,#cbi-forkop.fkp-workspace ~ .cbi-page-actions {
   --next-bg:#f6f7f8;--next-fg:#17252d;--next-muted:#455863;--next-line:#ced7dc;--next-accent:#14635e;--next-field:#fff;
+  --next-surface:#fff;--next-subtle:#eef2f4;
   --fkp-hover:#e6eeed;--fkp-danger:#a02b32;--fkp-selected:#dceee9;
   --text-color-high:var(--next-fg);--text-color-medium:var(--next-muted);--text-color-low:var(--next-muted);
   --background-color-high:var(--next-field);--background-color-medium:var(--next-bg);--background-color-low:var(--next-line);
@@ -908,223 +1617,398 @@ var workspaceStyles = `
   color:var(--next-fg);background:var(--next-bg);font-family:inherit;font-size:14px;line-height:1.5;
   accent-color:var(--next-accent);color-scheme:light;scrollbar-color:var(--next-line) var(--next-bg);
 }
-.fkp-workspace[data-theme=dark],.fkp-workspace-modal[data-theme=dark] {
+.fkp-workspace[data-theme=dark],.fkp-workspace[data-theme=dark] .fkp-next,.fkp-workspace-modal[data-theme=dark],#cbi-forkop.fkp-workspace[data-theme=dark] ~ .cbi-page-actions:not([data-theme=light]),#cbi-forkop.fkp-workspace ~ .cbi-page-actions[data-theme=dark] {
   --next-bg:#16232b;--next-fg:#eef4f6;--next-muted:#b8c8d0;--next-line:#455963;--next-accent:#8bd6c8;--next-field:#21333e;
+  --next-surface:#21333e;--next-subtle:#1b2b35;
   --fkp-hover:#29423f;--fkp-danger:#ffb4b8;--fkp-selected:#29473f;--warn-color-medium:#f2ca87;color-scheme:dark;
 }
 /* Native themes may load later and use important colors. The existing map ID
    and marked modal contain these overrides; surrounding LuCI is untouched. */
 #cbi-forkop.fkp-workspace[data-theme],#modal_overlay .fkp-workspace-modal[data-theme],
 #cbi-forkop.fkp-workspace[data-theme] :is(.cbi-map,.cbi-section,fieldset),#modal_overlay .fkp-workspace-modal[data-theme] :is(.cbi-map,.cbi-section,fieldset) {background:var(--next-bg)!important;color:var(--next-fg)!important}
-#cbi-forkop.fkp-workspace[data-theme] :is(input:not([type=checkbox]):not([type=radio]):not([type=button]):not([type=submit]),select,textarea,.cbi-select,.cbi-dropdown),
-#modal_overlay .fkp-workspace-modal[data-theme] :is(input:not([type=checkbox]):not([type=radio]):not([type=button]):not([type=submit]),select,textarea,.cbi-select,.cbi-dropdown),
-#cbi-forkop.fkp-workspace[data-theme] :is(.cbi-button,.btn),#modal_overlay .fkp-workspace-modal[data-theme] :is(.cbi-button,.btn) {background:var(--next-field)!important;color:var(--next-fg)!important;border-color:var(--next-line)}
-#cbi-forkop.fkp-workspace[data-theme] :is(.cbi-button-positive,.cbi-button-apply,.cbi-button-save,.fkp-next-primary-action),#modal_overlay .fkp-workspace-modal[data-theme] :is(.cbi-button-positive,.cbi-button-apply,.cbi-button-save) {background:var(--next-accent)!important;color:var(--next-bg)!important}
+#cbi-forkop.fkp-workspace[data-theme] :is(input:not([type=checkbox]):not([type=radio]):not([type=button]):not([type=submit]):not([type=file]),select,textarea,.cbi-select,.cbi-dropdown:not(.btn):not(.cbi-button)),
+#modal_overlay .fkp-workspace-modal[data-theme] :is(input:not([type=checkbox]):not([type=radio]):not([type=button]):not([type=submit]):not([type=file]),select,textarea,.cbi-select,.cbi-dropdown:not(.btn):not(.cbi-button)),
+#cbi-forkop.fkp-workspace[data-theme] :is(.cbi-button,.btn):not(.fkp-action-menu__item):not(.fkp_monitoring-page__tab):not(.fkp_monitoring-page__icon-button):not(.fkp_monitoring-page__row-action):not(.fkp_dashboard-page__outbound-grid__item__select),
+#modal_overlay .fkp-workspace-modal[data-theme] :is(.cbi-button,.btn):not(.fkp-action-menu__item) {background:var(--next-field)!important;color:var(--next-fg)!important;border-color:var(--next-line)}
+#cbi-forkop.fkp-workspace[data-theme] :is(.cbi-button,.btn):not(.fkp-action-menu__item):not(.fkp_monitoring-page__tab):not(.fkp_monitoring-page__icon-button):not(.fkp_monitoring-page__row-action):not(.fkp_dashboard-page__outbound-grid__item__select):hover:not(:disabled),
+#modal_overlay .fkp-workspace-modal[data-theme] :is(.cbi-button,.btn):not(.fkp-action-menu__item):hover:not(:disabled) {background:var(--fkp-hover)!important;border-color:var(--next-accent)!important;color:var(--next-accent)!important}
+#cbi-forkop.fkp-workspace[data-theme] :is(.cbi-button-positive,.cbi-button-apply,.cbi-button-save,.fkp-next-primary-action,.cbi-section-create>.cbi-button-add),
+#modal_overlay .fkp-workspace-modal[data-theme] :is(.cbi-button-positive,.cbi-button-apply,.cbi-button-save,.fkp-next-primary-action) {background:var(--next-accent)!important;border-color:var(--next-accent)!important;color:var(--next-bg)!important}
+#cbi-forkop.fkp-workspace[data-theme] :is(.cbi-button-positive,.cbi-button-apply,.cbi-button-save,.fkp-next-primary-action,.cbi-section-create>.cbi-button-add):hover:not(:disabled),
+#modal_overlay .fkp-workspace-modal[data-theme] :is(.cbi-button-positive,.cbi-button-apply,.cbi-button-save,.fkp-next-primary-action):hover:not(:disabled) {background:var(--next-accent)!important;border-color:var(--next-accent)!important;color:var(--next-bg)!important;filter:brightness(.94)}
 #cbi-forkop.fkp-workspace[data-theme] :is(.cbi-button-negative,.cbi-button-remove),#modal_overlay .fkp-workspace-modal[data-theme] :is(.cbi-button-negative,.cbi-button-remove) {color:var(--fkp-danger)!important}
-.fkp-workspace *,.fkp-workspace-modal * {box-sizing:border-box}
+#cbi-forkop.fkp-workspace[data-theme] :is(.cbi-button-negative,.cbi-button-remove):hover:not(:disabled),#modal_overlay .fkp-workspace-modal[data-theme] :is(.cbi-button-negative,.cbi-button-remove):hover:not(:disabled) {border-color:var(--fkp-danger)!important;color:var(--fkp-danger)!important;background:var(--fkp-hover)!important}
+#cbi-forkop.fkp-workspace ~ .cbi-page-actions {display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:10px;margin:-12px 0 28px;padding:14px 20px;background:var(--next-surface)!important;color:var(--next-fg)!important;border:1px solid var(--next-line)!important;border-radius:12px;box-shadow:0 4px 16px rgba(15,28,36,.04);text-align:right;box-sizing:border-box}
+#cbi-forkop.fkp-workspace ~ .cbi-page-actions[hidden] {display:none!important}
+#cbi-forkop.fkp-workspace ~ .cbi-page-actions::after {display:none!important;content:none!important}
+#cbi-forkop.fkp-workspace ~ .cbi-page-actions > form {display:inline-flex;align-items:center;gap:10px;margin:0}
+#cbi-forkop.fkp-workspace ~ .cbi-page-actions :is(button,.cbi-button,input[type=button],input[type=submit]) {float:none!important;margin:0!important;min-height:40px;height:auto;padding:8px 16px;border:1px solid var(--next-line)!important;border-radius:8px;background:var(--next-field)!important;color:var(--next-fg)!important;font:inherit;font-size:13.5px;font-weight:600;line-height:1.4;box-shadow:none!important;text-shadow:none!important;cursor:pointer;transition:background-color 140ms ease-out,border-color 140ms ease-out}
+#cbi-forkop.fkp-workspace ~ .cbi-page-actions :is(button,.cbi-button,input[type=button],input[type=submit]):hover:not(:disabled) {background:var(--fkp-hover)!important;border-color:var(--next-accent)!important;color:var(--next-accent)!important}
+#cbi-forkop.fkp-workspace ~ .cbi-page-actions :is(button,input,div,.cbi-button):is(.cbi-button-apply,.cbi-button-positive) {background:var(--next-accent)!important;border-color:var(--next-accent)!important;color:var(--next-bg)!important}
+#cbi-forkop.fkp-workspace ~ .cbi-page-actions :is(button,input,div,.cbi-button):is(.cbi-button-apply,.cbi-button-positive):hover:not(:disabled) {background:var(--next-accent)!important;border-color:var(--next-accent)!important;color:var(--next-bg)!important;filter:brightness(.94)}
+#cbi-forkop.fkp-workspace ~ .cbi-page-actions :is(button,input,div,.cbi-button):is(.cbi-button-reset,.cbi-button-negative,.cbi-button-remove) {color:var(--fkp-danger)!important}
+#cbi-forkop.fkp-workspace ~ .cbi-page-actions :is(button,input,div,.cbi-button):is(.cbi-button-reset,.cbi-button-negative,.cbi-button-remove):hover:not(:disabled) {border-color:var(--fkp-danger)!important;color:var(--fkp-danger)!important;background:var(--fkp-hover)!important}
+#cbi-forkop.fkp-workspace ~ .cbi-page-actions .cbi-dropdown.cbi-button {display:inline-flex;align-items:center;padding:6px 10px 6px 16px!important}
+#cbi-forkop.fkp-workspace ~ .cbi-page-actions .cbi-dropdown.cbi-button > ul:not(.dropdown) {margin:0!important;padding:0;background:transparent!important;color:inherit!important;border:0!important}
+#cbi-forkop.fkp-workspace ~ .cbi-page-actions .cbi-dropdown.cbi-button > ul:not(.dropdown) > li {min-height:0;padding:0;line-height:1.4;background:transparent!important;color:inherit!important}
+#cbi-forkop.fkp-workspace ~ .cbi-page-actions .cbi-dropdown.cbi-button > .open {color:inherit!important;border-left-color:color-mix(in srgb,currentColor 32%,transparent)!important}
+.fkp-workspace,.fkp-workspace-modal,.fkp-workspace *,.fkp-workspace-modal * {box-sizing:border-box}
 .fkp-workspace ::selection,.fkp-workspace-modal ::selection {background:var(--next-accent);color:var(--next-bg)}
-.fkp-workspace {display:grid;grid-template-columns:184px minmax(0,1fr);padding:0!important;margin:24px 0;min-width:0;border:1px solid var(--next-line);border-radius:12px;overflow:clip}
-.fkp-workspace-sidebar {min-width:0;padding:24px 12px;align-self:start;position:sticky;top:16px}
-.fkp-workspace-brand {font-size:22px;line-height:1.25;letter-spacing:-.025em;font-weight:700;padding:0 12px;margin-bottom:32px}
-.fkp-workspace-primary {display:flex;flex-direction:column;gap:8px}
+.fkp-workspace {display:grid;grid-template-columns:196px minmax(0,1fr);padding:0!important;margin:20px 0 28px;min-width:0;border:1px solid var(--next-line);border-radius:14px;box-shadow:0 6px 24px rgba(15,28,36,.05)}
+.fkp-workspace > .fkp-next-notice {grid-column:1 / -1;display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:12px 20px;border-bottom:1px solid var(--next-line);background:var(--fkp-selected);color:var(--next-fg);border-radius:14px 14px 0 0}
+.fkp-workspace > .fkp-next-notice[hidden] {display:none!important}
+.fkp-workspace-sidebar {min-width:0;padding:22px 14px;align-self:stretch;background:var(--next-surface);border-radius:14px 0 0 14px}
+.fkp-workspace-brand {font-size:20px;line-height:1.25;letter-spacing:-.025em;font-weight:750;padding:0 12px 16px;margin-bottom:14px;border-bottom:1px solid var(--next-line)}
+.fkp-workspace-primary {display:flex;flex-direction:column;gap:4px;position:sticky;top:16px}
 .fkp-workspace .fkp-workspace-mobile-menu {display:none}
-.fkp-workspace .fkp-workspace-preferences {margin-bottom:24px;padding:16px 0;border-bottom:1px solid var(--next-line)}
-.fkp-workspace .fkp-workspace-preferences h3 {font-size:16px;margin:0 0 12px}
-.fkp-workspace .fkp-workspace-preferences[hidden] {display:none}
-.fkp-workspace .fkp-rule-order {display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
-.fkp-workspace .fkp-rule-order button {min-height:44px;min-width:44px;white-space:normal;overflow-wrap:anywhere}
+.fkp-workspace .fkp-rule-order {display:inline-flex;align-items:center;gap:4px;margin:0}
+.fkp-workspace .fkp-rule-order button {min-height:34px;min-width:34px;padding:4px 8px;display:inline-flex;align-items:center;justify-content:center;text-align:center;font-weight:650;line-height:1}
 .fkp-workspace .fkp-rule-order-status {font-size:13px;overflow-wrap:anywhere;margin:12px 0 0}
 .fkp-workspace .fkp-rule-order-status:empty {margin:0}
-.fkp-workspace-main {min-width:0;border-left:1px solid var(--next-line);padding:24px 32px 32px}
-.fkp-workspace-top {display:flex;align-items:flex-start;justify-content:space-between;gap:24px;padding-bottom:24px;border-bottom:1px solid var(--next-line);margin-bottom:24px}
-.fkp-workspace-status {display:flex;flex-direction:column;gap:4px;min-width:0}
-.fkp-workspace-service {font-weight:650;line-height:1.4}
-.fkp-workspace-connection {color:var(--next-muted);font-size:12px;max-width:75ch;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
-.fkp-workspace .fkp-workspace-theme {display:flex;align-items:center;gap:8px;flex-shrink:0;font-size:12px;color:var(--next-muted);margin:0}
-.fkp-workspace .fkp-workspace-theme select {width:auto;min-width:126px;font-size:13px}
-.fkp-workspace .fkp-workspace-title {font-size:28px;font-weight:650;line-height:1.2;letter-spacing:-.025em;margin:0 0 24px;color:var(--next-fg);text-wrap:balance}
-.fkp-workspace-secondary:has(.fkp-workspace-local:not([hidden])) {margin-bottom:24px}
-.fkp-workspace-local {display:flex;gap:8px;border-bottom:1px solid var(--next-line);padding-bottom:12px;overflow-x:auto;scrollbar-width:thin}
-.fkp-workspace .fkp-workspace-nav-button,.fkp-workspace .fkp-workspace-local-button {border:0;background:transparent;box-shadow:none;white-space:nowrap;cursor:pointer;font:inherit;font-weight:550;min-height:44px;padding:10px 12px;text-align:left;border-radius:6px;color:var(--next-muted);margin:0}
-.fkp-workspace .fkp-workspace-local-button {font-size:13px}
-.fkp-workspace .fkp-workspace-nav-button[aria-current=page],.fkp-workspace .fkp-workspace-local-button[aria-current=page] {background:var(--fkp-selected);color:var(--next-accent);font-weight:650}
-.fkp-workspace .fkp-workspace-nav-button[data-errors],.fkp-workspace .fkp-workspace-local-button[data-errors] {display:flex;align-items:center;gap:8px;color:var(--fkp-danger)}
-.fkp-workspace .fkp-workspace-nav-button[data-errors]::after,.fkp-workspace .fkp-workspace-local-button[data-errors]::after {content:attr(data-errors);display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;margin-left:auto;padding:0 4px;border:1px solid currentColor;border-radius:4px;font-size:12px;font-variant-numeric:tabular-nums;line-height:1}
+.fkp-workspace-main {min-width:0;border-left:1px solid var(--next-line);padding:22px 28px 32px}
+.fkp-workspace-top {display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 16px;border:1px solid var(--next-line);border-radius:10px;background:var(--next-surface);margin-bottom:20px}
+.fkp-workspace-status {display:flex;flex-direction:column;gap:2px;min-width:0}
+.fkp-workspace-service {display:inline-flex;align-items:center;gap:8px;font-weight:650;font-size:14px;line-height:1.4}
+.fkp-workspace-service::before {content:"";width:9px;height:9px;border-radius:999px;flex-shrink:0;background:var(--next-muted)}
+.fkp-workspace-service[data-state=running]::before {background:#16a34a;box-shadow:0 0 0 3px rgba(22,163,74,.18)}
+.fkp-workspace-service[data-state=pending]::before {background:var(--warn-color-medium)}
+.fkp-workspace-service[data-state=stopped]::before,.fkp-workspace-service[data-state=error]::before {background:var(--fkp-danger)}
+.fkp-workspace-connection {color:var(--next-muted);font-size:12px;max-width:75ch;overflow-wrap:anywhere;font-variant-numeric:tabular-nums;padding-left:17px}
+.fkp-workspace .fkp-workspace-title {font-size:24px;font-weight:700;line-height:1.25;letter-spacing:-.025em;margin:0 0 12px;color:var(--next-fg);text-wrap:balance;overflow-wrap:anywhere}
+#cbi-forkop.fkp-workspace[data-active-tab=next] .fkp-workspace-title {display:none}
+.fkp-workspace-secondary:has(.fkp-workspace-local:not([hidden])) {margin-bottom:20px}
+.fkp-workspace-local {display:inline-flex;gap:4px;padding:4px;border:1px solid var(--next-line);border-radius:10px;background:var(--next-surface);overflow-x:auto;max-width:100%;scrollbar-width:thin}
+.fkp-workspace .fkp-workspace-nav-button,.fkp-workspace .fkp-workspace-local-button {border:0;background:transparent!important;box-shadow:none;white-space:nowrap;cursor:pointer;font:inherit;font-weight:550;min-height:44px;padding:9px 12px;text-align:left;border-radius:8px;color:var(--next-muted)!important;margin:0}
+.fkp-workspace .fkp-workspace-local-button {min-height:36px;padding:6px 14px;font-size:13px;text-align:center}
+.fkp-workspace .fkp-workspace-nav-button:hover:not(:disabled),.fkp-workspace .fkp-workspace-local-button:hover:not(:disabled) {background:var(--fkp-hover)!important;color:var(--next-fg)!important}
+.fkp-workspace .fkp-workspace-nav-button[aria-current=page],.fkp-workspace .fkp-workspace-local-button[aria-current=page] {background:var(--fkp-selected)!important;color:var(--next-accent)!important;font-weight:650}
+.fkp-workspace .fkp-workspace-nav-button[data-errors],.fkp-workspace .fkp-workspace-local-button[data-errors] {display:flex;align-items:center;gap:8px;color:var(--fkp-danger)!important}
+.fkp-workspace .fkp-workspace-nav-button[data-errors]::after,.fkp-workspace .fkp-workspace-local-button[data-errors]::after {content:attr(data-errors);display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;margin-left:auto;padding:0 4px;border:1px solid currentColor;border-radius:999px;font-size:11px;font-variant-numeric:tabular-nums;line-height:1}
 .fkp-workspace .fkp-workspace-native-tabs {display:none!important}
 .fkp-workspace-content {min-width:0}
-.fkp-workspace .fkp-workspace-description {font-size:14px;line-height:1.6;color:var(--next-muted);margin:-4px 0 20px;max-width:75ch}
-.fkp-workspace .fkp-form-group,.fkp-workspace-modal .fkp-form-group {min-width:0;margin:0 0 24px;padding:0;border:0}
-.fkp-workspace .fkp-form-group>h3,.fkp-workspace-modal .fkp-form-group>h3 {margin:24px 0 8px;font-size:17px}
-.fkp-workspace .fkp-form-group:first-child>h3,.fkp-workspace-modal .fkp-form-group:first-child>h3 {margin-top:0}
-.fkp-workspace .fkp-form-help,.fkp-workspace-modal .fkp-form-help {font-size:13px;line-height:1.6;color:var(--next-muted);margin:0 0 12px;max-width:75ch}
-.fkp-workspace details.fkp-form-group,.fkp-workspace-modal details.fkp-form-group {border-top:1px solid var(--next-line);border-bottom:1px solid var(--next-line);padding:0;margin-top:24px}
-.fkp-workspace .fkp-form-group>summary,.fkp-workspace-modal .fkp-form-group>summary {padding:14px 0;min-height:48px;cursor:pointer;font-size:14px;font-weight:650;line-height:1.5;overflow-wrap:anywhere}
+.fkp-workspace .fkp-workspace-description {font-size:13.5px;line-height:1.55;color:var(--next-muted);margin:0 0 18px;max-width:75ch;overflow-wrap:anywhere}
+.fkp-workspace section.fkp-form-group,.fkp-workspace-modal section.fkp-form-group {min-width:0;margin:0 0 16px;padding:18px 20px;border:1px solid var(--next-line);border-radius:12px;background:var(--next-surface)}
+.fkp-workspace section.fkp-form-group>h3,.fkp-workspace-modal section.fkp-form-group>h3 {margin:0 0 6px;font-size:16px;font-weight:650}
+.fkp-workspace .fkp-form-help,.fkp-workspace-modal .fkp-form-help {font-size:13px;line-height:1.55;color:var(--next-muted);margin:0 0 10px;max-width:75ch;overflow-wrap:anywhere}
+.fkp-workspace details.fkp-form-group,.fkp-workspace-modal details.fkp-form-group {min-width:0;margin:0 0 16px;padding:0 20px;border:1px solid var(--next-line);border-radius:12px;background:var(--next-surface)}
+.fkp-workspace details.fkp-form-group[open],.fkp-workspace-modal details.fkp-form-group[open] {padding-bottom:14px}
+.fkp-workspace .fkp-form-group>summary,.fkp-workspace-modal .fkp-form-group>summary {padding:14px 0;min-height:48px;cursor:pointer;font-size:15px;font-weight:650;line-height:1.4;overflow-wrap:anywhere;display:flex;align-items:center;justify-content:space-between;gap:12px;list-style:none}
+.fkp-workspace .fkp-form-group>summary::-webkit-details-marker,.fkp-workspace-modal .fkp-form-group>summary::-webkit-details-marker {display:none}
+.fkp-workspace .fkp-form-group>summary::after,.fkp-workspace-modal .fkp-form-group>summary::after {content:"\u25BE";font-size:14px;color:var(--next-muted);transition:transform 140ms ease}
+.fkp-workspace details.fkp-form-group[open]>summary,.fkp-workspace-modal details.fkp-form-group[open]>summary {border-bottom:1px solid var(--next-line);margin-bottom:8px}
+.fkp-workspace details.fkp-form-group[open]>summary::after,.fkp-workspace-modal details.fkp-form-group[open]>summary::after {transform:rotate(180deg)}
 .fkp-workspace .fkp-form-group>summary:hover,.fkp-workspace-modal .fkp-form-group>summary:hover {color:var(--next-accent)}
-.fkp-workspace .fkp-rule-name,.fkp-workspace .fkp-rule-action {display:block;font-size:14px;font-weight:650;line-height:1.5}
-.fkp-workspace .fkp-rule-scope,.fkp-workspace .fkp-rule-route {display:block;font-size:12px;font-weight:400;line-height:1.6;color:var(--next-muted);margin-top:4px;max-width:55ch;overflow-wrap:anywhere}
-.fkp-workspace .fkp-rule-state {display:inline-block;font-size:12px;font-weight:400;color:var(--next-muted);margin-top:4px}
-.fkp-workspace #cbi-forkop-section .cbi-section-table-row>:first-child {width:43%;min-width:180px}
-.fkp-workspace #cbi-forkop-section .cbi-section-table-row>:nth-child(2) {width:64px}
-.fkp-workspace #cbi-forkop-section .cbi-section-table-row>:nth-child(3) {min-width:160px}
+.fkp-workspace .fkp-rule-name,.fkp-workspace .fkp-rule-action {display:block;font-size:14px;font-weight:650;line-height:1.45;word-break:normal;overflow-wrap:break-word}
+.fkp-workspace .fkp-rule-scope,.fkp-workspace .fkp-rule-route {display:block;font-size:12px;font-weight:400;line-height:1.5;color:var(--next-muted);margin-top:3px;max-width:55ch;word-break:normal;overflow-wrap:break-word}
+.fkp-workspace .fkp-rule-state {display:inline-block;font-size:12px;font-weight:500;color:var(--next-muted);margin-top:3px}
+.fkp-workspace :is(#cbi-forkop-section,#cbi-forkop-server) :is(.cbi-section-table-titles,.cbi-section-table-row)::before {display:none!important;content:none!important}
+.fkp-workspace :is(#cbi-forkop-section,#cbi-forkop-server) :is(.cbi-section-table-titles,.cbi-section-table-row)>:first-child {width:28%!important;min-width:140px}
+.fkp-workspace :is(#cbi-forkop-section,#cbi-forkop-server) :is(.cbi-section-table-titles,.cbi-section-table-row)>:nth-child(2) {width:96px!important;min-width:96px;white-space:nowrap;text-align:center!important}
+.fkp-workspace :is(#cbi-forkop-section,#cbi-forkop-server) :is(.cbi-section-table-titles,.cbi-section-table-row)>:nth-child(3) {width:auto!important;min-width:160px}
 .fkp-workspace-content > h2,.fkp-workspace-content > .cbi-map-descr {display:none}
 .fkp-workspace .cbi-map-tabbed {background:transparent;border:0;padding:0;min-width:0}
 .fkp-workspace .cbi-map-tabbed > .cbi-section {padding:0;margin:0;background:transparent;border:0;box-shadow:none;min-width:0}
 .fkp-workspace .cbi-map-tabbed > .cbi-section[data-tab]:not([data-tab-active=true]),.fkp-workspace [hidden],.fkp-workspace-modal [hidden],.fkp-workspace .hidden,.fkp-workspace-modal .hidden {display:none!important}
 .fkp-workspace-modal .cbi-section-node-tabbed > [data-tab]:not([data-tab-active=true]) {display:none!important}
-.fkp-workspace h3,.fkp-workspace-modal h3,.fkp-workspace-modal h4 {color:var(--next-fg);font-weight:650;font-size:19px;line-height:1.3;margin:32px 0 12px;letter-spacing:-.015em;text-wrap:balance}
+.fkp-workspace h3,.fkp-workspace-modal h3,.fkp-workspace-modal h4 {color:var(--next-fg);font-weight:650;font-size:18px;line-height:1.3;margin:24px 0 12px;letter-spacing:-.015em;text-wrap:balance;overflow-wrap:break-word}
 .fkp-workspace .cbi-section > h3:first-child {margin-top:0}
-.fkp-workspace p,.fkp-workspace-modal p {max-width:75ch;overflow-wrap:anywhere}
-.fkp-workspace .cbi-section-descr,.fkp-workspace .cbi-value-description,.fkp-workspace-modal .cbi-section-descr,.fkp-workspace-modal .cbi-value-description {color:var(--next-muted);font-size:13px;line-height:1.6;max-width:75ch;margin:8px 0 16px;overflow-wrap:anywhere}
-.fkp-workspace .cbi-value,.fkp-workspace-modal .cbi-value {display:flex;flex-wrap:nowrap;align-items:flex-start;gap:24px;padding:12px 0;margin:0;border-bottom:1px solid var(--next-line);background:transparent;min-width:0}
-.fkp-workspace .cbi-value:last-child,.fkp-workspace-modal .cbi-value:last-child {border-bottom:0}
-.fkp-workspace .cbi-value > label.cbi-value-title,.fkp-workspace-modal .cbi-value > label.cbi-value-title {flex:0 0 200px;float:none;width:auto;text-align:left;padding:10px 0 0;margin:0;color:var(--next-fg);font-size:14px;line-height:1.5;font-weight:550;overflow-wrap:anywhere}
+.fkp-workspace p,.fkp-workspace-modal p,.fkp-workspace li,.fkp-workspace-modal li {max-width:75ch;overflow-wrap:break-word}
+.fkp-workspace .cbi-section-descr,.fkp-workspace .cbi-value-description,.fkp-workspace-modal .cbi-section-descr,.fkp-workspace-modal .cbi-value-description {color:var(--next-muted);font-size:12.5px;line-height:1.55;max-width:75ch;margin:6px 0 14px;overflow-wrap:break-word}
+.fkp-workspace .cbi-value-description::before,.fkp-workspace-modal .cbi-value-description::before {display:none!important;content:none!important}
+.fkp-workspace .cbi-value,.fkp-workspace-modal .cbi-value {display:flex;flex-wrap:nowrap;align-items:flex-start;gap:20px;padding:12px 0;margin:0;border-bottom:1px solid var(--next-line);background:transparent;min-width:0}
+.fkp-workspace .cbi-value:last-child,.fkp-workspace-modal .cbi-value:last-child {border-bottom:0;padding-bottom:2px}
+.fkp-workspace .cbi-value > label.cbi-value-title,.fkp-workspace-modal .cbi-value > label.cbi-value-title {flex:0 0 210px;float:none;width:auto;text-align:left;padding:9px 0 0;margin:0;color:var(--next-fg);font-size:13.5px;line-height:1.45;font-weight:550;overflow-wrap:break-word}
+.fkp-workspace .cbi-value:has(> .cbi-value-field > .cbi-checkbox) > label.cbi-value-title,.fkp-workspace-modal .cbi-value:has(> .cbi-value-field > .cbi-checkbox) > label.cbi-value-title {padding-top:3px}
 .fkp-workspace .cbi-value-field,.fkp-workspace-modal .cbi-value-field {flex:1;min-width:0;width:auto;margin:0;padding:0;color:var(--next-fg)}
 .fkp-workspace .cbi-value-field:only-child,.fkp-workspace-modal .cbi-value-field:only-child {margin-left:0}
 .fkp-workspace .cbi-value > .cbi-value-field > :is(input:not([type=checkbox]):not([type=radio]),select,textarea,.cbi-select,.cbi-dropdown,.cbi-dynlist,.control-group),
 .fkp-workspace-modal .cbi-value > .cbi-value-field > :is(input:not([type=checkbox]):not([type=radio]),select,textarea,.cbi-select,.cbi-dropdown,.cbi-dynlist,.control-group) {width:100%;max-width:42rem;min-width:0;height:auto}
 .fkp-workspace .cbi-value .cbi-value-description,.fkp-workspace-modal .cbi-value .cbi-value-description {margin:6px 0 0;line-height:1.5;white-space:normal;max-width:75ch}
 .fkp-workspace .cbi-value-field > [id^="cbid.forkop."] > :is(input:not([type=checkbox]):not([type=radio]):not([type=hidden]),select,textarea),.fkp-workspace-modal .cbi-value-field > [id^="cbid.forkop."] > :is(input:not([type=checkbox]):not([type=radio]):not([type=hidden]),select,textarea) {width:100%;max-width:42rem;min-width:0}
-.fkp-workspace .cbi-value .cbi-dynlist > .add-item,.fkp-workspace-modal .cbi-value .cbi-dynlist > .add-item {display:flex;gap:4px;min-width:0}
+:is(.fkp-workspace,.fkp-workspace-modal) .cbi-value-field .control-group {display:flex;align-items:center;gap:6px;width:100%;max-width:42rem;min-width:0}
+:is(.fkp-workspace,.fkp-workspace-modal) .cbi-value-field .control-group > input {flex:1;min-width:0;width:100%;margin:0}
+:is(.fkp-workspace,.fkp-workspace-modal) .cbi-value-field .control-group > :is(button,.cbi-button) {flex:0 0 42px;min-width:42px;min-height:42px;padding:0;margin:0!important;display:inline-flex;align-items:center;justify-content:center}
+.fkp-workspace .cbi-value .cbi-dynlist > .add-item,.fkp-workspace-modal .cbi-value .cbi-dynlist > .add-item {display:flex;gap:6px;min-width:0;align-items:center}
 .fkp-workspace .cbi-value .cbi-dynlist > .add-item > :is(input,.cbi-dropdown),.fkp-workspace-modal .cbi-value .cbi-dynlist > .add-item > :is(input,.cbi-dropdown) {flex:1;min-width:0;width:100%}
 .fkp-workspace .cbi-value .cbi-dynlist > .add-item > button,.fkp-workspace-modal .cbi-value .cbi-dynlist > .add-item > button {flex:0 0 42px;min-width:42px}
+:is(.fkp-workspace,.fkp-workspace-modal) .fkp-button-add-dynlist > .add-item {width:auto!important;display:inline-flex!important}
+:is(.fkp-workspace,.fkp-workspace-modal) .fkp-button-add-dynlist > .add-item > .cbi-button-add {width:auto!important;flex:0 0 auto!important;height:auto!important;min-height:40px!important;max-height:none!important;padding:8px 16px!important;border-radius:8px!important;white-space:normal!important}
 .fkp-workspace .cbi-value:has(.fkp-next),.fkp-workspace .cbi-value:has(.fkp_dashboard-page),.fkp-workspace .cbi-value:has(.fkp_monitoring-page),.fkp-workspace .cbi-value:has(.fkp_diagnostic-page),.fkp-workspace .cbi-value:has(.fkp_updates-page) {display:block;padding:0;border:0}
-.fkp-workspace input:not([type=checkbox]):not([type=radio]):not([type=button]):not([type=submit]),.fkp-workspace select,.fkp-workspace textarea,
-.fkp-workspace-modal input:not([type=checkbox]):not([type=radio]):not([type=button]):not([type=submit]),.fkp-workspace-modal select,.fkp-workspace-modal textarea {
-  min-height:42px;max-width:100%;border:1px solid var(--next-line);border-radius:6px;padding:9px 12px;background:var(--next-field);color:var(--next-fg);font:inherit;line-height:1.5;box-shadow:none;caret-color:var(--next-accent)
+.fkp-workspace input:not([type=checkbox]):not([type=radio]):not([type=button]):not([type=submit]):not([type=file]),.fkp-workspace select,.fkp-workspace textarea,
+.fkp-workspace-modal input:not([type=checkbox]):not([type=radio]):not([type=button]):not([type=submit]):not([type=file]),.fkp-workspace-modal select,.fkp-workspace-modal textarea {
+  box-sizing:border-box;min-height:42px;max-width:100%;border:1px solid var(--next-line);border-radius:8px;padding:9px 12px;background:var(--next-field);color:var(--next-fg);font:inherit;line-height:1.5;box-shadow:none;caret-color:var(--next-accent)
 }
-.fkp-workspace textarea,.fkp-workspace-modal textarea {min-height:112px;width:100%;resize:vertical;font-variant-numeric:tabular-nums}
-.fkp-workspace input::placeholder,.fkp-workspace textarea::placeholder,.fkp-workspace-modal input::placeholder,.fkp-workspace-modal textarea::placeholder {color:var(--next-muted);opacity:1}
-.fkp-workspace input[type=checkbox],.fkp-workspace input[type=radio],.fkp-workspace-modal input[type=checkbox],.fkp-workspace-modal input[type=radio] {width:20px;height:20px;min-height:20px;margin:11px 8px 11px 0;vertical-align:middle;accent-color:var(--next-accent)}
-.fkp-workspace #cbi-forkop-section tr[data-sid] input[type=checkbox] {width:24px;height:24px;min-height:24px}
-.fkp-workspace .cbi-checkbox,.fkp-workspace-modal .cbi-checkbox {min-height:42px;display:inline-flex;align-items:center}
+:is(.fkp-workspace,.fkp-workspace-modal,.fkp-next) input[type=file] {width:100%;max-width:42rem;min-height:42px;padding:5px 8px;border:1px dashed var(--next-line);border-radius:8px;background:var(--next-subtle);color:var(--next-muted);font:inherit;font-size:12.5px}
+:is(.fkp-workspace,.fkp-workspace-modal,.fkp-next) input[type=file]::file-selector-button {margin-right:10px;padding:6px 12px;border:1px solid var(--next-line);border-radius:6px;background:var(--next-field);color:var(--next-fg);font:inherit;font-size:12.5px;font-weight:600;cursor:pointer}
+.fkp-workspace textarea,.fkp-workspace-modal textarea {min-height:108px;width:100%;resize:vertical;font-variant-numeric:tabular-nums}
+.fkp-workspace input::placeholder,.fkp-workspace textarea::placeholder,.fkp-workspace-modal input::placeholder,.fkp-workspace-modal textarea::placeholder {color:var(--next-muted);opacity:.78}
+:is(.fkp-workspace,.fkp-workspace-modal,.fkp-next) input:is([type=checkbox],[type=radio]) {appearance:auto!important;-webkit-appearance:auto!important;width:19px!important;height:19px!important;min-height:19px!important;padding:0!important;border:0!important;border-radius:4px;background:transparent!important;box-shadow:none!important;flex:0 0 19px;margin:2px 8px 2px 0;vertical-align:middle;accent-color:var(--next-accent);cursor:pointer}
+:is(.fkp-workspace,.fkp-workspace-modal,.fkp-next) input[type=radio] {border-radius:50%}
+:is(.fkp-workspace,.fkp-workspace-modal,.fkp-next) input:is([type=checkbox],[type=radio])::before,:is(.fkp-workspace,.fkp-workspace-modal,.fkp-next) input:is([type=checkbox],[type=radio])::after {display:none!important;content:none!important}
+.fkp-workspace .fkp-next .fkp-next-check input[type=checkbox] {margin:0}
+.fkp-workspace :is(#cbi-forkop-section,#cbi-forkop-server) tr[data-sid] input[type=checkbox] {width:20px!important;height:20px!important;min-height:20px!important;margin:0 auto!important;display:block}
+.fkp-workspace .cbi-checkbox,.fkp-workspace-modal .cbi-checkbox {min-height:28px;display:inline-flex;align-items:center}
 .fkp-workspace button,.fkp-workspace .cbi-button,.fkp-workspace input[type=button],.fkp-workspace input[type=submit],
 .fkp-workspace-modal button,.fkp-workspace-modal .cbi-button,.fkp-workspace-modal input[type=button],.fkp-workspace-modal input[type=submit] {
-  min-height:42px;height:auto;max-width:100%;border:1px solid var(--next-line);border-radius:6px;padding:9px 14px;background:var(--next-field);color:var(--next-fg);font:inherit;font-weight:550;line-height:1.5;text-shadow:none;box-shadow:none;cursor:pointer;transition:background-color 140ms ease-out
+  min-height:42px;height:auto;max-width:100%;border:1px solid var(--next-line);border-radius:8px;padding:8px 14px;background:var(--next-field);color:var(--next-fg);font:inherit;font-weight:550;line-height:1.45;white-space:normal;word-break:normal;overflow-wrap:break-word;text-shadow:none;box-shadow:none;cursor:pointer;transition:background-color 140ms ease-out,border-color 140ms ease-out
 }
-.fkp-workspace button:hover:not(:disabled),.fkp-workspace .cbi-button:hover:not(:disabled),.fkp-workspace-modal button:hover:not(:disabled),.fkp-workspace-modal .cbi-button:hover:not(:disabled) {background:var(--fkp-hover);color:var(--next-accent)}
+.fkp-workspace button:hover:not(:disabled),.fkp-workspace .cbi-button:hover:not(:disabled),.fkp-workspace-modal button:hover:not(:disabled),.fkp-workspace-modal .cbi-button:hover:not(:disabled) {background:var(--fkp-hover);border-color:var(--next-accent);color:var(--next-accent)}
 .fkp-workspace .cbi-button-positive,.fkp-workspace .cbi-button-apply,.fkp-workspace .cbi-button-save,.fkp-workspace-modal .cbi-button-positive,.fkp-workspace-modal .cbi-button-apply,.fkp-workspace-modal .cbi-button-save {background:var(--next-accent);border-color:var(--next-accent);color:var(--next-bg)}
 .fkp-workspace .cbi-button-negative,.fkp-workspace .cbi-button-remove,.fkp-workspace-modal .cbi-button-negative,.fkp-workspace-modal .cbi-button-remove {color:var(--fkp-danger)}
-.fkp-workspace :disabled,.fkp-workspace-modal :disabled {opacity:.55;cursor:not-allowed}
+.fkp-workspace :disabled,.fkp-workspace-modal :disabled {opacity:.5;cursor:not-allowed}
 .fkp-workspace [aria-busy=true],.fkp-workspace-modal [aria-busy=true] {cursor:progress}
 .fkp-workspace [aria-invalid=true],.fkp-workspace .cbi-input-invalid,.fkp-workspace-modal [aria-invalid=true],.fkp-workspace-modal .cbi-input-invalid {border-color:var(--fkp-danger)!important;outline-color:var(--fkp-danger)}
-.fkp-workspace :is(button,input,select,textarea,a,summary,[tabindex]):focus-visible,.fkp-workspace-modal :is(button,input,select,textarea,a,summary,[tabindex]):focus-visible {outline:2px solid var(--next-accent);outline-offset:3px}
+.fkp-workspace :is(button,input,select,textarea,a,summary,[tabindex]):focus-visible,.fkp-workspace-modal :is(button,input,select,textarea,a,summary,[tabindex]):focus-visible {outline:2px solid var(--next-accent);outline-offset:2px}
 .fkp-workspace a,.fkp-workspace-modal a {color:var(--next-accent);text-underline-offset:3px}
 .fkp-workspace .cbi-dynlist,.fkp-workspace-modal .cbi-dynlist {max-width:100%}
-.fkp-workspace .cbi-dynlist > .item,.fkp-workspace-modal .cbi-dynlist > .item {padding:8px 12px;min-height:42px;border-color:var(--next-line);background:var(--next-field);color:var(--next-fg);border-radius:6px;overflow-wrap:anywhere}
-.fkp-workspace .cbi-dropdown,.fkp-workspace-modal .cbi-dropdown {min-height:42px;max-width:100%;border:1px solid var(--next-line);border-radius:6px;background:var(--next-field);color:var(--next-fg);padding:8px 12px}
+.fkp-workspace .cbi-dynlist > .item,.fkp-workspace-modal .cbi-dynlist > .item {position:relative;display:flex;align-items:center;padding:8px 44px 8px 12px;min-height:42px;margin-bottom:8px;border:1px solid var(--next-line);background:var(--next-field);color:var(--next-fg);border-radius:8px;overflow-wrap:anywhere}
+:is(.fkp-workspace,.fkp-workspace-modal) .cbi-dynlist > .item::after {top:0!important;bottom:0!important;right:0!important;width:36px!important;display:flex!important;align-items:center;justify-content:center;padding:0!important;border:0!important;border-left:1px solid var(--next-line)!important;border-radius:0 8px 8px 0!important;background:transparent!important;color:var(--fkp-danger)!important;font-size:15px;font-weight:650;box-shadow:none!important}
+:is(.fkp-workspace,.fkp-workspace-modal) .cbi-dynlist.fkp-connections-dynlist > .item {--fkp-dynlist-action-width:36px;padding-right:calc(var(--fkp-dynlist-action-width) * 2 + 12px)!important}
+:is(.fkp-workspace,.fkp-workspace-modal) .cbi-dynlist.fkp-connections-dynlist > .item > .fkp-dynlist-settings {right:var(--fkp-dynlist-action-width)!important;width:var(--fkp-dynlist-action-width)!important;top:0!important;bottom:0!important;height:auto!important;min-height:0!important;padding:0!important;border:0!important;border-left:1px solid var(--next-line)!important;border-radius:0!important;background:transparent!important;box-shadow:none!important}
+.fkp-workspace .cbi-dropdown,.fkp-workspace-modal .cbi-dropdown {min-height:42px;max-width:100%;border:1px solid var(--next-line);border-radius:8px;background:var(--next-field);color:var(--next-fg);padding:8px 12px}
+:is(.fkp-workspace,.fkp-workspace-modal) .cbi-dropdown:not(.btn):not(.cbi-button) {width:100%;max-width:42rem;min-width:0}
 .fkp-workspace .cbi-dropdown ul,.fkp-workspace-modal .cbi-dropdown ul {background:var(--next-field);color:var(--next-fg);border-color:var(--next-line)}
-.fkp-workspace .cbi-dropdown li,.fkp-workspace-modal .cbi-dropdown li {min-height:36px;padding:6px 8px;overflow-wrap:anywhere}
-.fkp-workspace .table,.fkp-workspace table,.fkp-workspace-modal .table,.fkp-workspace-modal table {width:100%;max-width:100%;border:0;border-collapse:collapse;color:var(--next-fg);background:transparent;font-variant-numeric:tabular-nums;font-size:13px;margin:16px 0 24px}
-.fkp-workspace :is(th,td,.th,.td),.fkp-workspace-modal :is(th,td,.th,.td) {background:transparent;color:var(--next-fg);border:0;border-bottom:1px solid var(--next-line);padding:12px 10px;text-align:left;vertical-align:middle;overflow-wrap:anywhere;line-height:1.5}
-.fkp-workspace :is(th,.th),.fkp-workspace-modal :is(th,.th) {font-weight:650;color:var(--next-muted);font-size:12px}
+.fkp-workspace .cbi-dropdown li,.fkp-workspace-modal .cbi-dropdown li {min-height:42px;padding:8px;overflow-wrap:anywhere}
+:is(.fkp-workspace,.fkp-workspace-modal) .fkp-extended-preview {display:flex;flex-direction:column;gap:8px;width:100%;max-width:100%}
+:is(.fkp-workspace,.fkp-workspace-modal) .fkp-extended-preview > button {align-self:flex-start}
+:is(.fkp-workspace,.fkp-workspace-modal) .fkp-extended-preview > [role=status]:empty {display:none}
+:is(.fkp-workspace,.fkp-workspace-modal) .fkp-extended-preview > [role=status]:not(:empty) {font-size:12.5px;color:var(--next-muted)}
+:is(.fkp-workspace,.fkp-workspace-modal) .fkp-extended-preview details {padding:8px 12px;border:1px solid var(--next-line);border-radius:8px;background:var(--next-subtle)}
+:is(.fkp-workspace,.fkp-workspace-modal) .fkp-extended-preview details > summary {cursor:pointer;font-weight:600;min-height:36px;display:flex;align-items:center}
+:is(.fkp-workspace,.fkp-workspace-modal) .fkp-capability-notice {display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px 16px;padding:14px 18px;margin:0 0 16px;border:1px solid var(--next-line);border-radius:12px;background:var(--next-surface)}
+:is(.fkp-workspace,.fkp-workspace-modal) .fkp-capability-notice > p {margin:0;flex:1 1 240px;font-size:13.5px;color:var(--next-muted)}
+.fkp-workspace .table,.fkp-workspace table,.fkp-workspace-modal .table,.fkp-workspace-modal table {width:100%;max-width:100%;border:0;border-collapse:collapse;color:var(--next-fg);background:transparent;font-variant-numeric:tabular-nums;font-size:13px;margin:8px 0 16px}
+.fkp-workspace :is(#cbi-forkop-section,#cbi-forkop-server) .table.cbi-section-table {border:1px solid var(--next-line);border-radius:12px;border-collapse:separate;border-spacing:0;background:var(--next-surface);overflow:hidden}
+.fkp-workspace :is(th,td,.th,.td),.fkp-workspace-modal :is(th,td,.th,.td) {background:transparent;color:var(--next-fg);border:0;border-bottom:1px solid var(--next-line);padding:12px 14px;text-align:left;vertical-align:middle;overflow-wrap:anywhere;line-height:1.45}
+.fkp-workspace :is(#cbi-forkop-section,#cbi-forkop-server) tbody tr:last-child > :is(td,.td) {border-bottom:0}
+.fkp-workspace :is(th,.th),.fkp-workspace-modal :is(th,.th) {font-weight:650;color:var(--next-muted);font-size:12px;background:var(--next-subtle)}
 .fkp-workspace :is(tr,.tr):hover > :is(td,.td),.fkp-workspace-modal :is(tr,.tr):hover > :is(td,.td) {background:var(--fkp-hover)}
 .fkp-workspace .cbi-section-table-row,.fkp-workspace .cbi-section-table-row:nth-child(2n),.fkp-workspace-modal .cbi-section-table-row {background:transparent}
-.fkp-workspace .cbi-section-actions > div,.fkp-workspace-modal .cbi-section-actions > div {display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:8px}
+.fkp-workspace .cbi-section-actions > div,.fkp-workspace-modal .cbi-section-actions > div,.fkp-workspace .fkp-rule-actions-bar {display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:6px}
+.fkp-workspace .fkp-rule-actions-bar:has(.fkp-rule-order) > .drag-handle {display:none!important}
 .fkp-workspace .cbi-section-actions,.fkp-workspace-modal .cbi-section-actions {min-width:104px}
-.fkp-workspace :is(#cbi-forkop-section,#cbi-forkop-server) :is(td,.td).cbi-section-actions {width:240px!important;min-width:240px!important;white-space:nowrap}
-.fkp-workspace .td.cbi-section-actions > div:not(.cbi-dropdown) {display:flex;justify-content:flex-end;align-items:center;flex-wrap:wrap;gap:8px}
-.fkp-workspace :is(#cbi-forkop-section,#cbi-forkop-server) .cbi-section-actions > div {display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:flex-end}
-.fkp-workspace #cbi-forkop-section .cbi-section-actions :is(button,.cbi-button) {padding-inline:10px}
-.fkp-workspace .td.cbi-section-actions > div:not(.cbi-dropdown) > :is(button,.cbi-button) {flex:0 0 auto;width:auto;margin:0!important}
-.fkp-workspace .cbi-section-create,.fkp-workspace .cbi-page-actions,.fkp-workspace-modal .button-row {display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-top:24px;padding-top:16px}
+.fkp-workspace :is(#cbi-forkop-section,#cbi-forkop-server) :is(td,.td).cbi-section-actions {width:1%!important;min-width:240px!important;white-space:nowrap}
+.fkp-workspace .td.cbi-section-actions > div:not(.cbi-dropdown) {display:flex;justify-content:flex-end;align-items:center;flex-wrap:wrap;gap:6px}
+.fkp-workspace :is(#cbi-forkop-section,#cbi-forkop-server) .cbi-section-actions > div {display:flex;flex-wrap:wrap;gap:6px;align-items:center;justify-content:flex-end}
+.fkp-workspace :is(#cbi-forkop-section,#cbi-forkop-server) .cbi-section-actions :is(button,.cbi-button) {min-height:34px;padding:5px 10px;font-size:12.5px;border-radius:6px;white-space:nowrap}
+.fkp-workspace .td.cbi-section-actions > div:not(.cbi-dropdown) > * {flex:0 0 auto;width:auto;margin:0!important}
+.fkp-workspace .cbi-section-create {display:flex;align-items:center;justify-content:flex-start;flex-wrap:wrap;gap:10px;margin:14px 0 0!important;padding:0!important}
+.fkp-workspace .cbi-section-create > * {flex:0 0 auto!important;margin:0!important}
+.fkp-workspace .cbi-page-actions,.fkp-workspace-modal .button-row {display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:10px;margin-top:20px;padding-top:16px;border-top:1px solid var(--next-line)}
+.fkp-workspace-modal .button-row > button {margin:0!important}
 .fkp-workspace pre,.fkp-workspace code,.fkp-workspace-modal pre,.fkp-workspace-modal code {background:var(--next-field);color:var(--next-fg);font-size:13px;line-height:1.6;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
-.fkp-workspace pre,.fkp-workspace-modal pre {max-width:100%;overflow:auto;border-radius:6px;padding:16px;border:1px solid var(--next-line)}
-.fkp-workspace .alert-message,.fkp-workspace-modal .alert-message {background:var(--next-field);color:var(--next-fg);border:1px solid var(--next-line);border-radius:6px;padding:16px;margin:16px 0}
+.fkp-workspace pre,.fkp-workspace-modal pre {max-width:100%;overflow:auto;border-radius:8px;padding:14px 16px;border:1px solid var(--next-line)}
+.fkp-workspace .alert-message,.fkp-workspace-modal .alert-message {background:var(--next-surface);color:var(--next-fg);border:1px solid var(--next-line);border-radius:10px;padding:14px 16px;margin:14px 0;overflow-wrap:anywhere}
 .fkp-workspace .alert-message.error,.fkp-workspace-modal .alert-message.error {color:var(--fkp-danger);border-color:var(--fkp-danger)}
-.fkp-workspace .fkp-next {--next-bg:inherit;--next-fg:inherit;--next-muted:inherit;--next-line:inherit;--next-accent:inherit;--next-field:inherit;padding:0;border-radius:0;background:transparent;color:inherit;line-height:1.5;color-scheme:inherit}
-.fkp-workspace .fkp-next > header {position:static;float:none;inset:auto;display:flex;width:auto;height:auto;min-height:0;max-width:none;padding:0;margin:0 0 24px;border:0;box-shadow:none;background:transparent;color:var(--next-fg);z-index:auto;transform:none}
-.fkp-workspace .fkp-next > header h2 {color:var(--next-fg);font-size:24px;line-height:1.25;margin:0 0 8px}
+:is(.fkp-workspace,.fkp-workspace-modal) .fkp-copy-feedback {display:flex;flex-direction:column;gap:8px;width:100%;max-width:100%;margin-top:12px;padding:12px;border:1px solid var(--next-line);border-radius:8px;background:var(--next-field)}
+:is(.fkp-workspace,.fkp-workspace-modal) .fkp-copy-feedback textarea {width:100%;min-height:88px;font-size:16px}
+:is(.fkp-workspace,.fkp-workspace-modal) .fkp-copy-feedback button {align-self:flex-start;min-height:42px}
+.fkp-workspace .fkp-next {padding:0;border-radius:0;background:transparent;color:inherit;line-height:1.5;color-scheme:inherit}
+.fkp-workspace .fkp-next > header {position:static;float:none;inset:auto;display:flex;width:auto;height:auto;min-height:0;max-width:none;padding:0;margin:0 0 20px;border:0;box-shadow:none;background:transparent;color:var(--next-fg);z-index:auto;transform:none}
+.fkp-workspace .fkp-next > header h2 {color:var(--next-fg);font-size:22px;line-height:1.25;margin:0 0 6px}
 .fkp-workspace .fkp-next > header p {color:var(--next-muted);margin:0}
 .fkp-workspace .fkp-next-panel {background:transparent;border-radius:0;box-shadow:none}
+.fkp-workspace .fkp-workspace-sources {display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;padding:14px 18px;margin:0 0 16px;border:1px solid var(--next-line);border-radius:12px;background:var(--next-surface)}
+.fkp-workspace .fkp-workspace-sources > p:not([role=status]) {order:1;flex:1 1 260px;margin:0;font-size:13px;line-height:1.5;color:var(--next-muted);max-width:none}
+.fkp-workspace .fkp-workspace-sources-actions {order:2;display:flex;flex-wrap:wrap;align-items:center;gap:8px;flex:0 0 auto}
+.fkp-workspace .fkp-workspace-sources > button {order:2}
+.fkp-workspace .fkp-workspace-sources > button,.fkp-workspace .fkp-workspace-sources-actions > button {margin:0!important;flex:0 0 auto;min-height:44px;padding:8px 14px;font-size:13.5px;text-align:center}
+#cbi-forkop.fkp-workspace[data-theme] .fkp-workspace-sources > button:first-of-type {background:var(--next-accent)!important;border-color:var(--next-accent)!important;color:var(--next-bg)!important;font-weight:600}
+.fkp-workspace .fkp-workspace-sources > button.cbi-button {order:3}
+.fkp-workspace .fkp-workspace-sources > p[role=status] {order:4;flex-basis:100%;margin:2px 0 0;font-size:13px;color:var(--fkp-danger)}
+.fkp-workspace .fkp-workspace-sources > p[role=status]:empty {display:none}
+.fkp-workspace .fkp-source-evidence {margin:12px 0;padding:0 14px;border:1px solid var(--next-line);border-radius:10px;background:var(--next-subtle)}
+.fkp-workspace .fkp-source-evidence > summary {padding:8px 0;min-height:44px;display:flex;align-items:center;justify-content:space-between;font-size:13px;font-weight:600;color:var(--next-muted);list-style:none}
+.fkp-workspace .fkp-source-evidence > summary::-webkit-details-marker {display:none}
+.fkp-workspace .fkp-source-evidence > summary::after {content:"\u25BE";font-size:13px;transition:transform 140ms ease}
+.fkp-workspace .fkp-source-evidence[open] {padding-bottom:12px}
+.fkp-workspace .fkp-source-evidence[open] > summary {border-bottom:1px solid var(--next-line);margin-bottom:8px}
+.fkp-workspace .fkp-source-evidence[open] > summary::after {transform:rotate(180deg)}
+.fkp-workspace .fkp-node-search {margin:14px 0 12px;gap:8px 12px}
+.fkp-workspace .fkp-node-search[hidden] {display:none!important}
+.fkp-workspace .fkp-node-search > span {font-size:12.5px;font-weight:600;color:var(--next-muted);padding:6px 12px;border:1px solid var(--next-line);border-radius:999px;background:var(--next-subtle);white-space:nowrap}
+.fkp-workspace .fkp-node-search > small {font-size:12px;line-height:1.45;color:var(--next-muted)}
 .fkp-workspace .fkp_dashboard-page {--dashboard-grid-columns:2;--dashboard-grid-min-width:0}
-.fkp-workspace .fkp_dashboard-page__widgets-section {gap:16px;margin:0 0 32px}
-.fkp-workspace .fkp_dashboard-page__widgets-section__item {border:0;border-top:1px solid var(--next-line);border-radius:0;padding:16px 0;min-width:0}
-.fkp-workspace .fkp_dashboard-page__widgets-section__item__title {font-size:15px;font-weight:650;margin-bottom:12px}
-.fkp-workspace .fkp_dashboard-page__widgets-section__item__row {display:flex;justify-content:space-between;gap:16px;margin:8px 0;font-variant-numeric:tabular-nums}
+.fkp-workspace .fkp_dashboard-page__widgets-section {gap:16px;margin:16px 0 0}
+.fkp-workspace .fkp_dashboard-page__widgets-section__item {border:1px solid var(--next-line);border-radius:12px;padding:16px 18px;background:var(--next-surface);min-width:0}
+.fkp-workspace .fkp_dashboard-page__widgets-section__item__title {font-size:15px;font-weight:650;margin-bottom:10px}
+.fkp-workspace .fkp_dashboard-page__widgets-section__item__row {display:flex;justify-content:space-between;gap:16px;margin:6px 0;font-variant-numeric:tabular-nums}
 .fkp-workspace .fkp_dashboard-page__widgets-section__item__row__key {color:var(--next-muted)}
-.fkp-workspace .fkp_dashboard-page__outbound-section {border:0;border-top:1px solid var(--next-line);border-radius:0;padding:24px 0;margin-top:8px}
+.fkp-workspace .fkp_dashboard-page__outbound-section {border:1px solid var(--next-line);border-radius:12px;padding:20px;background:var(--next-surface);margin-top:0}
+.fkp-workspace .fkp_dashboard-page__outbound-section + .fkp_dashboard-page__outbound-section {margin-top:16px}
 .fkp-workspace .fkp_dashboard-page__outbound-section__title-section {gap:16px;flex-wrap:wrap}
-.fkp-workspace .fkp_dashboard-page__outbound-section__title-section__title {font-size:18px;font-weight:650}
+.fkp-workspace .fkp_dashboard-page__outbound-section__title-section__title {font-size:17px;font-weight:650}
 .fkp-workspace .fkp_dashboard-page__outbound-section__title-section__actions {gap:8px;flex-wrap:wrap}
-.fkp-workspace .fkp_dashboard-page__outbound-grid {gap:12px;margin-top:16px}
-.fkp-workspace .fkp_dashboard-page__outbound-grid__item {border-width:1px;border-color:var(--next-line);border-radius:8px;padding:16px;background:var(--next-field)}
+.fkp-workspace .fkp_dashboard-page__outbound-grid {gap:12px;margin-top:14px}
+.fkp-workspace .fkp_dashboard-page__outbound-grid__item {border-width:1px;border-color:var(--next-line);border-radius:10px;padding:16px;background:var(--next-field)}
 .fkp-workspace .fkp_dashboard-page__outbound-grid__item--active {border-color:var(--next-accent);background:var(--fkp-selected)}
 .fkp-workspace .fkp_dashboard-page__outbound-grid__item--selectable:hover {border-color:var(--next-accent)}
-.fkp-workspace .fkp_dashboard-page__subscription-meta {--subscription-meta-action-size:42px;--subscription-meta-action-gap:8px;border:0;border-bottom:1px solid var(--next-line);border-radius:0;padding:16px 0;background:transparent}
-.fkp-workspace .fkp_dashboard-page__subscription-meta__announce {border:0;border-radius:0;padding:12px 0;background:transparent;font-style:normal;line-height:1.5}
-.fkp-workspace .fkp_dashboard-page button.btn,.fkp-workspace .fkp_monitoring-page button.btn,.fkp-workspace-modal button.fkp_dashboard-page__urltest-details__copy-button {min-width:42px;min-height:42px;height:auto;border-radius:6px}
+.fkp-workspace .fkp_dashboard-page__subscription-meta {--subscription-meta-action-size:42px;--subscription-meta-action-gap:8px;border:0;border-bottom:1px solid var(--next-line);border-radius:0;padding:12px 0;background:transparent}
+.fkp-workspace .fkp_dashboard-page__subscription-meta__announce {border:0;border-radius:0;padding:10px 0;background:transparent;font-style:normal;line-height:1.5}
+.fkp-workspace .fkp_dashboard-page button.btn,.fkp-workspace .fkp_monitoring-page button.btn:not(.fkp_monitoring-page__row-action):not(.fkp_monitoring-page__tab),.fkp-workspace-modal button.fkp_dashboard-page__urltest-details__copy-button {min-width:42px;min-height:42px;height:auto;border-radius:8px}
 .fkp-workspace .fkp_dashboard-page__outbound-grid__item__copy-button {padding:8px}
-.fkp-workspace .fkp_diagnostic-page {grid-template-columns:minmax(0,2fr) minmax(220px,1fr);gap:32px}
-.fkp-workspace .fkp_diagnostic-page__right-bar {gap:24px}
-.fkp-workspace .fkp_diagnostic-page__checks,.fkp-workspace .fkp_diagnostic-page__right-bar__wiki,.fkp-workspace .fkp_diagnostic-page__right-bar__actions,.fkp-workspace .fkp_diagnostic-page__right-bar__system-info {border:0;border-top:1px solid var(--next-line);border-radius:0;padding:16px 0;background:transparent;gap:12px}
+.fkp-workspace .fkp_diagnostic-page {grid-template-columns:minmax(0,1.85fr) minmax(260px,1fr);gap:20px}
+.fkp-workspace .fkp_diagnostic-page__right-bar {gap:16px}
+.fkp-workspace .fkp_diagnostic-page__right-bar__wiki,.fkp-workspace .fkp_diagnostic-page__right-bar__actions,.fkp-workspace .fkp_diagnostic-page__right-bar__system-info {border:1px solid var(--next-line);border-radius:12px;padding:16px;background:var(--next-surface);gap:10px}
+.fkp-workspace .fkp_diagnostic-page__right-bar__system-info__row {display:flex;justify-content:space-between;align-items:baseline;gap:12px;font-variant-numeric:tabular-nums}
+.fkp-workspace .fkp_diagnostic-page__right-bar__system-info__row > b {color:var(--next-muted);font-weight:550;flex-shrink:0}
+.fkp-workspace .fkp_diagnostic-page__right-bar__system-info__row > div {display:inline-flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:6px;text-align:right;min-width:0}
+.fkp-workspace .fkp_diagnostic-page__actions-group {display:flex;flex-direction:column;gap:8px;min-width:0}
+.fkp-workspace .fkp_diagnostic-page__actions-group--service {margin-top:4px;padding-top:12px;border-top:1px solid var(--next-line)}
+.fkp-workspace .fkp_diagnostic-page__actions-subtitle {font-size:11.5px;font-weight:650;text-transform:uppercase;letter-spacing:.04em;color:var(--next-muted);margin:0 0 2px}
+.fkp-workspace .fkp_diagnostic-page__right-bar__actions button {display:flex!important;align-items:center;justify-content:flex-start;gap:10px;text-align:left!important;width:100%}
+.fkp-workspace .fkp_diagnostic-page__checks {border:0;padding:0;background:transparent;gap:10px}
 .fkp-workspace .fkp_diagnostic-page__right-bar__wiki--warning {border-color:var(--warn-color-medium)}
 .fkp-workspace .fkp_diagnostic-page__right-bar__wiki--error {border-color:var(--fkp-danger)}
-.fkp-workspace .fkp_diagnostic-page__left-bar {gap:24px}
-.fkp-workspace .fkp_diagnostic_alert {border-width:1px;border-radius:8px;padding:16px;gap:12px;background:var(--next-field)}
-.fkp-workspace .fkp_diagnostic_alert__title {font-size:15px;font-weight:650;margin-bottom:8px}
-.fkp-workspace .fkp_diagnostic_alert__description {line-height:1.6;overflow-wrap:anywhere}
-.fkp-workspace .fkp_monitoring-page {--fkp-monitoring-control-height:44px;--fkp-monitoring-row-action-size:42px;--fkp-monitoring-divider-color:var(--next-line);--fkp-monitoring-soft-bg:var(--next-field);--fkp-monitoring-soft-bg-hover:var(--fkp-hover)}
-.fkp-workspace .fkp_monitoring-page__controls {gap:16px;margin-bottom:24px}
+.fkp-workspace .fkp_diagnostic-page__left-bar {gap:16px}
+.fkp-workspace .fkp_diagnostic-page__left-bar > .fkp-next-panel {border:1px solid var(--next-line);border-radius:12px;padding:20px;background:var(--next-surface)}
+.fkp-workspace .fkp_diagnostic-page__left-bar > .fkp-next-panel > h3:first-child {margin-top:0}
+.fkp-workspace .fkp_diagnostic_alert {border-width:1px;border-radius:10px;padding:14px 16px;gap:12px;background:var(--next-surface)}
+.fkp-workspace .fkp_diagnostic_alert__title {font-size:14.5px;font-weight:650;margin-bottom:4px}
+.fkp-workspace .fkp_diagnostic_alert__description {line-height:1.55;overflow-wrap:anywhere}
+.fkp-workspace .fkp_monitoring-page {--fkp-monitoring-control-height:42px;--fkp-monitoring-row-action-size:34px;--fkp-monitoring-divider-color:var(--next-line);--fkp-monitoring-soft-bg:var(--next-surface);--fkp-monitoring-soft-bg-hover:var(--fkp-hover);--fkp-monitoring-danger-color:var(--fkp-danger)}
+.fkp-workspace .fkp_monitoring-page__controls {gap:10px 12px;margin-bottom:16px;flex-wrap:wrap}
+.fkp-workspace .fkp_monitoring-page__tabs {border-radius:10px;padding:3px}
+.fkp-workspace .fkp_monitoring-page .btn.fkp_monitoring-page__tab {min-height:36px;border-radius:7px;font-size:13px;padding:5px 12px}
 .fkp-workspace .fkp_monitoring-page .btn.fkp_monitoring-page__tab--active {background:var(--fkp-selected)!important;color:var(--next-accent)!important}
-.fkp-workspace .fkp_monitoring-page__table th {font-size:12px;text-transform:none}
-.fkp-workspace .fkp_updates-page__components {gap:32px}
-.fkp-workspace .fkp_updates-page__components-column {flex:1 1 280px;min-width:0;gap:24px}
-.fkp-workspace .fkp_updates-page__component {border:0;border-top:1px solid var(--next-line);border-radius:0;min-width:0;padding:16px 0;gap:16px}
-.fkp-workspace .fkp_updates-page__component__title {font-size:18px;font-weight:650}
+.fkp-workspace .fkp_monitoring-page__tab--active .fkp_monitoring-page__tab-badge {background:var(--next-accent);color:var(--next-bg)}
+.fkp-workspace .fkp_monitoring-page__filters {flex:1 1 300px;gap:10px;flex-wrap:nowrap}
+.fkp-workspace .fkp_monitoring-page__device-filter {width:auto;flex:0 1 175px;min-width:130px}
+.fkp-workspace .fkp_monitoring-page__search {width:auto;flex:1 1 180px;max-width:280px}
+.fkp-workspace .fkp_monitoring-page__table-wrap {border:1px solid var(--next-line);border-radius:12px;background:var(--next-surface);overflow-x:auto}
+.fkp-workspace .fkp_monitoring-page__table {margin:0}
+.fkp-workspace .fkp_monitoring-page__table th {font-size:12px;text-transform:none;padding:11px 10px;background:var(--next-subtle)}
+.fkp-workspace .fkp_monitoring-page__table td {padding:10px}
+#cbi-forkop.fkp-workspace[data-theme] .fkp_monitoring-page .btn.fkp_monitoring-page__row-action {width:34px;height:34px;min-width:34px;min-height:34px;padding:0;margin:2px auto;border:1px solid transparent!important;border-radius:8px;background:transparent!important;color:var(--fkp-danger)!important}
+#cbi-forkop.fkp-workspace[data-theme] .fkp_monitoring-page .btn.fkp_monitoring-page__row-action:hover:not(:disabled) {background:var(--fkp-hover)!important;border-color:var(--fkp-danger)!important;color:var(--fkp-danger)!important}
+.fkp-workspace .fkp_updates-page__toolbar {display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px 14px;padding:12px 16px;margin:0 0 16px;border:1px solid var(--next-line);border-radius:12px;background:var(--next-surface)}
+.fkp-workspace .fkp_updates-page__toolbar > span {font-size:13px;color:var(--next-muted)}
+.fkp-workspace .fkp_updates-page__components {gap:20px}
+.fkp-workspace .fkp_updates-page__components-column {flex:1 1 280px;min-width:0;gap:16px}
+.fkp-workspace .fkp_updates-page__component {border:1px solid var(--next-line);border-radius:12px;background:var(--next-surface);min-width:0;padding:18px;gap:14px}
+.fkp-workspace .fkp_updates-page__component__header {border-bottom-color:var(--next-line);padding-bottom:10px;justify-content:space-between}
+.fkp-workspace .fkp_updates-page__component__title {font-size:17px;font-weight:650}
+.fkp-workspace .fkp_updates-page__component__header-version {font-size:12px;font-weight:600;padding:3px 9px;border-radius:999px;background:var(--next-subtle);border:1px solid var(--next-line);color:var(--next-muted)}
 .fkp-workspace .fkp_updates-page__component__info-row {white-space:normal;flex-wrap:wrap;gap:8px 16px}
+.fkp-workspace .fkp_updates-page__component__actions--with-details {border-top-color:var(--next-line);padding-top:12px}
 .fkp-workspace .fkp_updates-page__component__actions-main,.fkp-workspace .fkp_updates-page__component__variants-buttons {flex-wrap:wrap;gap:8px}
 .fkp-workspace .fkp_updates-page__component__variants-title {font-size:13px;font-weight:550}
-.fkp-workspace-modal {padding:24px!important;border:0;border-radius:12px;box-shadow:0 16px 48px rgba(0,0,0,.22);max-width:min(960px,calc(100vw - 32px));max-height:calc(100dvh - 32px);overflow:auto}
-.fkp-workspace-modal > h4:first-child {font-size:24px;margin:0 0 24px}
+.fkp-workspace-modal {padding:24px!important;border:1px solid var(--next-line);border-radius:14px;box-shadow:0 20px 56px rgba(0,0,0,.24);width:calc(100% - 32px);min-width:0;max-width:min(960px,calc(100% - 32px));max-height:calc(100vh - 32px);max-height:calc(100dvh - 32px);overflow-y:auto;overflow-x:hidden}
+.fkp-workspace-modal > h4:first-child {font-size:22px;font-weight:700;margin:0 0 18px}
 .fkp-workspace-modal .cbi-map {padding:0;margin:0;border:0;background:transparent;color:inherit;box-shadow:none}
-.fkp-workspace-modal .cbi-tabmenu {display:flex;gap:8px;overflow-x:auto;border:0;border-bottom:1px solid var(--next-line);padding:0 0 12px;margin:0 0 24px;list-style:none}
+.fkp-workspace-modal .cbi-tabmenu {display:inline-flex;gap:4px;overflow-x:auto;max-width:100%;border:1px solid var(--next-line);border-radius:10px;background:var(--next-surface);padding:4px;margin:0 0 20px;list-style:none}
 .fkp-workspace-modal .cbi-tabmenu li {margin:0;border:0;background:transparent;padding:0;white-space:nowrap}
-.fkp-workspace-modal .cbi-tabmenu a {display:block;padding:10px 12px;min-height:42px;border-radius:6px;text-decoration:none;color:var(--next-muted)}
-.fkp-workspace-modal .cbi-tabmenu .cbi-tab:not(.cbi-tab-disabled) a {background:var(--fkp-selected);color:var(--next-accent);font-weight:650}
+.fkp-workspace-modal .cbi-tabmenu a {display:block;padding:8px 14px;min-height:38px;border-radius:8px;text-decoration:none;color:var(--next-muted);font-weight:550}
+.fkp-workspace-modal .cbi-tabmenu .cbi-tab:not(.cbi-tab-disabled) a {background:var(--fkp-selected);color:var(--next-accent);font-weight:600}
 .fkp-workspace-modal .fkp_dashboard-page__urltest-details__row {grid-template-columns:minmax(0,1fr) minmax(54px,max-content) 42px;padding:12px 0;border-radius:0}
-@media (max-width:1050px) {
-  .fkp-workspace {grid-template-columns:160px minmax(0,1fr)}
-  .fkp-workspace-main {padding:24px}
-  .fkp-workspace-top {gap:16px;flex-wrap:wrap}
+@media (min-width:1180px) {
+  .fkp-workspace :is(#cbi-forkop-section,#cbi-forkop-server) :is(td,.td).cbi-section-actions {min-width:max-content!important}
+  .fkp-workspace #cbi-forkop-section .cbi-section-actions > div.fkp-rule-actions-bar,.fkp-workspace #cbi-forkop-server .cbi-section-actions > div.fkp-rule-actions-bar,.fkp-workspace .fkp-rule-actions-bar,.fkp-workspace .fkp-rule-order {flex-wrap:nowrap}
 }
-@media (max-width:720px) {
-  .fkp-workspace #cbi-forkop-section .cbi-section-table-row>:first-child,.fkp-workspace #cbi-forkop-section .cbi-section-table-row>:nth-child(2),.fkp-workspace #cbi-forkop-section .cbi-section-table-row>:nth-child(3) {width:auto;min-width:0}
-  .fkp-workspace {display:block;border-radius:8px;margin:16px 0}
-  .fkp-workspace-sidebar {position:static;padding:16px 16px 12px;border-bottom:1px solid var(--next-line)}
-  .fkp-workspace-brand {font-size:20px;padding:0;margin-bottom:12px}
-  .fkp-workspace-primary {display:none}
-  .fkp-workspace .fkp-workspace-mobile-menu {display:flex;align-items:center;gap:12px;margin:0;min-width:0}
-  .fkp-workspace .fkp-workspace-mobile-menu select {flex:1;min-width:0;width:100%;max-width:100%;min-height:44px}
+@media (max-width:1050px) {
+  .fkp-workspace {grid-template-columns:168px minmax(0,1fr)}
+  .fkp-workspace-main {padding:20px}
+  .fkp-workspace-top {gap:12px;flex-wrap:wrap}
   .fkp-workspace-local {flex-wrap:wrap;overflow:visible}
   .fkp-workspace .fkp-workspace-local-button {white-space:normal;overflow-wrap:anywhere;max-width:100%}
+}
+@media (max-width:960px) {
+  .fkp-workspace .fkp_diagnostic-page {grid-template-columns:minmax(0,1fr)}
+  .fkp-workspace .fkp_updates-page__components-column {flex-basis:100%}
+  .fkp-workspace .fkp_monitoring-page__actions {margin-left:auto}
+  .fkp-workspace .fkp_monitoring-page__filters {order:3;flex-wrap:wrap;flex:1 1 100%}
+  .fkp-workspace .fkp_monitoring-page__device-filter,.fkp-workspace .fkp_monitoring-page__search {flex:1 1 180px;max-width:none}
+}
+@media (max-width:900px) {
+  .fkp-workspace .fkp_monitoring-page__table-wrap {border:0;background:transparent}
+  .fkp-workspace .fkp_monitoring-page__table tr {border:1px solid var(--next-line);border-radius:10px;background:var(--next-surface);padding:12px;margin-bottom:10px}
+}
+@media (max-width:720px) {
+  .fkp-workspace :is(#cbi-forkop-section,#cbi-forkop-server) :is(.cbi-section-table-titles,.cbi-section-table-row)>:is(:first-child,:nth-child(2),:nth-child(3)) {width:auto!important;min-width:0;white-space:normal;text-align:left!important}
+  .fkp-workspace :is(#cbi-forkop-section,#cbi-forkop-server) tr[data-sid] input[type=checkbox] {margin:0!important;display:inline-block}
+  #cbi-forkop.fkp-workspace ~ .cbi-page-actions {margin:-6px 0 20px;padding:12px 14px;justify-content:stretch}
+  #cbi-forkop.fkp-workspace ~ .cbi-page-actions :is(button,.cbi-button,input[type=button],input[type=submit]) {flex:1 1 auto;min-height:42px;text-align:center;justify-content:center}
+  .fkp-workspace .fkp-workspace-sources > p:not([role=status]),.fkp-workspace .fkp-workspace-sources-actions {flex-basis:100%}
+  .fkp-workspace .fkp-workspace-sources > button,.fkp-workspace .fkp-workspace-sources-actions > button {flex:1 1 auto;min-height:42px}
+  .fkp-workspace {display:block;border-radius:12px;margin:12px 0 20px;overflow-x:clip}
+  .fkp-workspace > .fkp-next-notice {border-radius:12px 12px 0 0;padding:12px 16px}
+  .fkp-workspace-sidebar {position:static;padding:14px 16px;border-bottom:1px solid var(--next-line);border-radius:12px 12px 0 0;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+  .fkp-workspace-brand {font-size:18px;padding:0;margin:0;border:0}
+  .fkp-workspace-primary {display:none}
+  .fkp-workspace .fkp-workspace-mobile-menu {display:flex;align-items:center;gap:8px;margin:0;min-width:0;flex:1 1 180px;font-size:13px;font-weight:600;color:var(--next-muted)}
+  .fkp-workspace .fkp-workspace-mobile-menu select {flex:1;min-width:0;width:100%;max-width:100%;min-height:44px}
+  .fkp-workspace-local {display:flex;flex-wrap:wrap;overflow:visible;width:100%}
+  .fkp-workspace .fkp-workspace-local-button {min-height:42px;white-space:normal;overflow-wrap:anywhere;max-width:100%;flex:1 1 auto}
   .fkp-workspace .fkp-workspace-nav-button {flex-shrink:0;min-height:44px}
-  .fkp-workspace-main {padding:16px;border:0}
-  .fkp-workspace-top {margin-bottom:16px;padding-bottom:12px}
-  .fkp-workspace .fkp-workspace-title {font-size:26px}
+  .fkp-workspace-main {padding:14px;border:0}
+  .fkp-workspace-top {margin-bottom:14px;padding:10px 12px;gap:10px}
+  .fkp-workspace-connection {padding-left:0}
+  .fkp-workspace .fkp-workspace-title {font-size:22px}
+  .fkp-workspace section.fkp-form-group,.fkp-workspace-modal section.fkp-form-group {padding:14px 16px}
+  .fkp-workspace details.fkp-form-group,.fkp-workspace-modal details.fkp-form-group {padding-inline:16px}
   .fkp-workspace .cbi-value,.fkp-workspace-modal .cbi-value {display:block;padding:12px 0}
   .fkp-workspace .cbi-value > label.cbi-value-title,.fkp-workspace-modal .cbi-value > label.cbi-value-title {display:block;width:100%;text-align:left;padding:0;margin:0 0 8px}
-  .fkp-workspace input,.fkp-workspace select,.fkp-workspace textarea,.fkp-workspace-modal input,.fkp-workspace-modal select,.fkp-workspace-modal textarea {font-size:16px!important}
-  .fkp-workspace .fkp-workspace-theme select {font-size:16px}
+  .fkp-workspace .cbi-value > label.cbi-value-title:empty,.fkp-workspace-modal .cbi-value > label.cbi-value-title:empty {display:none;margin:0}
+  .fkp-workspace input:not([type=checkbox]):not([type=radio]),.fkp-workspace select,.fkp-workspace textarea,.fkp-workspace-modal input:not([type=checkbox]):not([type=radio]),.fkp-workspace-modal select,.fkp-workspace-modal textarea {font-size:16px!important}
+  :is(.fkp-workspace,.fkp-workspace-modal) .cbi-dynlist > .item {padding-right:48px}
+  :is(.fkp-workspace,.fkp-workspace-modal) .cbi-dynlist > .item::after {width:42px!important}
+  :is(.fkp-workspace,.fkp-workspace-modal) .cbi-dynlist.fkp-connections-dynlist > .item {--fkp-dynlist-action-width:42px}
+  :is(.fkp-workspace,.fkp-workspace-modal) .fkp-button-add-dynlist > .add-item {width:100%!important;display:flex!important}
+  :is(.fkp-workspace,.fkp-workspace-modal) .fkp-button-add-dynlist > .add-item > .cbi-button-add {width:100%!important;height:auto!important;min-height:42px!important;max-height:none!important;padding:8px 12px!important;white-space:normal!important}
   .fkp-workspace .cbi-map-tabbed > .cbi-section {overflow-x:auto}
-  .fkp-workspace .table,.fkp-workspace table {min-width:520px}
-  .fkp-workspace :is(#cbi-forkop-section,#cbi-forkop-server) .table.cbi-section-table {display:block;width:100%;min-width:0;table-layout:auto}
+  .fkp-workspace .table,.fkp-workspace table,.fkp-workspace-modal .table,.fkp-workspace-modal table {min-width:0}
+  .fkp-workspace :is(#cbi-forkop-section,#cbi-forkop-server) .table.cbi-section-table {display:block;width:100%;min-width:0;table-layout:auto;border:0;background:transparent}
   .fkp-workspace :is(#cbi-forkop-section,#cbi-forkop-server) .cbi-section-table > thead {display:none}
   .fkp-workspace :is(#cbi-forkop-section,#cbi-forkop-server) .cbi-section-table > :is(tbody,tfoot) {display:block;width:100%}
-  .fkp-workspace :is(#cbi-forkop-section,#cbi-forkop-server) .cbi-section-table-row {display:block;width:100%;padding:16px 0;margin:0;border-bottom:1px solid var(--next-line)}
-  .fkp-workspace :is(#cbi-forkop-section,#cbi-forkop-server) .cbi-section-table-row::before {display:none;content:none}
-  .fkp-workspace :is(#cbi-forkop-section,#cbi-forkop-server) .cbi-section-table-row > .td {display:grid;grid-template-columns:minmax(88px,32%) minmax(0,1fr);align-items:center;gap:12px;width:100%;min-width:0;margin:0;padding:8px 0;border:0;text-align:left;white-space:normal}
+  .fkp-workspace :is(#cbi-forkop-section,#cbi-forkop-server) .cbi-section-table-row {display:block;width:100%;padding:14px 16px;margin:0 0 12px;border:1px solid var(--next-line);border-radius:12px;background:var(--next-surface)}
+  .fkp-workspace :is(#cbi-forkop-section,#cbi-forkop-server) .cbi-section-table-row > .td {display:grid;grid-template-columns:minmax(88px,34%) minmax(0,1fr);align-items:center;gap:12px;width:100%;min-width:0;margin:0;padding:8px 0;border:0;text-align:left;white-space:normal}
   .fkp-workspace :is(#cbi-forkop-section,#cbi-forkop-server) .cbi-section-table-row > .td[data-title]::before {content:attr(data-title);color:var(--next-muted);font-weight:550;white-space:normal;overflow-wrap:anywhere}
-  .fkp-workspace :is(#cbi-forkop-section,#cbi-forkop-server) .cbi-section-table-row > .cbi-section-table-titles {display:block;font-size:15px;color:var(--next-fg);font-weight:650;padding:0 0 12px}
-  .fkp-workspace :is(#cbi-forkop-section,#cbi-forkop-server) .cbi-section-table-row > .cbi-section-actions {display:block;width:100%!important;min-width:0!important;padding-top:12px}
-  .fkp-workspace .td.cbi-section-actions > div:not(.cbi-dropdown) {justify-content:flex-start}
-  .fkp-workspace :is(#cbi-forkop-section,#cbi-forkop-server) .placeholder > .td {display:block;padding:16px 0}
+  .fkp-workspace :is(#cbi-forkop-section,#cbi-forkop-server) .cbi-section-table-row > .cbi-section-table-titles {display:block;font-size:15px;color:var(--next-fg);font-weight:650;padding:0 0 10px;border-bottom:1px solid var(--next-line);margin-bottom:4px}
+  .fkp-workspace :is(#cbi-forkop-section,#cbi-forkop-server) .cbi-section-table-row > .cbi-section-actions {display:block;width:100%!important;min-width:0!important;padding-top:10px;border-top:1px solid var(--next-line);margin-top:4px}
+  .fkp-workspace :is(#cbi-forkop-section,#cbi-forkop-server) .cbi-section-actions :is(button,.cbi-button),.fkp-workspace .fkp-rule-order button {min-height:42px;min-width:42px;font-size:13.5px;padding:8px 12px}
+  .fkp-workspace .td.cbi-section-actions > div:not(.cbi-dropdown),.fkp-workspace .fkp-rule-actions-bar {justify-content:flex-start}
+  .fkp-workspace #cbi-forkop-section .cbi-section-actions > div,.fkp-workspace #cbi-forkop-server .cbi-section-actions > div {justify-content:flex-start}
+  .fkp-workspace :is(#cbi-forkop-section,#cbi-forkop-server) .placeholder > .td {display:block;padding:16px}
+  .fkp-workspace .cbi-page-actions {margin-inline:0}
   .fkp-workspace .fkp-next-content {grid-template-columns:minmax(0,1fr)}
   .fkp-workspace .fkp_dashboard-page {--dashboard-grid-columns:1}
   .fkp-workspace .fkp_diagnostic-page {grid-template-columns:minmax(0,1fr)}
+  .fkp-workspace .fkp_diagnostic-page__left-bar > .fkp-next-panel {padding:16px}
   .fkp-workspace .fkp_monitoring-page__table {min-width:0}
   .fkp-workspace .fkp_updates-page__components-column {flex-basis:auto}
-  .fkp-workspace-modal {padding:20px 16px!important;max-width:calc(100vw - 16px);max-height:calc(100dvh - 16px);border-radius:8px}
+  .fkp-workspace-modal {padding:18px 14px!important;width:calc(100% - 16px);max-width:calc(100% - 16px);max-height:calc(100vh - 16px);max-height:calc(100dvh - 16px);margin:8px auto;border-radius:12px}
+  .fkp-workspace-modal .cbi-tabmenu {display:flex}
+  .fkp-workspace-modal .cbi-tabmenu a {min-height:42px}
 }
+@media (max-width:560px) {
+  .fkp-workspace-modal .fkp_dashboard-page__urltest-details__row {grid-template-columns:minmax(0,1fr) 42px}
+}
+@media (max-width:520px) {
+  .fkp-workspace .fkp_monitoring-page__controls,.fkp-workspace .fkp_monitoring-page__filters,.fkp-workspace .fkp_monitoring-page__device-filter,.fkp-workspace .fkp_monitoring-page__search {flex:0 0 auto;width:100%;max-width:none;height:auto}
+  .fkp-workspace .fkp_monitoring-page__actions {margin-left:0}
+}
+.fkp-workspace .fkp-action-menu,.fkp-workspace-modal .fkp-action-menu {position:relative;display:inline-block;vertical-align:middle;flex:0 0 auto}
+.fkp-workspace .fkp-action-menu[hidden],.fkp-workspace-modal .fkp-action-menu[hidden] {display:none!important}
+.fkp-workspace .fkp-action-menu--block,.fkp-workspace-modal .fkp-action-menu--block {display:block;width:100%}
+.fkp-workspace .fkp-action-menu > summary.fkp-action-menu__trigger,.fkp-workspace-modal .fkp-action-menu > summary.fkp-action-menu__trigger {box-sizing:border-box;min-height:44px;min-width:44px;margin:0;padding:8px 14px;border:1px solid var(--next-line);border-radius:8px;background:var(--next-field);color:var(--next-fg);font:inherit;font-size:13.5px;font-weight:600;line-height:1.2;display:inline-flex;align-items:center;justify-content:center;gap:6px;cursor:pointer;list-style:none;user-select:none;white-space:nowrap;transition:background-color .15s ease,border-color .15s ease,color .15s ease}
+.fkp-workspace .fkp-action-menu--block > summary.fkp-action-menu__trigger,.fkp-workspace-modal .fkp-action-menu--block > summary.fkp-action-menu__trigger {display:flex;width:100%;justify-content:space-between}
+.fkp-workspace .fkp-action-menu > summary.fkp-action-menu__trigger::-webkit-details-marker,.fkp-workspace-modal .fkp-action-menu > summary.fkp-action-menu__trigger::-webkit-details-marker {display:none}
+.fkp-workspace .fkp-action-menu > summary.fkp-action-menu__trigger::marker,.fkp-workspace-modal .fkp-action-menu > summary.fkp-action-menu__trigger::marker {content:""}
+.fkp-workspace .fkp-action-menu > summary.fkp-action-menu__trigger:hover,.fkp-workspace-modal .fkp-action-menu > summary.fkp-action-menu__trigger:hover,.fkp-workspace .fkp-action-menu[open] > summary.fkp-action-menu__trigger,.fkp-workspace-modal .fkp-action-menu[open] > summary.fkp-action-menu__trigger {background:var(--fkp-hover);border-color:var(--next-accent);color:var(--next-accent)}
+.fkp-workspace .fkp-action-menu:not(.fkp-action-menu--compact) > summary.fkp-action-menu__trigger::after,.fkp-workspace-modal .fkp-action-menu:not(.fkp-action-menu--compact) > summary.fkp-action-menu__trigger::after {content:"\u25BE";font-size:11px;line-height:1;color:var(--next-muted);transition:transform .15s ease}
+.fkp-workspace .fkp-action-menu[open]:not(.fkp-action-menu--compact) > summary.fkp-action-menu__trigger::after,.fkp-workspace-modal .fkp-action-menu[open]:not(.fkp-action-menu--compact) > summary.fkp-action-menu__trigger::after {transform:rotate(180deg);color:var(--next-accent)}
+.fkp-workspace .fkp-action-menu--compact > summary.fkp-action-menu__trigger,.fkp-workspace-modal .fkp-action-menu--compact > summary.fkp-action-menu__trigger {padding:0 10px;font-size:18px;font-weight:700;line-height:1;letter-spacing:1px}
+.fkp-workspace .fkp-action-menu__popover,.fkp-workspace-modal .fkp-action-menu__popover {box-sizing:border-box;position:absolute;top:calc(100% + 6px);right:0;z-index:80;min-width:210px;max-width:min(284px,calc(100vw - 28px));padding:6px;border:1px solid var(--next-line);border-radius:10px;background:var(--next-surface);box-shadow:0 12px 30px rgba(15,28,36,.16);display:flex;flex-direction:column;gap:2px;text-align:left}
+.fkp-workspace[data-theme="dark"] .fkp-action-menu__popover,.fkp-workspace-modal[data-theme="dark"] .fkp-action-menu__popover {box-shadow:0 14px 34px rgba(0,0,0,.45)}
+.fkp-workspace .fkp-action-menu[data-align="start"] > .fkp-action-menu__popover,.fkp-workspace-modal .fkp-action-menu[data-align="start"] > .fkp-action-menu__popover {left:0;right:auto}
+.fkp-workspace .fkp-action-menu--block > .fkp-action-menu__popover,.fkp-workspace-modal .fkp-action-menu--block > .fkp-action-menu__popover {position:static;margin-top:6px;width:100%;min-width:0;max-width:none;box-shadow:none;background:var(--next-subtle)}
+.fkp-workspace .fkp-action-menu__popover button.fkp-action-menu__item,.fkp-workspace-modal .fkp-action-menu__popover button.fkp-action-menu__item {box-sizing:border-box;width:100%!important;min-height:40px;margin:0!important;padding:8px 12px!important;border:0!important;border-radius:7px!important;background:transparent!important;color:var(--next-fg)!important;font-size:13.5px;font-weight:500;display:flex!important;align-items:center;justify-content:flex-start!important;gap:8px;text-align:left!important;white-space:normal;box-shadow:none!important;flex:0 0 auto!important}
+.fkp-workspace .fkp-action-menu__popover button.fkp-action-menu__item:hover:not(:disabled),.fkp-workspace-modal .fkp-action-menu__popover button.fkp-action-menu__item:hover:not(:disabled) {background:var(--fkp-hover)!important;color:var(--next-accent)!important}
+.fkp-workspace .fkp-action-menu__popover button.fkp-action-menu__danger,.fkp-workspace-modal .fkp-action-menu__popover button.fkp-action-menu__danger,#cbi-forkop.fkp-workspace[data-theme] .fkp-action-menu__popover button.fkp-action-menu__danger {color:var(--fkp-danger)!important}
+.fkp-workspace .fkp-action-menu__popover button.fkp-action-menu__danger:hover:not(:disabled),.fkp-workspace-modal .fkp-action-menu__popover button.fkp-action-menu__danger:hover:not(:disabled),#cbi-forkop.fkp-workspace[data-theme] .fkp-action-menu__popover button.fkp-action-menu__danger:hover:not(:disabled) {color:var(--fkp-danger)!important;background:rgba(209,67,67,.1)!important}
+.fkp-workspace .fkp-action-menu__divider,.fkp-workspace-modal .fkp-action-menu__divider {border:0;border-top:1px solid var(--next-line);margin:4px 2px;width:auto}
+.fkp-workspace .fkp-action-menu__heading,.fkp-workspace-modal .fkp-action-menu__heading {padding:6px 10px 2px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--next-muted)}
+.fkp-workspace .cbi-map-tabbed > .cbi-section:has(details.fkp-action-menu[open]) {overflow:visible}
 @media (prefers-reduced-motion:reduce) {.fkp-workspace *,.fkp-workspace-modal * {transition:none!important;animation:none!important}}
 `;
 
@@ -1135,6 +2019,173 @@ function renderFlagEmojis(value) {
   return value.split(FLAG_EMOJI_PATTERN).filter(Boolean).map(
     (part) => EXACT_FLAG_EMOJI_PATTERN.test(part) ? E("span", { class: "fkp_dashboard-page__flag-emoji" }, part) : part
   );
+}
+
+// src/forkop/workspace/actionMenu.ts
+var boundDocuments = /* @__PURE__ */ new WeakSet();
+function ensureDocumentDismissal(doc) {
+  if (!doc || boundDocuments.has(doc)) return;
+  boundDocuments.add(doc);
+  doc.addEventListener("pointerdown", (event) => {
+    const target = event.target instanceof Node ? event.target : null;
+    for (const openMenu of doc.querySelectorAll(
+      "details.fkp-action-menu[open]"
+    )) {
+      if (!target || !openMenu.contains(target)) {
+        openMenu.open = false;
+      }
+    }
+  });
+}
+function actionMenuDivider() {
+  const hr = document.createElement("hr");
+  hr.className = "fkp-action-menu__divider";
+  hr.setAttribute("aria-hidden", "true");
+  return hr;
+}
+function actionMenuHeading(text) {
+  const heading = document.createElement("div");
+  heading.className = "fkp-action-menu__heading";
+  heading.textContent = text;
+  return heading;
+}
+function decorateActionMenuItems(popover) {
+  for (const btn of popover.querySelectorAll("button")) {
+    btn.classList.add("fkp-action-menu__item");
+    if (!btn.hasAttribute("role")) {
+      btn.setAttribute("role", "menuitem");
+    }
+    if (btn.classList.contains("cbi-button-remove") || btn.classList.contains("cbi-button-negative") || btn.dataset.danger === "true") {
+      btn.classList.add("fkp-action-menu__danger");
+    }
+  }
+}
+function createActionMenu(label, items2, options = {}) {
+  ensureDocumentDismissal(typeof document !== "undefined" ? document : null);
+  const details = document.createElement("details");
+  details.className = [
+    "fkp-action-menu",
+    options.compact ? "fkp-action-menu--compact" : "",
+    options.block ? "fkp-action-menu--block" : ""
+  ].filter(Boolean).join(" ");
+  details.dataset.align = "end";
+  if (options.busy) details.dataset.busy = "true";
+  if (options.open) details.open = true;
+  const summary = document.createElement("summary");
+  summary.className = "fkp-action-menu__trigger";
+  summary.setAttribute(
+    "aria-label",
+    options.ariaLabel || (options.compact ? "\u0415\u0449\u0451 \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u044F" : label || "\u0415\u0449\u0451 \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u044F")
+  );
+  const labelSpan = document.createElement("span");
+  labelSpan.className = "fkp-action-menu__label";
+  labelSpan.textContent = label;
+  summary.append(labelSpan);
+  const popover = document.createElement("div");
+  popover.className = "fkp-action-menu__popover";
+  popover.setAttribute("role", "menu");
+  for (const item of items2) {
+    if (item) popover.append(item);
+  }
+  decorateActionMenuItems(popover);
+  details.append(summary, popover);
+  details.addEventListener("toggle", () => {
+    const doc = details.ownerDocument;
+    ensureDocumentDismissal(doc);
+    if (!details.open) return;
+    for (const other of doc.querySelectorAll(
+      "details.fkp-action-menu[open]"
+    )) {
+      if (other !== details) other.open = false;
+    }
+    if (!options.block && typeof window !== "undefined") {
+      const rect = details.getBoundingClientRect();
+      if (rect.width > 0 && rect.right < 236 && window.innerWidth - rect.left > rect.right) {
+        details.dataset.align = "start";
+      } else {
+        details.dataset.align = "end";
+      }
+    }
+  });
+  details.addEventListener("keydown", (event) => {
+    if (!details.open) return;
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      details.open = false;
+      summary.focus();
+      return;
+    }
+    if (event.key !== "ArrowDown" && event.key !== "ArrowUp" && event.key !== "Home" && event.key !== "End") {
+      return;
+    }
+    const focusable = [
+      ...popover.querySelectorAll("button")
+    ].filter((btn) => !btn.disabled && !btn.hidden);
+    if (!focusable.length) return;
+    event.preventDefault();
+    const active = details.ownerDocument.activeElement;
+    const currentIndex = focusable.indexOf(active);
+    let nextIndex = 0;
+    if (event.key === "Home") {
+      nextIndex = 0;
+    } else if (event.key === "End") {
+      nextIndex = focusable.length - 1;
+    } else if (event.key === "ArrowDown") {
+      nextIndex = currentIndex < 0 ? 0 : (currentIndex + 1) % focusable.length;
+    } else {
+      nextIndex = currentIndex <= 0 ? focusable.length - 1 : currentIndex - 1;
+    }
+    focusable[nextIndex]?.focus();
+  });
+  popover.addEventListener("click", (event) => {
+    const target = event.target instanceof Element ? event.target : null;
+    const button = target?.closest("button");
+    if (button && popover.contains(button) && !button.disabled) {
+      details.open = false;
+    }
+  });
+  return details;
+}
+function ensureRowOverflowMenu(bar, rowLabel = "") {
+  const addSiteBtns = [
+    ...bar.querySelectorAll(".fkp-rule-add-site")
+  ];
+  const removeBtns = [
+    ...bar.querySelectorAll(
+      ".cbi-button-remove, .cbi-button-negative"
+    )
+  ];
+  let menu = bar.querySelector(
+    ":scope > details.fkp-action-menu"
+  );
+  if (!addSiteBtns.length && !removeBtns.length) {
+    if (menu) menu.remove();
+    return null;
+  }
+  const ariaLabel = rowLabel ? `\u0415\u0449\u0451 \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u044F: ${rowLabel}` : "\u0415\u0449\u0451 \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u044F";
+  if (!menu) {
+    menu = createActionMenu("\u22EF", [], {
+      compact: true,
+      ariaLabel
+    });
+    bar.append(menu);
+  } else {
+    menu.querySelector(".fkp-action-menu__trigger")?.setAttribute("aria-label", ariaLabel);
+  }
+  const popover = menu.querySelector(".fkp-action-menu__popover");
+  popover.querySelectorAll(".fkp-action-menu__divider").forEach((hr) => hr.remove());
+  for (const btn of addSiteBtns) {
+    popover.append(btn);
+  }
+  if (addSiteBtns.length > 0 && removeBtns.length > 0) {
+    popover.append(actionMenuDivider());
+  }
+  for (const btn of removeBtns) {
+    popover.append(btn);
+  }
+  decorateActionMenuItems(popover);
+  return menu;
 }
 
 // src/forkop/next/workflows.ts
@@ -1283,17 +2334,18 @@ function renderQuickSite(textarea, label, priority) {
   input2.setAttribute("aria-label", "\u0421\u0430\u0439\u0442 \u0438\u043B\u0438 \u0430\u0434\u0440\u0435\u0441 \u0441\u0442\u0440\u0430\u043D\u0438\u0446\u044B");
   field.append(input2);
   const scope = document.createElement("label");
-  scope.textContent = "\u0412\u043A\u043B\u044E\u0447\u0430\u044F \u043F\u043E\u0434\u0434\u043E\u043C\u0435\u043D\u044B";
+  scope.className = "fkp-next-check";
   const subdomains = document.createElement("input");
   subdomains.type = "checkbox";
   subdomains.checked = true;
-  scope.append(subdomains);
+  scope.append(subdomains, "\u0412\u043A\u043B\u044E\u0447\u0430\u044F \u043F\u043E\u0434\u0434\u043E\u043C\u0435\u043D\u044B");
   const context = document.createElement("p");
   context.textContent = `\u0418\u0437\u043C\u0435\u043D\u044F\u0435\u0442\u0441\u044F \u043F\u0440\u0430\u0432\u0438\u043B\u043E \xAB${label}\xBB, \u043F\u0440\u0438\u043E\u0440\u0438\u0442\u0435\u0442 ${priority}. \u041F\u0440\u0430\u0432\u0438\u043B\u0430 \u0432\u044B\u0448\u0435 \u043F\u0440\u043E\u0432\u0435\u0440\u044F\u044E\u0442\u0441\u044F \u043F\u0435\u0440\u0432\u044B\u043C\u0438; \u043E\u0441\u0442\u0430\u043B\u044C\u043D\u044B\u0435 \u0443\u0441\u043B\u043E\u0432\u0438\u044F \u044D\u0442\u043E\u0433\u043E \u043F\u0440\u0430\u0432\u0438\u043B\u0430 \u0441\u043E\u0445\u0440\u0430\u043D\u044F\u044E\u0442\u0441\u044F. \u042D\u0442\u043E \u0434\u043E\u043F\u043E\u043B\u043D\u0435\u043D\u0438\u0435 \u043A \u0441\u0443\u0449\u0435\u0441\u0442\u0432\u0443\u044E\u0449\u0438\u043C \u0434\u043E\u043C\u0435\u043D\u0430\u043C, \u043D\u0435 \u043E\u0442\u0434\u0435\u043B\u044C\u043D\u043E\u0435 \u043F\u0440\u0430\u0432\u0438\u043B\u043E.`;
   const preview = document.createElement("output");
   preview.setAttribute("aria-live", "polite");
   const add = document.createElement("button");
   add.type = "button";
+  add.className = "fkp-next-primary-action";
   add.textContent = "\u0414\u043E\u0431\u0430\u0432\u0438\u0442\u044C \u0432 \u0447\u0435\u0440\u043D\u043E\u0432\u0438\u043A \u043F\u0440\u0430\u0432\u0438\u043B\u0430";
   add.disabled = textarea.disabled || textarea.readOnly;
   input2.disabled = add.disabled;
@@ -1366,7 +2418,9 @@ function configureRuleWorkflow(section) {
       lastSection = name;
       const sourceWorkflow = requested.kind === "create" || requested.kind === "edit" && (!requested.option || [
         "selector_proxy_links",
+        "_wg_warp_helper",
         "subscription_url",
+        "_subscription_preview",
         "interfaces",
         "outbound_jsons",
         "urltest",
@@ -1376,8 +2430,9 @@ function configureRuleWorkflow(section) {
       notice.textContent = sourceWorkflow ? "\u0421\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u0435 \u0440\u0435\u0434\u0430\u043A\u0442\u043E\u0440, \u0437\u0430\u0442\u0435\u043C \u043F\u0440\u0438\u043C\u0435\u043D\u0438\u0442\u0435 \u0438\u0437\u043C\u0435\u043D\u0435\u043D\u0438\u044F. \u041F\u043E\u0441\u043B\u0435 \u0440\u0430\u0437\u0431\u043E\u0440\u0430 \u0438\u0441\u0442\u043E\u0447\u043D\u0438\u043A\u043E\u0432 \u0432\u0435\u0440\u043D\u0438\u0442\u0435\u0441\u044C \u043A \u0432\u044B\u0431\u043E\u0440\u0443 \u0443\u0437\u043B\u0430. \u041F\u0440\u043E\u043F\u0443\u0441\u043A\u0438 \u0438 \u043E\u0448\u0438\u0431\u043A\u0438 \u0438\u0441\u0442\u043E\u0447\u043D\u0438\u043A\u043E\u0432 \u0441\u043C\u043E\u0442\u0440\u0438\u0442\u0435 \u0432 \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442\u0435 \u043E\u0431\u043D\u043E\u0432\u043B\u0435\u043D\u0438\u044F \u043F\u043E\u0434\u043F\u0438\u0441\u043A\u0438." : "\u0421\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u0435 \u0440\u0435\u0434\u0430\u043A\u0442\u043E\u0440, \u0437\u0430\u0442\u0435\u043C \u043F\u0440\u0438\u043C\u0435\u043D\u0438\u0442\u0435 \u0438\u0437\u043C\u0435\u043D\u0435\u043D\u0438\u044F \u043F\u0440\u0430\u0432\u0438\u043B\u0430.";
       const root = this.getActiveModalMap();
       const option = requested.option || (requested.kind === "site" ? "domain" : "selector_proxy_links");
+      const cfg = this.uciconfig || this.map.config;
       const field = [...root.querySelectorAll("[id]")].find(
-        (node) => node.id === `cbid.${this.uciconfig || this.map.config}.${name}.${option}`
+        (node) => node.id === `cbid.${cfg}.${name}.${option}` || node.id === `cbi-${cfg}-${name}-${option}`
       );
       const tab = option === "domain" || option === "fully_routed_ips" ? "conditions" : "settings";
       root.querySelector(`.cbi-tabmenu [data-tab="${tab}"] a`)?.click();
@@ -1386,7 +2441,19 @@ function configureRuleWorkflow(section) {
         if (parent instanceof HTMLDetailsElement) parent.open = true;
         parent = parent.parentElement;
       }
-      const input2 = field?.matches("input,textarea,select") ? field : field?.querySelector("input,textarea,select");
+      if (requested.kind === "site" && requested.site) {
+        const quickInput = root.querySelector(
+          '[aria-label="\u0421\u0430\u0439\u0442 \u0438\u043B\u0438 \u0430\u0434\u0440\u0435\u0441 \u0441\u0442\u0440\u0430\u043D\u0438\u0446\u044B"]'
+        );
+        if (quickInput && !quickInput.disabled) {
+          quickInput.value = requested.site;
+          quickInput.dispatchEvent(new Event("input", { bubbles: true }));
+          quickInput.focus();
+          quickInput.scrollIntoView?.({ block: "center" });
+          return result;
+        }
+      }
+      const input2 = field?.matches("input,textarea,select,button") ? field : field?.querySelector("input,textarea,select,button");
       input2?.focus();
       field?.scrollIntoView?.({ block: "center" });
       return result;
@@ -1423,9 +2490,20 @@ function configureRuleWorkflow(section) {
     for (const row of table.querySelectorAll("tr[data-sid]")) {
       const button = document.createElement("button");
       button.type = "button";
+      button.className = "cbi-button fkp-rule-add-site";
       button.textContent = "\u0414\u043E\u0431\u0430\u0432\u0438\u0442\u044C \u0441\u0430\u0439\u0442";
       button.onclick = () => navigateToRule(table, { kind: "site", section: row.dataset.sid });
-      (row.querySelector(".cbi-section-actions") || row.lastElementChild)?.append(button);
+      const actions = row.querySelector(".cbi-section-actions") || row.lastElementChild;
+      if (actions) {
+        const bar = actions.querySelector(
+          ":scope > .fkp-rule-actions-bar, :scope > div:not(.cbi-dropdown):not(.fkp-rule-order)"
+        ) || actions;
+        const editBtn = bar.querySelector(":scope > .cbi-button-edit");
+        if (editBtn) bar.insertBefore(button, editBtn);
+        else bar.append(button);
+        const rowName = row.querySelector(".fkp-rule-name")?.textContent?.trim() || row.getAttribute("data-title") || row.dataset.sid || "";
+        ensureRowOverflowMenu(bar, rowName);
+      }
     }
     return table;
   };
@@ -1639,17 +2717,23 @@ function canUseDirectClashApi(settings) {
   const location = getWindowLocation();
   return settings?.enable_yacd === "1" && Boolean(settings.yacd_secret_key) && typeof location?.hostname === "string" && location.hostname !== "" && location.protocol !== "https:";
 }
+function formatUrlHost(hostname) {
+  if (hostname.includes(":") && !hostname.startsWith("[")) {
+    return `[${hostname}]`;
+  }
+  return hostname;
+}
 function getClashWsUrl() {
-  const { hostname } = window.location;
-  return `ws://${hostname}:9090`;
+  const host = formatUrlHost(window.location.hostname);
+  return `ws://${host}:9090`;
 }
 function getClashHttpUrl() {
-  const { hostname } = window.location;
-  return `http://${hostname}:9090`;
+  const host = formatUrlHost(window.location.hostname);
+  return `http://${host}:9090`;
 }
 function getClashUIUrl() {
-  const { hostname } = window.location;
-  return `http://${hostname}:9090/ui`;
+  const host = formatUrlHost(window.location.hostname);
+  return `http://${host}:9090/ui`;
 }
 
 // src/helpers/preserveScrollForPage.ts
@@ -1678,7 +2762,7 @@ function insertIf(condition, elements) {
 }
 
 // src/helpers/isCopyableProxyLink.ts
-var COPYABLE_PROXY_URI_RE = /^(vless|vmess|trojan|ss|ssr|hysteria2|hy2|tuic|socks4|socks4a|socks5):\/\//i;
+var COPYABLE_PROXY_URI_RE = /^(vless|vmess|trojan|ss|ssr|hysteria2|hy2|tuic|socks4|socks4a|socks5|wireguard|wg|awg|amneziawg|warp):\/\//i;
 function isCopyableProxyLink(link) {
   return COPYABLE_PROXY_URI_RE.test((link || "").trim());
 }
@@ -2490,9 +3574,9 @@ function renderSubscriptionMetadata(metadata) {
     refillDate ? { label: _("Refill"), value: refillDate } : void 0
   ].filter(Boolean);
   const actions = [
-    renderMetadataAction("Profile", metadata.webPageUrl),
-    renderMetadataAction("Support", metadata.supportUrl),
-    renderMetadataAction("More details", metadata.announceUrl)
+    renderMetadataAction(_("Profile"), metadata.webPageUrl),
+    renderMetadataAction(_("Support"), metadata.supportUrl),
+    renderMetadataAction(_("More details"), metadata.announceUrl)
   ].filter(Boolean);
   return E("div", { class: "fkp_dashboard-page__subscription-meta" }, [
     E("div", { class: "fkp_dashboard-page__subscription-meta__main" }, [
@@ -2797,6 +3881,7 @@ function renderDefaultState({
       "\u041F\u043E\u0438\u0441\u043A \u043C\u0435\u043D\u044F\u0435\u0442 \u0442\u043E\u043B\u044C\u043A\u043E \u0441\u043F\u0438\u0441\u043E\u043A \u043D\u0430 \u044D\u043A\u0440\u0430\u043D\u0435. \u0421\u043E\u0441\u0442\u0430\u0432 URLTest \u0441\u043E\u0445\u0440\u0430\u043D\u044F\u0435\u0442\u0441\u044F."
     )
   ]);
+  searchControls.hidden = rows.length <= 1;
   return E(
     "div",
     {
@@ -2826,37 +3911,7 @@ function renderDefaultState({
                 "button",
                 {
                   type: "button",
-                  click: (event) => {
-                    const root = event.currentTarget;
-                    navigateToRule(root, {
-                      kind: "site",
-                      section: section.sectionName
-                    });
-                  }
-                },
-                "\u0414\u043E\u0431\u0430\u0432\u0438\u0442\u044C \u0441\u0430\u0439\u0442"
-              ),
-              E(
-                "button",
-                {
-                  type: "button",
-                  click: (event) => {
-                    const root = event.currentTarget;
-                    navigateToRule(root, {
-                      kind: "edit",
-                      section: section.sectionName,
-                      option: "subscription_url"
-                    });
-                  }
-                },
-                "\u0418\u0437\u043C\u0435\u043D\u0438\u0442\u044C \u0438\u0441\u0442\u043E\u0447\u043D\u0438\u043A\u0438"
-              ),
-              ...subscriptionUpdateAction ? [subscriptionUpdateAction] : [],
-              E(
-                "button",
-                {
-                  type: "button",
-                  class: "btn dashboard-sections-grid-item-test-latency",
+                  class: "btn dashboard-sections-grid-item-test-latency fkp-next-primary-action",
                   "data-latency-section": section.sectionName,
                   disabled: latencyFetching ? true : void 0,
                   click: (event) => {
@@ -2884,6 +3939,45 @@ function renderDefaultState({
                   },
                   _("Test latency")
                 )
+              ),
+              createActionMenu(
+                "\u0415\u0449\u0451",
+                [
+                  ...subscriptionUpdateAction ? [subscriptionUpdateAction] : [],
+                  E(
+                    "button",
+                    {
+                      type: "button",
+                      click: (event) => {
+                        const root = event.currentTarget;
+                        navigateToRule(root, {
+                          kind: "edit",
+                          section: section.sectionName,
+                          option: "subscription_url"
+                        });
+                      }
+                    },
+                    "\u0418\u0437\u043C\u0435\u043D\u0438\u0442\u044C \u0438\u0441\u0442\u043E\u0447\u043D\u0438\u043A\u0438"
+                  ),
+                  E(
+                    "button",
+                    {
+                      type: "button",
+                      click: (event) => {
+                        const root = event.currentTarget;
+                        navigateToRule(root, {
+                          kind: "site",
+                          section: section.sectionName
+                        });
+                      }
+                    },
+                    "\u0414\u043E\u0431\u0430\u0432\u0438\u0442\u044C \u0441\u0430\u0439\u0442"
+                  )
+                ],
+                {
+                  ariaLabel: `\u0414\u0435\u0439\u0441\u0442\u0432\u0438\u044F: ${section.displayName}`,
+                  busy: Boolean(subscriptionUpdating)
+                }
               )
             ]
           )
@@ -3134,6 +4228,8 @@ async function copyToClipboard(text, feedback) {
       if (!document.execCommand("copy")) throw new Error("Clipboard refused");
     }
     textarea?.remove();
+    globalFallback?.remove();
+    globalFallback = void 0;
     announce(_("Copied"), false);
     return true;
   } catch {
@@ -3149,8 +4245,12 @@ async function copyToClipboard(text, feedback) {
         textarea?.remove();
         textarea = manual;
       }
-      if (!host.isConnected)
-        (previousFocus?.parentElement ?? document.body).append(host);
+      if (!host.isConnected) {
+        const mountTarget = previousFocus?.closest(
+          ".fkp-workspace-modal, .fkp-workspace-main, .fkp-workspace"
+        ) ?? document.body;
+        mountTarget.append(host);
+      }
     }
     const select2 = host.querySelector("button") ?? document.createElement("button");
     select2.type = "button";
@@ -3347,9 +4447,6 @@ var COMPONENT_ACTION_STATE_DIR = "/var/run/forkop/component-actions";
 var GET_UI_STATE_RPC_TIMEOUT_MS = 3e3;
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
-}
-function translate(message) {
-  return typeof _ === "function" ? _(message) : message;
 }
 function parseJsonObjectOutput(output) {
   if (!output) {
@@ -3809,7 +4906,7 @@ var ForkopShellMethods = {
                   success: true,
                   component,
                   action,
-                  message: translate("Forkop has been installed"),
+                  message: _("Forkop has been installed"),
                   current_version: installedVersion,
                   latest_version: expectedLatestVersion,
                   changed: true,
@@ -3817,8 +4914,8 @@ var ForkopShellMethods = {
                 }
               };
             }
+            continue;
           }
-          continue;
         }
         return failure;
       }
@@ -4079,6 +5176,15 @@ function getConnectionInterfaces(section) {
 function getJsonOutbounds(section) {
   const values = getListValues(section.outbound_jsons);
   return values.length ? values : getListValues(section.outbound_json);
+}
+function getEffectiveSectionAction(section) {
+  if (section.action) {
+    return section.action;
+  }
+  if (section.connection_type === "exclusion") {
+    return "bypass";
+  }
+  return section.connection_type;
 }
 function isConnectionAction(action) {
   return Boolean(
@@ -4767,11 +5873,11 @@ async function getDashboardSections(options = {}) {
   );
   const data = await Promise.all(
     configSections.filter(
-      (section) => section.enabled !== "0" && isConnectionAction(section.action)
+      (section) => section.enabled !== "0" && isConnectionAction(getEffectiveSectionAction(section))
     ).map(async (section) => {
       const displayName = getDisplayName(section);
       const sectionName = section[".name"];
-      const sectionAction = section.action;
+      const sectionAction = getEffectiveSectionAction(section);
       const proxyConfigType = getSectionProxyConfigType(section);
       if (isConnectionAction(sectionAction) && shouldUseProxyGroup(section)) {
         const subscriptionSourceCount = getSubscriptionSourceCount(section);
@@ -7953,6 +9059,7 @@ var styles = `
 
 .fkp_dashboard-page__outbound-section__title-section {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     justify-content: space-between;
     gap: 8px 10px;
@@ -7968,15 +9075,18 @@ var styles = `
 
 .fkp_dashboard-page__outbound-section__title-section__actions {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     justify-content: flex-end;
-    gap: 6px;
-    flex: 0 0 auto;
+    gap: 8px;
+    flex: 0 1 auto;
+    min-width: 0;
 }
 
 .fkp_dashboard-page .btn.fkp_dashboard-page__outbound-section__subscription-update {
     min-width: 130px;
-    min-height: 28px;
+    min-height: 42px;
+    max-width: 100%;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -7997,7 +9107,8 @@ var styles = `
 
 .fkp_dashboard-page .btn.dashboard-sections-grid-item-test-latency {
     min-width: 99px;
-    min-height: 28px;
+    min-height: 42px;
+    max-width: 100%;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -8024,9 +9135,10 @@ var styles = `
 }
 
 .fkp_dashboard-page__subscription-meta {
-    --subscription-meta-action-size: 28px;
-    --subscription-meta-action-gap: 6px;
+    --subscription-meta-action-size: 42px;
+    --subscription-meta-action-gap: 8px;
     grid-column: 1 / -1;
+    min-width: 0;
     border: 2px var(--background-color-low, lightgray) solid;
     border-radius: 4px;
     padding: 8px 10px;
@@ -8035,6 +9147,7 @@ var styles = `
 
 .fkp_dashboard-page__subscription-meta__main {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: 6px 10px;
     min-width: 0;
@@ -8050,9 +9163,9 @@ var styles = `
 
 .fkp_dashboard-page__subscription-meta__title {
     flex: 0 1 auto;
-    width: max-content;
-    max-width: min(28ch, 30%);
-    min-width: min-content;
+    width: auto;
+    max-width: 100%;
+    min-width: 0;
     color: var(--text-color-high);
     font-weight: 700;
     line-height: 1.25;
@@ -8092,6 +9205,7 @@ var styles = `
     flex: 0 0 auto;
     margin-left: auto;
     display: flex;
+    flex-wrap: wrap;
     justify-content: flex-end;
     gap: var(--subscription-meta-action-gap);
 }
@@ -8150,7 +9264,7 @@ var styles = `
     }
 
     .fkp_dashboard-page__subscription-meta__title {
-        max-width: calc(100% - 42px);
+        max-width: 100%;
     }
 }
 
@@ -8227,11 +9341,11 @@ var styles = `
 }
 
 .fkp_dashboard-page .btn.fkp_dashboard-page__outbound-grid__item__copy-button {
-    width: 22px;
-    height: 22px;
-    min-width: 22px;
-    min-height: 22px;
-    padding: 1px;
+    width: 42px;
+    height: 42px;
+    min-width: 42px;
+    min-height: 42px;
+    padding: 8px;
     box-sizing: border-box;
     display: flex;
     align-items: center;
@@ -8241,14 +9355,15 @@ var styles = `
 }
 
 .fkp_dashboard-page__outbound-grid__item__copy-button svg {
-    width: 13px;
-    height: 13px;
+    width: 14px;
+    height: 14px;
     display: block;
     flex: 0 0 auto;
 }
 
 .fkp_dashboard-page__outbound-grid__item__footer {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     justify-content: space-between;
     gap: 8px;
@@ -8278,8 +9393,9 @@ var styles = `
 
 .fkp_dashboard-page__urltest-details {
     box-sizing: border-box;
-    width: min(760px, calc(100vw - 56px));
+    width: min(760px, 100%);
     max-width: 100%;
+    min-width: 0;
     padding-top: 10px;
 }
 
@@ -8355,18 +9471,20 @@ var styles = `
 .fkp_dashboard-page__urltest-details__table {
     display: grid;
     gap: 6px;
-    width: calc(100% + 14px);
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
     box-sizing: border-box;
     max-height: min(46vh, 460px);
     overflow-x: hidden;
     overflow-y: auto;
-    padding-right: 14px;
+    padding-right: 4px;
     scrollbar-gutter: auto;
 }
 
 .fkp_dashboard-page__urltest-details__row {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(54px, max-content) 20px;
+    grid-template-columns: minmax(0, 1fr) minmax(54px, max-content) 42px;
     align-items: center;
     gap: 8px;
     width: 100%;
@@ -8470,23 +9588,24 @@ var styles = `
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    flex: 0 0 20px;
-    width: 20px;
-    min-width: 20px;
-    height: 20px;
+    flex: 0 0 42px;
+    width: 42px;
+    min-width: 42px;
+    height: 42px;
+    min-height: 42px;
     padding: 0;
     box-sizing: border-box;
 }
 
 .fkp_dashboard-page__urltest-details__copy-button svg {
-    width: 12px;
-    height: 12px;
+    width: 14px;
+    height: 14px;
 }
 
 .fkp_dashboard-page__urltest-details__copy-placeholder {
     display: block;
-    width: 20px;
-    min-width: 20px;
+    width: 42px;
+    min-width: 42px;
     height: 1px;
 }
 
@@ -8513,12 +9632,14 @@ var styles = `
     }
 
     .fkp_dashboard-page__urltest-details__row {
-        grid-template-columns: minmax(0, 1fr) 20px;
+        grid-template-columns: minmax(0, 1fr) 42px;
     }
 
     .fkp_dashboard-page__urltest-details__row-meta {
         grid-column: 1 / -1;
         justify-content: flex-start;
+        flex-wrap: wrap;
+        white-space: normal;
     }
 }
 
@@ -8598,26 +9719,33 @@ function renderSymptomGuide(read, openLogs) {
   result.dataset.symptomResult = "";
   const run = text("button", "\u041F\u0440\u043E\u0432\u0435\u0440\u0438\u0442\u044C \u0432\u044B\u0431\u0440\u0430\u043D\u043D\u044B\u0439 \u0441\u0446\u0435\u043D\u0430\u0440\u0438\u0439");
   run.type = "button";
-  const logs = text("button", "\u0422\u0435\u0445\u043D\u0438\u0447\u0435\u0441\u043A\u0438\u0435 \u043B\u043E\u0433\u0438 \u0440\u044F\u0434\u043E\u043C");
+  run.className = "fkp-next-primary-action";
+  const logs = text("button", "\u041E\u0442\u043A\u0440\u044B\u0442\u044C \u0436\u0443\u0440\u043D\u0430\u043B");
   logs.type = "button";
   logs.onclick = () => openLogs ? openLogs() : root.dispatchEvent(
     new CustomEvent("forkop:diagnostic-logs", { bubbles: true })
   );
+  const symptomActions = document.createElement("div");
+  symptomActions.className = "fkp-symptom-actions";
+  symptomActions.append(run, logs);
   let generation = 0;
   const key = () => JSON.stringify([symptom.value, domain.value, device.value, section.value]);
+  function syncFields() {
+    domainWrap.hidden = !["site", "device"].includes(symptom.value);
+    deviceWrap.hidden = symptom.value !== "device";
+    sectionWrap.hidden = symptom.value !== "source";
+  }
   function invalidate() {
     generation++;
     run.disabled = false;
     result.textContent = "\u041F\u0430\u0440\u0430\u043C\u0435\u0442\u0440\u044B \u0438\u0437\u043C\u0435\u043D\u0435\u043D\u044B \u2014 \u043F\u0440\u043E\u0432\u0435\u0440\u044C\u0442\u0435 \u0441\u043D\u043E\u0432\u0430";
-    domainWrap.hidden = !["site", "device"].includes(symptom.value);
-    deviceWrap.hidden = symptom.value !== "device";
-    sectionWrap.hidden = symptom.value !== "source";
+    syncFields();
   }
   symptom.onchange = invalidate;
   domain.oninput = invalidate;
   device.oninput = invalidate;
   section.onchange = invalidate;
-  invalidate();
+  syncFields();
   run.onclick = async () => {
     const captured = key(), id = ++generation, scenario = symptom.value;
     const target = ["site", "device"].includes(scenario) ? domain.value.trim() : "", address = scenario === "device" ? device.value.trim() : "", rule = scenario === "source" ? section.value : "";
@@ -8743,15 +9871,277 @@ function renderSymptomGuide(read, openLogs) {
       if (current()) run.disabled = false;
     }
   };
+  const tspuCard = document.createElement("div");
+  tspuCard.className = "fkp-tspu-card";
+  const tspuHeading = text("h4", "\u041F\u0440\u043E\u0432\u0435\u0440\u043A\u0430 \u0431\u043B\u043E\u043A\u0438\u0440\u043E\u0432\u043E\u043A \u0422\u0421\u041F\u0423 (\u043B\u0438\u043C\u0438\u0442 16\u201320 \u041A\u0411)");
+  const tspuHelp = text(
+    "p",
+    "\u041F\u043E\u044D\u0442\u0430\u043F\u043D\u0430\u044F \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0430 DNS, TCP, TLS ClientHello \u0438 \u0437\u0430\u0433\u0440\u0443\u0437\u043A\u0438 64 \u041A\u0411 \u043F\u043E\u0437\u0432\u043E\u043B\u044F\u0435\u0442 \u0432\u044B\u044F\u0432\u0438\u0442\u044C \u043E\u0433\u0440\u0430\u043D\u0438\u0447\u0435\u043D\u0438\u0435 \u0422\u0421\u041F\u0423 \u043D\u0430 16\u201320 \u041A\u0411, \u043F\u0440\u0438 \u043A\u043E\u0442\u043E\u0440\u043E\u043C ping \u0438 HTTP-\u0437\u0430\u0433\u043E\u043B\u043E\u0432\u043A\u0438 \u043F\u0440\u043E\u0445\u043E\u0434\u044F\u0442, \u043D\u043E \u0441\u043E\u0435\u0434\u0438\u043D\u0435\u043D\u0438\u0435 \u043E\u0431\u0440\u044B\u0432\u0430\u0435\u0442\u0441\u044F \u043F\u0440\u0438 \u043F\u0435\u0440\u0435\u0434\u0430\u0447\u0435 \u0434\u0430\u043D\u043D\u044B\u0445."
+  );
+  tspuHelp.className = "fkp-next-help";
+  const tspuDomain = document.createElement("input");
+  tspuDomain.name = "tspu_domain";
+  tspuDomain.placeholder = "youtube.com";
+  const tspuPresets = document.createElement("div");
+  tspuPresets.className = "fkp-tspu-presets";
+  for (const presetDomain of ["youtube.com", "discord.com", "cloudflare.com"]) {
+    const chip = text("button", presetDomain);
+    chip.type = "button";
+    chip.className = "fkp-tspu-preset";
+    chip.dataset.tspuPreset = presetDomain;
+    chip.onclick = () => {
+      tspuDomain.value = presetDomain;
+      tspuDomain.focus();
+    };
+    tspuPresets.append(chip);
+  }
+  const tspuCompare = document.createElement("select");
+  tspuCompare.name = "tspu_compare_section";
+  const defaultCompareOpt = text("option", "\u0411\u0435\u0437 \u0441\u0440\u0430\u0432\u043D\u0435\u043D\u0438\u044F (\u0442\u043E\u043B\u044C\u043A\u043E \u043D\u0430\u043F\u0440\u044F\u043C\u0443\u044E)");
+  defaultCompareOpt.value = "";
+  tspuCompare.append(defaultCompareOpt);
+  const tspuSectionLabels = /* @__PURE__ */ new Map();
+  const tspuConnectionSections = [];
+  const tspuRun = text("button", "\u041F\u0440\u043E\u0432\u0435\u0440\u0438\u0442\u044C \u0431\u043B\u043E\u043A\u0438\u0440\u043E\u0432\u043A\u0438 \u0422\u0421\u041F\u0423 (\u043B\u0438\u043C\u0438\u0442 16\u201320 \u041A\u0411)");
+  tspuRun.type = "button";
+  tspuRun.className = "fkp-next-primary-action";
+  tspuRun.dataset.tspuRun = "";
+  const tspuResult = text(
+    "div",
+    "\u0423\u043A\u0430\u0436\u0438\u0442\u0435 \u0434\u043E\u043C\u0435\u043D (\u043D\u0430\u043F\u0440\u0438\u043C\u0435\u0440, youtube.com) \u0434\u043B\u044F \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0438 \u044D\u0442\u0430\u043F\u043E\u0432 DNS, TCP, TLS ClientHello \u0438 \u043F\u043E\u0440\u043E\u0433\u0430 16\u201320 \u041A\u0411."
+  );
+  tspuResult.className = "fkp-tspu-result";
+  tspuResult.setAttribute("role", "status");
+  tspuResult.setAttribute("aria-live", "polite");
+  tspuResult.dataset.tspuResult = "";
+  const tspuVerdictCopy = {
+    ok: [
+      "\u0411\u043B\u043E\u043A\u0438\u0440\u043E\u0432\u043A\u0430 \u0422\u0421\u041F\u0423 \u043D\u0435 \u043E\u0431\u043D\u0430\u0440\u0443\u0436\u0435\u043D\u0430 (\u043F\u0435\u0440\u0435\u0434\u0430\u0447\u0430 64 \u041A\u0411 \u0443\u0441\u043F\u0435\u0448\u043D\u0430)",
+      "\u041F\u0440\u044F\u043C\u043E\u0435 \u0441\u043E\u0435\u0434\u0438\u043D\u0435\u043D\u0438\u0435 \u043F\u0440\u043E\u0448\u043B\u043E \u0432\u0441\u0435 4 \u044D\u0442\u0430\u043F\u0430 \u0431\u0435\u0437 \u043E\u0431\u0440\u044B\u0432\u0430 \u043D\u0430 16\u201320 \u041A\u0411."
+    ],
+    tspu_byte_cap_16kb: [
+      "\u041E\u0431\u043D\u0430\u0440\u0443\u0436\u0435\u043D\u0430 \u0431\u043B\u043E\u043A\u0438\u0440\u043E\u0432\u043A\u0430 \u0422\u0421\u041F\u0423 \u043F\u043E \u043E\u0431\u044A\u0451\u043C\u0443 \u0434\u0430\u043D\u043D\u044B\u0445 (\u043B\u0438\u043C\u0438\u0442 16\u201320 \u041A\u0411)",
+      "DNS, TCP \u0438 TLS ClientHello \u043F\u0440\u043E\u0445\u043E\u0434\u044F\u0442 (\u043F\u043E\u044D\u0442\u043E\u043C\u0443 ping \u0438 \u0437\u0430\u0433\u043E\u043B\u043E\u0432\u043A\u0438 \u0440\u0430\u0431\u043E\u0442\u0430\u044E\u0442), \u043D\u043E \u043F\u0435\u0440\u0435\u0434\u0430\u0447\u0430 \u0434\u0430\u043D\u043D\u044B\u0445 \u0437\u0430\u0432\u0438\u0441\u0430\u0435\u0442 \u0438 \u043E\u0431\u0440\u044B\u0432\u0430\u0435\u0442\u0441\u044F \u043F\u043E\u0441\u043B\u0435 16\u201320 \u041A\u0411. \u041D\u0430\u043F\u0440\u0430\u0432\u044C\u0442\u0435 \u0434\u043E\u043C\u0435\u043D \u0447\u0435\u0440\u0435\u0437 \u043F\u0440\u043E\u043A\u0441\u0438-\u0442\u0443\u043D\u043D\u0435\u043B\u044C (VLESS Reality, Hysteria2, AmneziaWG \u0438\u043B\u0438 Cloudflare WARP)."
+    ],
+    tls_hello_blocked: [
+      "\u0417\u0430\u0431\u043B\u043E\u043A\u0438\u0440\u043E\u0432\u0430\u043D\u043E \u0440\u0443\u043A\u043E\u043F\u043E\u0436\u0430\u0442\u0438\u0435 TLS ClientHello (\u0444\u0438\u043B\u044C\u0442\u0440\u0430\u0446\u0438\u044F SNI)",
+      "TCP-\u0441\u043E\u0435\u0434\u0438\u043D\u0435\u043D\u0438\u0435 \u043E\u0442\u043A\u0440\u044B\u0432\u0430\u0435\u0442\u0441\u044F, \u043D\u043E \u043F\u0430\u043A\u0435\u0442 TLS ClientHello \u0441\u0431\u0440\u0430\u0441\u044B\u0432\u0430\u0435\u0442\u0441\u044F \u0438\u043B\u0438 \u0431\u043B\u043E\u043A\u0438\u0440\u0443\u0435\u0442\u0441\u044F \u0422\u0421\u041F\u0423. \u041D\u0430\u043F\u0440\u0430\u0432\u044C\u0442\u0435 \u0434\u043E\u043C\u0435\u043D \u0447\u0435\u0440\u0435\u0437 \u0437\u0430\u0448\u0438\u0444\u0440\u043E\u0432\u0430\u043D\u043D\u044B\u0439 \u043F\u0440\u043E\u043A\u0441\u0438-\u0442\u0443\u043D\u043D\u0435\u043B\u044C."
+    ],
+    tls_cert_intercepted: [
+      "\u041E\u0448\u0438\u0431\u043A\u0430 \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0438 \u0441\u0435\u0440\u0442\u0438\u0444\u0438\u043A\u0430\u0442\u0430 \u0438\u043B\u0438 \u043F\u0435\u0440\u0435\u0445\u0432\u0430\u0442 TLS",
+      "\u041F\u0440\u043E\u0432\u0435\u0440\u044C\u0442\u0435 \u0441\u0438\u0441\u0442\u0435\u043C\u043D\u043E\u0435 \u0432\u0440\u0435\u043C\u044F \u0440\u043E\u0443\u0442\u0435\u0440\u0430; \u0435\u0441\u043B\u0438 \u0432\u0440\u0435\u043C\u044F \u0442\u043E\u0447\u043D\u043E\u0435, HTTPS-\u0441\u043E\u0435\u0434\u0438\u043D\u0435\u043D\u0438\u0435 \u043F\u0435\u0440\u0435\u0445\u0432\u0430\u0442\u044B\u0432\u0430\u0435\u0442\u0441\u044F. \u041D\u0430\u043F\u0440\u0430\u0432\u044C\u0442\u0435 \u0442\u0440\u0430\u0444\u0438\u043A \u0447\u0435\u0440\u0435\u0437 \u043F\u0440\u043E\u0432\u0435\u0440\u0435\u043D\u043D\u044B\u0439 \u0442\u0443\u043D\u043D\u0435\u043B\u044C."
+    ],
+    clock_skew: [
+      "\u0421\u0431\u043E\u0439 \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0438 TLS \u0438\u0437-\u0437\u0430 \u043D\u0435\u0432\u0435\u0440\u043D\u043E\u0433\u043E \u0441\u0438\u0441\u0442\u0435\u043C\u043D\u043E\u0433\u043E \u0432\u0440\u0435\u043C\u0435\u043D\u0438 \u0440\u043E\u0443\u0442\u0435\u0440\u0430",
+      "\u0421\u0438\u043D\u0445\u0440\u043E\u043D\u0438\u0437\u0438\u0440\u0443\u0439\u0442\u0435 \u0432\u0440\u0435\u043C\u044F \u043F\u043E NTP \u0432 \u0441\u0438\u0441\u0442\u0435\u043C\u0435 \u0438 \u043F\u043E\u0432\u0442\u043E\u0440\u0438\u0442\u0435 \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0443."
+    ],
+    tcp_blocked: [
+      "\u0411\u043B\u043E\u043A\u0438\u0440\u043E\u0432\u043A\u0430 TCP-\u0441\u043E\u0435\u0434\u0438\u043D\u0435\u043D\u0438\u044F \u043A IP-\u0430\u0434\u0440\u0435\u0441\u0443 \u0443\u0437\u043B\u0430",
+      "\u0421\u043E\u0435\u0434\u0438\u043D\u0435\u043D\u0438\u0435 \u043F\u043E \u043F\u043E\u0440\u0442\u0443 443 \u043D\u0435 \u0443\u0441\u0442\u0430\u043D\u0430\u0432\u043B\u0438\u0432\u0430\u0435\u0442\u0441\u044F. \u041D\u0430\u043F\u0440\u0430\u0432\u044C\u0442\u0435 \u0434\u043E\u043C\u0435\u043D \u0438 \u0435\u0433\u043E IP-\u043F\u043E\u0434\u0441\u0435\u0442\u0438 \u0447\u0435\u0440\u0435\u0437 \u043F\u0440\u043E\u043A\u0441\u0438-\u0442\u0443\u043D\u043D\u0435\u043B\u044C."
+    ],
+    dns_blocked: [
+      "\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0440\u0430\u0437\u0440\u0435\u0448\u0438\u0442\u044C \u0434\u043E\u043C\u0435\u043D \u0447\u0435\u0440\u0435\u0437 DNS",
+      "\u041F\u0440\u043E\u0432\u0435\u0440\u044C\u0442\u0435 \u0440\u0430\u0431\u043E\u0442\u0443 DNS \u0438 \u0437\u0430\u0449\u0438\u0449\u0451\u043D\u043D\u043E\u0433\u043E \u0440\u0435\u0437\u043E\u043B\u0432\u0435\u0440\u0430 (DoH/DoT) \u0432 \u043D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0430\u0445 Forkop."
+    ],
+    dns_spoofed: [
+      "\u041E\u0431\u043D\u0430\u0440\u0443\u0436\u0435\u043D\u0430 \u043F\u043E\u0434\u043C\u0435\u043D\u0430 DNS-\u043E\u0442\u0432\u0435\u0442\u0430 (\u0437\u0430\u0433\u043B\u0443\u0448\u043A\u0430 / \u043F\u0440\u0438\u0432\u0430\u0442\u043D\u044B\u0439 IP)",
+      "\u0412\u043A\u043B\u044E\u0447\u0438\u0442\u0435 \u0438\u0437\u043E\u043B\u0438\u0440\u043E\u0432\u0430\u043D\u043D\u044B\u0439 DNS \u0447\u0435\u0440\u0435\u0437 \u0442\u0443\u043D\u043D\u0435\u043B\u044C \u0438\u043B\u0438 \u0437\u0430\u0449\u0438\u0449\u0451\u043D\u043D\u044B\u0439 DoH/DoT \u0440\u0435\u0437\u043E\u043B\u0432\u0435\u0440."
+    ],
+    http_restricted: [
+      "\u041E\u0433\u0440\u0430\u043D\u0438\u0447\u0435\u043D\u0438\u0435 \u043D\u0430 \u0443\u0440\u043E\u0432\u043D\u0435 HTTP-\u043E\u0442\u0432\u0435\u0442\u0430 \u0441\u0435\u0440\u0432\u0438\u0441\u0430 (403 / 451)",
+      "\u0422\u0421\u041F\u0423 \u043D\u0435 \u043E\u0431\u043E\u0440\u0432\u0430\u043B \u0441\u043E\u0435\u0434\u0438\u043D\u0435\u043D\u0438\u0435, \u043D\u043E \u0441\u0430\u043C \u0432\u0435\u0431-\u0441\u0435\u0440\u0432\u0438\u0441 \u043E\u0433\u0440\u0430\u043D\u0438\u0447\u0438\u0432\u0430\u0435\u0442 \u0434\u043E\u0441\u0442\u0443\u043F \u0441 \u0432\u0430\u0448\u0435\u0433\u043E IP-\u0430\u0434\u0440\u0435\u0441\u0430. \u0412\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u0437\u0430\u0440\u0443\u0431\u0435\u0436\u043D\u044B\u0439 \u0432\u044B\u0445\u043E\u0434\u043D\u043E\u0439 \u0443\u0437\u0435\u043B."
+    ],
+    slow_link: [
+      "\u041C\u0435\u0434\u043B\u0435\u043D\u043D\u044B\u0439 \u043E\u0442\u0432\u0435\u0442: \u043F\u043E\u0440\u043E\u0433 16\u201320 \u041A\u0411 \u043F\u0440\u043E\u0439\u0434\u0435\u043D, \u043D\u043E 64 \u041A\u0411 \u043D\u0435 \u0443\u043B\u043E\u0436\u0438\u043B\u0438\u0441\u044C \u0432 \u0442\u0430\u0439\u043C-\u0430\u0443\u0442",
+      "\u041F\u0440\u0438\u0437\u043D\u0430\u043A\u043E\u0432 \u0436\u0451\u0441\u0442\u043A\u043E\u0433\u043E \u043B\u0438\u043C\u0438\u0442\u0430 \u0422\u0421\u041F\u0423 16\u201320 \u041A\u0411 \u043D\u0435\u0442; \u043F\u0440\u043E\u0432\u0435\u0440\u044C\u0442\u0435 \u043E\u0431\u0449\u0443\u044E \u0441\u043A\u043E\u0440\u043E\u0441\u0442\u044C \u043A\u0430\u043D\u0430\u043B\u0430."
+    ],
+    uplink_down: [
+      "\u041E\u0442\u0441\u0443\u0442\u0441\u0442\u0432\u0443\u0435\u0442 \u0432\u044B\u0445\u043E\u0434 \u0432 \u0438\u043D\u0442\u0435\u0440\u043D\u0435\u0442 \u0441 \u0440\u043E\u0443\u0442\u0435\u0440\u0430",
+      "\u041F\u0440\u043E\u0432\u0435\u0440\u044C\u0442\u0435 WAN-\u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435 \u0440\u043E\u0443\u0442\u0435\u0440\u0430 \u043F\u0435\u0440\u0435\u0434 \u0434\u0438\u0430\u0433\u043D\u043E\u0441\u0442\u0438\u043A\u043E\u0439 \u0431\u043B\u043E\u043A\u0438\u0440\u043E\u0432\u043E\u043A."
+    ],
+    probe_error: [
+      "\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0432\u044B\u043F\u043E\u043B\u043D\u0438\u0442\u044C \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0443 \u0422\u0421\u041F\u0423",
+      "\u041F\u0440\u043E\u0432\u0435\u0440\u044C\u0442\u0435 \u043A\u043E\u0440\u0440\u0435\u043A\u0442\u043D\u043E\u0441\u0442\u044C \u0434\u043E\u043C\u0435\u043D\u0430 \u0438 \u043D\u0430\u043B\u0438\u0447\u0438\u0435 curl \u043D\u0430 \u0440\u043E\u0443\u0442\u0435\u0440\u0435."
+    ]
+  };
+  const tspuStageTitle = {
+    dns: "1. DNS",
+    tcp: "2. TCP",
+    tls: "3. TLS ClientHello",
+    byte_cap: "4. \u041F\u0435\u0440\u0435\u0434\u0430\u0447\u0430 64 \u041A\u0411 / \u043B\u0438\u043C\u0438\u0442 16\u201320 \u041A\u0411"
+  };
+  const tspuStageStatusText = {
+    ok: "\u0423\u0441\u043F\u0435\u0448\u043D\u043E",
+    failed: "\u0421\u0431\u043E\u0439 / \u0431\u043B\u043E\u043A",
+    warning: "\u0412\u043D\u0438\u043C\u0430\u043D\u0438\u0435",
+    skipped: "\u041F\u0440\u043E\u043F\u0443\u0449\u0435\u043D\u043E"
+  };
+  const routeActionableVerdicts = /* @__PURE__ */ new Set([
+    "tspu_byte_cap_16kb",
+    "tls_hello_blocked",
+    "tls_cert_intercepted",
+    "tcp_blocked",
+    "dns_spoofed",
+    "http_restricted"
+  ]);
+  let tspuGen = 0;
+  tspuRun.onclick = async () => {
+    const rawDomain = tspuDomain.value.trim() || domain.value.trim();
+    if (!rawDomain) {
+      tspuResult.textContent = "\u0423\u043A\u0430\u0436\u0438\u0442\u0435 \u0434\u043E\u043C\u0435\u043D \u0434\u043B\u044F \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0438 \u0431\u043B\u043E\u043A\u0438\u0440\u043E\u0432\u043E\u043A \u0422\u0421\u041F\u0423 (\u043D\u0430\u043F\u0440\u0438\u043C\u0435\u0440, youtube.com).";
+      return;
+    }
+    const curGen = ++tspuGen;
+    const compareSec = tspuCompare.value.trim();
+    tspuRun.disabled = true;
+    tspuResult.textContent = `\u041F\u0440\u043E\u0432\u0435\u0440\u044F\u0435\u043C \u044D\u0442\u0430\u043F\u044B DNS \u2192 TCP \u2192 TLS ClientHello \u2192 64 \u041A\u0411 \u0434\u043B\u044F ${rawDomain}\u2026`;
+    try {
+      const res = await read("tspu_classify", {
+        domain: rawDomain,
+        section: "direct",
+        ...compareSec ? { compare_section: compareSec } : {}
+      });
+      if (curGen !== tspuGen) return;
+      if (!res.success) {
+        tspuResult.textContent = `\u041F\u0440\u043E\u0432\u0435\u0440\u043A\u0430 \u0422\u0421\u041F\u0423 \u043D\u0435 \u0432\u044B\u043F\u043E\u043B\u043D\u0435\u043D\u0430: ${res.error || "\u043E\u0448\u0438\u0431\u043A\u0430 \u0437\u0430\u043F\u0440\u043E\u0441\u0430"}.`;
+        return;
+      }
+      const d = object(res.data);
+      const verdictKey = String(d.verdict || "probe_error");
+      const [headline, advice] = tspuVerdictCopy[verdictKey] || [
+        `\u0420\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442: ${verdictKey}`,
+        "\u0421\u0440\u0430\u0432\u043D\u0438\u0442\u0435 \u043F\u043E\u0432\u0435\u0434\u0435\u043D\u0438\u0435 \u0447\u0435\u0440\u0435\u0437 \u0432\u044B\u0431\u0440\u0430\u043D\u043D\u043E\u0435 \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435."
+      ];
+      const stageMap = /* @__PURE__ */ new Map();
+      for (const rawStage of Array.isArray(d.stages) ? d.stages : []) {
+        const st = object(rawStage);
+        if (typeof st.stage === "string") {
+          stageMap.set(st.stage, st);
+        }
+      }
+      const stageGrid = document.createElement("div");
+      stageGrid.className = "fkp-tspu-stages";
+      for (const stageKey of ["dns", "tcp", "tls", "byte_cap"]) {
+        const st = stageMap.get(stageKey) || { status: "skipped" };
+        const statusKey = String(st.status || "skipped");
+        const item = document.createElement("div");
+        item.className = "fkp-tspu-stage";
+        item.dataset.tspuStage = stageKey;
+        item.dataset.tspuStatus = statusKey;
+        const titleNode = text("strong", tspuStageTitle[stageKey] || stageKey);
+        const metaParts = [
+          tspuStageStatusText[statusKey] || statusKey
+        ];
+        if (typeof st.remote_ip === "string" && st.remote_ip) {
+          metaParts.push(st.remote_ip);
+        }
+        if (typeof st.bytes_read === "number" && st.bytes_read > 0) {
+          const kb = (st.bytes_read / 1024).toFixed(1);
+          metaParts.push(`${kb} \u041A\u0411`);
+        }
+        if (typeof st.http_code === "number" && st.http_code > 0) {
+          metaParts.push(`HTTP ${st.http_code}`);
+        }
+        if (typeof st.duration_ms === "number" && st.duration_ms >= 0) {
+          metaParts.push(`${st.duration_ms} \u043C\u0441`);
+        }
+        const detailNode = text("span", metaParts.join(" \xB7 "));
+        item.append(titleNode, detailNode);
+        stageGrid.append(item);
+      }
+      tspuResult.replaceChildren(
+        text("strong", headline),
+        text("p", advice),
+        stageGrid
+      );
+      if (d.comparison && typeof d.comparison === "object") {
+        const comp = object(d.comparison);
+        const compSec = String(comp.section || compareSec);
+        const compLabel = tspuSectionLabels.get(compSec) || compSec;
+        const compText = comp.bypass_verified === true ? `\u0421\u0440\u0430\u0432\u043D\u0435\u043D\u0438\u0435 \u0441 \u043C\u0430\u0440\u0448\u0440\u0443\u0442\u043E\u043C \xAB${compLabel}\xBB: \u043E\u0431\u0445\u043E\u0434 \u043F\u043E\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0451\u043D (\u043F\u0435\u0440\u0435\u0434\u0430\u0447\u0430 64 \u041A\u0411 \u043F\u0440\u043E\u0448\u043B\u0430 \u0431\u0435\u0437 \u0431\u043B\u043E\u043A\u0438\u0440\u043E\u0432\u043A\u0438).` : `\u0421\u0440\u0430\u0432\u043D\u0435\u043D\u0438\u0435 \u0441 \u043C\u0430\u0440\u0448\u0440\u0443\u0442\u043E\u043C \xAB${compLabel}\xBB: \u0441\u0442\u0430\u0442\u0443\u0441 ${String(comp.verdict || "\u043D\u0435 \u043F\u043E\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0451\u043D")}.`;
+        const compNode = text("p", compText);
+        compNode.className = "fkp-tspu-comparison";
+        tspuResult.append(compNode);
+      }
+      const actionsRow = document.createElement("div");
+      actionsRow.className = "fkp-tspu-actions";
+      if (routeActionableVerdicts.has(verdictKey)) {
+        const targetSec = compareSec || (tspuConnectionSections.includes("main") ? "main" : tspuConnectionSections[0]) || "";
+        const targetLabel = targetSec ? tspuSectionLabels.get(targetSec) || targetSec : "";
+        const fixRouteBtn = text(
+          "button",
+          targetSec ? `\u041D\u0430\u043F\u0440\u0430\u0432\u0438\u0442\u044C ${rawDomain} \u0447\u0435\u0440\u0435\u0437 \xAB${targetLabel}\xBB` : `\u0421\u043E\u0437\u0434\u0430\u0442\u044C \u043F\u0440\u0430\u0432\u0438\u043B\u043E \u043E\u0431\u0445\u043E\u0434\u0430 \u0434\u043B\u044F ${rawDomain}`
+        );
+        fixRouteBtn.type = "button";
+        fixRouteBtn.className = "fkp-next-primary-action";
+        fixRouteBtn.dataset.tspuFixRoute = "";
+        fixRouteBtn.onclick = () => {
+          const ok = targetSec ? navigateToRule(root, {
+            kind: "site",
+            section: targetSec,
+            option: "domain",
+            site: rawDomain
+          }) : navigateToRule(root, {
+            kind: "create",
+            option: "selector_proxy_links"
+          });
+          if (!ok) {
+            tspuResult.append(
+              text(
+                "p",
+                `\u041E\u0442\u043A\u0440\u043E\u0439\u0442\u0435 \u0440\u0430\u0437\u0434\u0435\u043B \xAB\u041F\u0440\u0430\u0432\u0438\u043B\u0430\xBB \u0438 \u0434\u043E\u0431\u0430\u0432\u044C\u0442\u0435 \u0434\u043E\u043C\u0435\u043D ${rawDomain} \u0432 \u0443\u0441\u043B\u043E\u0432\u0438\u044F \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u044F.`
+              )
+            );
+          }
+        };
+        actionsRow.append(fixRouteBtn);
+      }
+      if (verdictKey === "dns_blocked" || verdictKey === "dns_spoofed") {
+        const fixDnsBtn = text("button", "\u041E\u0442\u043A\u0440\u044B\u0442\u044C \u043D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438 DNS");
+        fixDnsBtn.type = "button";
+        fixDnsBtn.dataset.tspuFixDns = "";
+        fixDnsBtn.onclick = () => {
+          const map = root.closest(".cbi-map") || document;
+          map.querySelector(
+            '.cbi-tabmenu [data-tab="settings"] a, .cbi-tabmenu [data-tab="settings"] button'
+          )?.click();
+          const dnsField = map.querySelector(
+            "#widget\\.cbid\\.forkop\\.settings\\.dns_type"
+          ) || map.querySelector(
+            "#cbi-forkop-settings-dns_type select"
+          ) || map.querySelector("#cbi-forkop-settings-dns_type");
+          dnsField?.focus();
+          dnsField?.scrollIntoView?.({ block: "center" });
+        };
+        actionsRow.append(fixDnsBtn);
+      }
+      if (actionsRow.childNodes.length) {
+        tspuResult.append(actionsRow);
+      }
+    } catch {
+      if (curGen !== tspuGen) return;
+      tspuResult.textContent = "\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0432\u044B\u043F\u043E\u043B\u043D\u0438\u0442\u044C \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0443 \u0422\u0421\u041F\u0423. \u041F\u0440\u043E\u0432\u0435\u0440\u044C\u0442\u0435 \u0441\u043E\u0435\u0434\u0438\u043D\u0435\u043D\u0438\u0435 \u0441 \u0440\u043E\u0443\u0442\u0435\u0440\u043E\u043C.";
+    } finally {
+      if (curGen === tspuGen) tspuRun.disabled = false;
+    }
+  };
+  const tspuControls = document.createElement("div");
+  tspuControls.className = "fkp-tspu-controls";
+  tspuControls.append(
+    labelled("\u0414\u043E\u043C\u0435\u043D \u0434\u043B\u044F \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0438 \u0422\u0421\u041F\u0423", tspuDomain),
+    tspuPresets,
+    labelled("\u0421\u0440\u0430\u0432\u043D\u0438\u0442\u044C \u0441 \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435\u043C (\u043D\u0435\u043E\u0431\u044F\u0437\u0430\u0442\u0435\u043B\u044C\u043D\u043E)", tspuCompare)
+  );
+  tspuCard.append(tspuHeading, tspuHelp, tspuControls, tspuRun, tspuResult);
   root.append(
     text("h3", "\u0427\u0442\u043E \u043D\u0435 \u0440\u0430\u0431\u043E\u0442\u0430\u0435\u0442?"),
     labelled("\u0421\u0438\u043C\u043F\u0442\u043E\u043C", symptom),
     domainWrap,
     deviceWrap,
     sectionWrap,
-    run,
+    symptomActions,
     result,
-    logs
+    tspuCard
   );
   void read("status").then((response) => {
     if (!response.success) return;
@@ -8759,9 +10149,19 @@ function renderSymptomGuide(read, openLogs) {
     for (const raw of Array.isArray(rows) ? rows : []) {
       const row = object(raw);
       if (typeof row.name !== "string") continue;
-      const option = text("option", String(row.label || row.name));
+      const labelText = String(row.label || row.name);
+      tspuSectionLabels.set(row.name, labelText);
+      const option = text("option", labelText);
       option.value = row.name;
       section.append(option);
+      if (!row.action || ["connection", "proxy", "outbound", "vpn"].includes(
+        String(row.action)
+      )) {
+        tspuConnectionSections.push(row.name);
+        const compOpt = text("option", labelText);
+        compOpt.value = row.name;
+        tspuCompare.append(compOpt);
+      }
     }
   }).catch(() => {
     result.textContent = "\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0437\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044C \u043F\u0440\u0430\u0432\u0438\u043B\u0430. \u041E\u0442\u043A\u0440\u043E\u0439\u0442\u0435 \u0434\u0438\u0430\u0433\u043D\u043E\u0441\u0442\u0438\u043A\u0443 \u043F\u043E\u0432\u0442\u043E\u0440\u043D\u043E; \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0438 \u043D\u0435 \u0437\u0430\u043F\u0443\u0441\u043A\u0430\u043B\u0438\u0441\u044C.";
@@ -8814,7 +10214,7 @@ async function nextRequest(action, payload = {}) {
   try {
     const response = await executeShellCommand({
       command: "/usr/bin/forkop",
-      args: action === "route_explain" ? ["route_explain", JSON.stringify(payload)] : ["next", action, JSON.stringify(payload)],
+      args: action === "route_explain" || action === "tspu_classify" ? [action, JSON.stringify(payload)] : ["next", action, JSON.stringify(payload)],
       timeout: 6e4,
       operationName: `Forkop Next ${action}`
     });
@@ -9777,10 +11177,15 @@ var styles3 = `
 
 .fkp-partial-modal__body {}
 
+.fkp-partial-modal__body :is([role="status"], [role="alert"]):empty {
+    display: none;
+}
+
 .fkp-partial-modal__content {
-    max-height: 70vh;
-    overflow: scroll;
-    border-radius: 4px;
+    max-height: min(70vh, calc(100dvh - 180px));
+    max-width: 100%;
+    overflow: auto;
+    border-radius: 8px;
 }
 
 .fkp-partial-modal__footer {
@@ -9793,11 +11198,14 @@ var styles3 = `
 
 .fkp-partial-modal__footer button {
     margin-left: 0;
+    min-height: 42px;
+    min-width: 42px;
 }
 
 .fkp-partial-modal__checkbox {
     display: inline-flex;
     align-items: center;
+    min-height: 42px;
     gap: 8px;
     margin-right: auto;
     cursor: pointer;
@@ -9806,6 +11214,13 @@ var styles3 = `
 
 .fkp-partial-modal__checkbox-text {
     line-height: 1.2;
+}
+
+@media (max-width: 560px) {
+    .fkp-partial-modal__checkbox {
+        flex-basis: 100%;
+        margin-right: 0;
+    }
 }
 `;
 
@@ -10017,7 +11432,6 @@ function renderModal(text, name, options) {
   };
   const downloadButton = renderButton({
     text: _("Download"),
-    classNames: ["cbi-button-apply"],
     onClick: () => {
       if (exportReady) downloadAsTxt(currentText, name);
     }
@@ -10049,7 +11463,6 @@ ${currentText}
   footer.push(
     renderButton({
       text: _("Close"),
-      classNames: ["cbi-button-remove"],
       onClick: () => {
         destroy();
         ui.hideModal();
@@ -10163,8 +11576,16 @@ function renderAvailableActions({
   viewLogs,
   showSingBoxConfig
 }) {
-  return E("div", { class: "fkp_diagnostic-page__right-bar__actions" }, [
-    E("b", {}, _("Available actions")),
+  const primaryButtons = [
+    ...insertIf(viewLogs.visible, [
+      renderButton({
+        onClick: viewLogs.onClick,
+        icon: renderSquareChartGanttIcon24,
+        text: _("View logs"),
+        loading: viewLogs.loading,
+        disabled: viewLogs.disabled
+      })
+    ]),
     ...insertIf(restart.visible, [
       renderButton({
         classNames: ["cbi-button-apply"],
@@ -10175,16 +11596,6 @@ function renderAvailableActions({
         disabled: restart.disabled
       })
     ]),
-    ...insertIf(stop.visible, [
-      renderButton({
-        classNames: ["cbi-button-remove"],
-        onClick: stop.onClick,
-        icon: renderCircleStopIcon24,
-        text: _("Stop Forkop"),
-        loading: stop.loading,
-        disabled: stop.disabled
-      })
-    ]),
     ...insertIf(start.visible, [
       renderButton({
         classNames: ["cbi-button-save"],
@@ -10193,6 +11604,38 @@ function renderAvailableActions({
         text: _("Start Forkop"),
         loading: start.loading,
         disabled: start.disabled
+      })
+    ])
+  ];
+  const overflowConfigButtons = [
+    ...insertIf(showSingBoxConfig.visible, [
+      renderButton({
+        onClick: showSingBoxConfig.onClick,
+        icon: renderCogIcon24,
+        text: _("Show sing-box config"),
+        loading: showSingBoxConfig.loading,
+        disabled: showSingBoxConfig.disabled
+      })
+    ]),
+    ...insertIf(globalCheck.visible, [
+      renderButton({
+        onClick: globalCheck.onClick,
+        icon: renderCircleCheckBigIcon24,
+        text: _("Get global check"),
+        loading: globalCheck.loading,
+        disabled: globalCheck.disabled
+      })
+    ])
+  ];
+  const overflowServiceButtons = [
+    ...insertIf(enable.visible, [
+      renderButton({
+        classNames: ["cbi-button-save"],
+        onClick: enable.onClick,
+        icon: renderPlayIcon24,
+        text: _("Enable autostart"),
+        loading: enable.loading,
+        disabled: enable.disabled
       })
     ]),
     ...insertIf(disable.visible, [
@@ -10205,43 +11648,50 @@ function renderAvailableActions({
         disabled: disable.disabled
       })
     ]),
-    ...insertIf(enable.visible, [
+    ...insertIf(stop.visible, [
       renderButton({
-        classNames: ["cbi-button-save"],
-        onClick: enable.onClick,
-        icon: renderPlayIcon24,
-        text: _("Enable autostart"),
-        loading: enable.loading,
-        disabled: enable.disabled
-      })
-    ]),
-    ...insertIf(globalCheck.visible, [
-      renderButton({
-        onClick: globalCheck.onClick,
-        icon: renderCircleCheckBigIcon24,
-        text: _("Get global check"),
-        loading: globalCheck.loading,
-        disabled: globalCheck.disabled
-      })
-    ]),
-    ...insertIf(viewLogs.visible, [
-      renderButton({
-        onClick: viewLogs.onClick,
-        icon: renderSquareChartGanttIcon24,
-        text: _("View logs"),
-        loading: viewLogs.loading,
-        disabled: viewLogs.disabled
-      })
-    ]),
-    ...insertIf(showSingBoxConfig.visible, [
-      renderButton({
-        onClick: showSingBoxConfig.onClick,
-        icon: renderCogIcon24,
-        text: _("Show sing-box config"),
-        loading: showSingBoxConfig.loading,
-        disabled: showSingBoxConfig.disabled
+        classNames: ["cbi-button-remove"],
+        onClick: stop.onClick,
+        icon: renderCircleStopIcon24,
+        text: _("Stop Forkop"),
+        loading: stop.loading,
+        disabled: stop.disabled
       })
     ])
+  ];
+  const hasOverflow = overflowConfigButtons.length > 0 || overflowServiceButtons.length > 0;
+  const overflowBusy = Boolean(
+    showSingBoxConfig.loading || globalCheck.loading || enable.loading || disable.loading || stop.loading
+  );
+  return E("div", { class: "fkp_diagnostic-page__right-bar__actions" }, [
+    E("b", {}, _("Available actions")),
+    ...primaryButtons.length ? [
+      E("div", { class: "fkp_diagnostic-page__actions-group" }, [
+        ...primaryButtons
+      ])
+    ] : [],
+    ...hasOverflow ? [
+      createActionMenu(
+        "\u0414\u043E\u043F\u043E\u043B\u043D\u0438\u0442\u0435\u043B\u044C\u043D\u043E",
+        [
+          ...overflowConfigButtons.length ? [
+            actionMenuHeading("\u041A\u043E\u043D\u0444\u0438\u0433\u0443\u0440\u0430\u0446\u0438\u044F \u0438 \u043E\u0442\u0447\u0451\u0442"),
+            ...overflowConfigButtons
+          ] : [],
+          ...overflowConfigButtons.length && overflowServiceButtons.length ? [actionMenuDivider()] : [],
+          ...overflowServiceButtons.length ? [
+            actionMenuHeading("\u0423\u043F\u0440\u0430\u0432\u043B\u0435\u043D\u0438\u0435 \u0441\u0435\u0440\u0432\u0438\u0441\u043E\u043C"),
+            ...overflowServiceButtons
+          ] : []
+        ],
+        {
+          block: true,
+          ariaLabel: "\u0414\u043E\u043F\u043E\u043B\u043D\u0438\u0442\u0435\u043B\u044C\u043D\u044B\u0435 \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u044F \u0434\u0438\u0430\u0433\u043D\u043E\u0441\u0442\u0438\u043A\u0438",
+          open: overflowBusy,
+          busy: overflowBusy
+        }
+      )
+    ] : []
   ]);
 }
 
@@ -10276,6 +11726,9 @@ function renderCheckSummary(items2) {
   });
   return E("div", { class: "fkp_diagnostic_alert__summary" }, renderedItems);
 }
+function renderSummaryRow(items2) {
+  return items2.length > 0 ? [E("div", {}, ""), renderCheckSummary(items2)] : [];
+}
 function renderLoadingState3(props) {
   const iconWrap = E("span", { class: "fkp_diagnostic_alert__icon" });
   iconWrap.appendChild(renderLoaderCircleIcon24());
@@ -10292,8 +11745,7 @@ function renderLoadingState3(props) {
           props.description
         )
       ]),
-      E("div", {}, ""),
-      renderCheckSummary(props.items)
+      ...renderSummaryRow(props.items)
     ]
   );
 }
@@ -10313,8 +11765,7 @@ function renderWarningState(props) {
           props.description
         )
       ]),
-      E("div", {}, ""),
-      renderCheckSummary(props.items)
+      ...renderSummaryRow(props.items)
     ]
   );
 }
@@ -10334,8 +11785,7 @@ function renderErrorState(props) {
           props.description
         )
       ]),
-      E("div", {}, ""),
-      renderCheckSummary(props.items)
+      ...renderSummaryRow(props.items)
     ]
   );
 }
@@ -10355,8 +11805,7 @@ function renderSuccessState(props) {
           props.description
         )
       ]),
-      E("div", {}, ""),
-      renderCheckSummary(props.items)
+      ...renderSummaryRow(props.items)
     ]
   );
 }
@@ -10376,8 +11825,7 @@ function renderSkippedState(props) {
           props.description
         )
       ]),
-      E("div", {}, ""),
-      renderCheckSummary(props.items)
+      ...renderSummaryRow(props.items)
     ]
   );
 }
@@ -10446,7 +11894,7 @@ function renderSystemInfo({ items: items2 }) {
           E("b", {}, item.key),
           E("div", {}, [
             E("span", {}, item.value),
-            E("span", { class: tagClass }, item?.tag?.label)
+            ...item.tag?.label ? [E("span", { class: tagClass }, item.tag.label)] : []
           ])
         ]
       );
@@ -10486,10 +11934,9 @@ function renderWikiDisclaimer(kind) {
       ])
     ]),
     renderButton({
-      classNames: ["cbi-button-save"],
       text: _("Open Project Page"),
       onClick: () => window.open(
-        "https://github.com/ushan0v/forkop#readme",
+        "https://github.com/m0llusca/forkop-next#readme",
         "_blank",
         "noopener,noreferrer"
       )
@@ -10792,11 +12239,25 @@ function clearPersistedDiagnosticRun(storage = getSessionStorage3()) {
 var MASKED_VALUE = "MASKED";
 var SING_BOX_MASKED_KEYS = /* @__PURE__ */ new Set([
   "auth_key",
+  "auth_str",
+  "certificate",
+  "certificate_path",
+  "client_id",
   "control_url",
   "exit_node",
+  "headers",
   "hostname",
+  "key",
+  "key_path",
   "listen",
   "listen_port",
+  "obfs",
+  "peer_public_key",
+  "pre_shared_key",
+  "reserved",
+  "service_name",
+  "token",
+  "users",
   "username",
   "uuid",
   "server",
@@ -10820,6 +12281,7 @@ var SING_BOX_MASKED_KEYS = /* @__PURE__ */ new Set([
 var FORKOP_MASK_AFTER_TOKEN = [
   "option proxy_string",
   "option hwid",
+  "option subscription_hwid",
   "option subscription_url",
   "list subscription_urls",
   "list urltest_proxy_links",
@@ -10834,10 +12296,24 @@ var FORKOP_MASK_AFTER_TOKEN = [
   "option reality_public_key",
   "option reality_short_id",
   "list reality_short_id",
-  "option yacd_secret_key"
+  "option yacd_secret_key",
+  "option pre_shared_key",
+  "option private_key",
+  "option public_key",
+  "option preshared_key",
+  "option auth_token",
+  "option token",
+  "option secret",
+  "option key",
+  "option passphrase",
+  "option wireguard_private_key",
+  "option amneziawg_private_key"
 ];
 var FORKOP_MASK_AFTER_TOKEN_SPACE = [
   "option outbound_json",
+  "list outbound_jsons",
+  "option inbound_json",
+  "list inbound_jsons",
   "list domain",
   "list domain_suffix",
   "list domain_keyword",
@@ -10847,8 +12323,10 @@ var FORKOP_MASK_AFTER_TOKEN_SPACE = [
   "list fully_routed_ips",
   "option dns_server",
   "option bootstrap_dns_server",
+  "option domain_resolver_dns_server",
   "list dns_server",
   "list bootstrap_dns_server",
+  "list domain_resolver_dns_server",
   "option listen",
   "option listen_port",
   "option public_host",
@@ -10869,18 +12347,37 @@ var FORKOP_MASK_AFTER_TOKEN_SPACE = [
   "option mixed_proxy_username",
   "option mixed_proxy_password",
   "option ipaddr",
+  "option ip6addr",
+  "option ip6prefix",
   "option netmask",
   "option gateway",
+  "option ip6gw",
+  "list ipaddr",
+  "list ip6addr",
+  "option macaddr",
+  "option clientid",
+  "option vendorid",
+  "option endpoint_host",
+  "option peer_pubkey",
   "option username",
   "option password",
   "option private_key",
   "option url"
+];
+var MULTILINE_JSON_TOKENS = [
+  "option outbound_json",
+  "list outbound_jsons",
+  "option inbound_json",
+  "list inbound_jsons"
 ];
 function isRecord2(value) {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 function isSpaceChar(value) {
   return value === " " || value === "	" || value === "\r" || value === "\n";
+}
+function normalizeDirectiveSpacing(line) {
+  return line.replace(/^(\s*(?:option|list))\s+([^\s]+)\s+/, "$1 $2 ");
 }
 function maskAfterToken(line, token) {
   const position = line.indexOf(token);
@@ -10914,8 +12411,57 @@ function maskOptionPath(line, token) {
   const quote = quoteOffset + slash + 1;
   return `${line.slice(0, slash)}/MASKED'${line.slice(quote + 1)}`;
 }
+var WG_WARP_URI_IN_TEXT_RE = /\b(wireguard|wg|awg|amneziawg|warp):\/\/[^\s'"]+/gi;
+var SENSITIVE_URI_QUERY_KEY_RE = /^(privatekey|private_key|private-key|psk|presharedkey|pre_shared_key|pre-shared-key|token|auth_token|license|license_key|secret)$/i;
+var IPV6_ULA_IN_TEXT_RE = /\b(?:f[cd][0-9a-f]{2}:[0-9a-f:]*:[0-9a-f:]*(?:\/\d{1,3})?)\b/gi;
+var FAKEIP_V6_PREFIX_RE = /^2001:0*2(?::|$)/i;
+function maskWgWarpUriInText(rawUri) {
+  const schemeIdx = rawUri.indexOf("://");
+  if (schemeIdx < 0) return rawUri;
+  const schemePrefix = rawUri.slice(0, schemeIdx + 3);
+  const rest = rawUri.slice(schemeIdx + 3);
+  const hashIdx = rest.indexOf("#");
+  const hashSuffix = hashIdx >= 0 ? rest.slice(hashIdx) : "";
+  const withoutHash = hashIdx >= 0 ? rest.slice(0, hashIdx) : rest;
+  const queryIdx = withoutHash.indexOf("?");
+  const authority = queryIdx >= 0 ? withoutHash.slice(0, queryIdx) : withoutHash;
+  const rawQuery = queryIdx >= 0 ? withoutHash.slice(queryIdx + 1) : null;
+  const lastAt = authority.lastIndexOf("@");
+  const maskedAuthority = lastAt >= 0 ? `[REDACTED]@${authority.slice(lastAt + 1)}` : authority;
+  if (rawQuery === null) {
+    return `${schemePrefix}${maskedAuthority}${hashSuffix}`;
+  }
+  const maskedPairs = rawQuery.split("&").map((pair) => {
+    const eqIdx = pair.indexOf("=");
+    if (eqIdx < 0) return pair;
+    const rawKey = pair.slice(0, eqIdx);
+    let decodedKey = rawKey;
+    try {
+      decodedKey = decodeURIComponent(rawKey);
+    } catch {
+      decodedKey = rawKey;
+    }
+    if (SENSITIVE_URI_QUERY_KEY_RE.test(decodedKey.trim())) {
+      return `${rawKey}=[REDACTED]`;
+    }
+    return pair;
+  });
+  return `${schemePrefix}${maskedAuthority}?${maskedPairs.join("&")}${hashSuffix}`;
+}
+function maskFreeTextWgWarpAndUla(line) {
+  const withMaskedUris = line.replace(
+    WG_WARP_URI_IN_TEXT_RE,
+    (match) => maskWgWarpUriInText(match)
+  );
+  return withMaskedUris.replace(IPV6_ULA_IN_TEXT_RE, (match) => {
+    if (FAKEIP_V6_PREFIX_RE.test(match)) {
+      return match;
+    }
+    return "[REDACTED]";
+  });
+}
 function maskGlobalCheckLine(line) {
-  let maskedLine = line;
+  let maskedLine = normalizeDirectiveSpacing(line);
   for (const token of FORKOP_MASK_AFTER_TOKEN) {
     maskedLine = maskAfterToken(maskedLine, token);
   }
@@ -10924,11 +12470,20 @@ function maskGlobalCheckLine(line) {
   }
   maskedLine = maskOptionPath(maskedLine, "option dns_server '");
   maskedLine = maskOptionPath(maskedLine, "list dns_server '");
+  maskedLine = maskOptionPath(
+    maskedLine,
+    "option domain_resolver_dns_server '"
+  );
+  maskedLine = maskFreeTextWgWarpAndUla(maskedLine);
   return maskedLine;
+}
+function hasUnescapedClosingSingleQuote(value) {
+  const cleaned = value.replace(/'\\''/g, "");
+  return cleaned.includes("'");
 }
 function maskMultilineContinuation(line) {
   const leadingSpace = line.match(/^\s*/)?.[0] ?? "";
-  const hasClosingQuote = line.includes("'");
+  const hasClosingQuote = hasUnescapedClosingSingleQuote(line);
   return `${leadingSpace}${MASKED_VALUE}${hasClosingQuote ? "'" : ""}`;
 }
 function maskSingBoxConfigValue(value) {
@@ -10958,15 +12513,16 @@ function maskGlobalCheckText(text = "") {
   let inMaskedMultiline = false;
   return `${text}`.split("\n").map((line) => {
     if (inMaskedMultiline) {
-      if (line.includes("'")) {
+      if (hasUnescapedClosingSingleQuote(line)) {
         inMaskedMultiline = false;
       }
       return maskMultilineContinuation(line);
     }
+    const normalizedLine = normalizeDirectiveSpacing(line);
     const maskedLine = maskGlobalCheckLine(line);
-    if (line.includes("option outbound_json")) {
-      const firstQuote = line.indexOf("'");
-      if (firstQuote >= 0 && line.slice(firstQuote + 1).indexOf("'") < 0) {
+    if (MULTILINE_JSON_TOKENS.some((t) => normalizedLine.includes(t))) {
+      const firstQuote = normalizedLine.indexOf("'");
+      if (firstQuote >= 0 && !hasUnescapedClosingSingleQuote(normalizedLine.slice(firstQuote + 1))) {
         inMaskedMultiline = true;
       }
     }
@@ -11628,7 +13184,7 @@ function renderDiagnosticSystemInfoWidget() {
       value: normalizeCompiledVersion(diagnosticsSystemInfo.forkop_version)
     },
     {
-      key: "Luci App",
+      key: _("LuCI app"),
       value: normalizeCompiledVersion(FORKOP_LUCI_APP_VERSION)
     },
     {
@@ -11656,11 +13212,11 @@ function renderDiagnosticSystemInfoWidget() {
   }
   items2.push(
     {
-      key: "OS",
+      key: _("System"),
       value: diagnosticsSystemInfo.openwrt_version
     },
     {
-      key: "Device",
+      key: _("Device"),
       value: diagnosticsSystemInfo.device_model
     }
   );
@@ -11919,7 +13475,7 @@ async function initController2() {
         () => void handleViewLogs()
       );
       guide.dataset.nativeSymptomGuide = "";
-      (host.querySelector(".fkp_diagnostic-page__left-bar") || host).prepend(
+      (host.querySelector(".fkp_diagnostic-page__left-bar") || host).append(
         guide
       );
     }
@@ -11944,30 +13500,41 @@ var styles4 = `
 
 .fkp_diagnostic-page {
     display: grid;
-    grid-template-columns: 2fr 1fr;
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
     grid-column-gap: 10px;
     align-items: start;
+    min-width: 0;
 }
 
-@media (max-width: 800px) {
+@media (max-width: 960px) {
     .fkp_diagnostic-page {
-        grid-template-columns: 1fr;
+        grid-template-columns: minmax(0, 1fr);
+        row-gap: 16px;
     }
 }
 
 .fkp_diagnostic-page__right-bar {
     display: grid;
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
     grid-row-gap: 10px;
+    min-width: 0;
+}
+
+@media (min-width: 981px) {
+    .fkp_diagnostic-page__right-bar {
+        position: sticky;
+        top: 18px;
+    }
 }
 
 .fkp_diagnostic-page__right-bar__wiki {
     border: 2px var(--background-color-low, lightgray) solid;
     border-radius: 4px;
     padding: 10px;
+    min-width: 0;
 
     display: grid;
-    grid-template-columns: auto;
+    grid-template-columns: minmax(0, 1fr);
     grid-row-gap: 10px;
 }
 
@@ -11980,24 +13547,41 @@ var styles4 = `
 
 .fkp_diagnostic-page__right-bar__wiki__content {
     display: grid;
-    grid-template-columns: 1fr 5fr;
+    grid-template-columns: 24px minmax(0, 1fr);
     grid-column-gap: 10px;
+    min-width: 0;
 }
 
-.fkp_diagnostic-page__right-bar__wiki__texts {}
+.fkp_diagnostic-page__right-bar__wiki__texts {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
 
 .fkp_diagnostic-page__right-bar__actions {
     border: 2px var(--background-color-low, lightgray) solid;
     border-radius: 4px;
     padding: 10px;
+    min-width: 0;
 
     display: grid;
-    grid-template-columns: auto;
+    grid-template-columns: minmax(0, 1fr);
     grid-row-gap: 10px;
 
 }
 
-.fkp_diagnostic-page__right-bar__actions > .fkp-partial-button {
+.fkp_diagnostic-page__right-bar__actions .fkp_diagnostic-page__actions-group {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-row-gap: 8px;
+    min-width: 0;
+}
+
+.fkp_diagnostic-page__right-bar__actions .fkp_diagnostic-page__actions-group--service {
+    padding-top: 8px;
+    border-top: 1px var(--background-color-low, lightgray) solid;
+}
+
+.fkp_diagnostic-page__right-bar__actions .fkp-partial-button {
     width: 100%;
     min-width: 0;
     margin-left: 0;
@@ -12007,9 +13591,10 @@ var styles4 = `
     border: 2px var(--background-color-low, lightgray) solid;
     border-radius: 4px;
     padding: 10px;
+    min-width: 0;
 
     display: grid;
-    grid-template-columns: auto;
+    grid-template-columns: minmax(0, 1fr);
     grid-row-gap: 10px;
 }
 
@@ -12019,8 +13604,10 @@ var styles4 = `
 
 .fkp_diagnostic-page__right-bar__system-info__row {
     display: grid;
-    grid-template-columns: auto 1fr;
+    grid-template-columns: minmax(0, auto) minmax(0, 1fr);
     grid-column-gap: 5px;
+    min-width: 0;
+    overflow-wrap: anywhere;
 }
 
 .fkp_diagnostic-page__right-bar__system-info__row__tag {
@@ -12047,8 +13634,9 @@ var styles4 = `
 
 .fkp_diagnostic-page__left-bar {
     display: grid;
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
     grid-row-gap: 10px;
+    min-width: 0;
 }
 
 .fkp_diagnostic-page__run_check_wrapper {}
@@ -12059,16 +13647,18 @@ var styles4 = `
 
 .fkp_diagnostic-page__checks {
     display: grid;
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
     grid-row-gap: 10px;
+    min-width: 0;
 }
 
 .fkp_diagnostic_alert {
     border: 2px var(--background-color-low, lightgray) solid;
     border-radius: 4px;
+    min-width: 0;
 
     display: grid;
-    grid-template-columns: 24px 1fr;
+    grid-template-columns: 24px minmax(0, 1fr);
     grid-column-gap: 10px;
     align-items: center;
     padding: 10px;
@@ -12097,13 +13687,19 @@ var styles4 = `
 
 .fkp_diagnostic_alert__icon {}
 
-.fkp_diagnostic_alert__content {}
+.fkp_diagnostic_alert__content {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
 
 .fkp_diagnostic_alert__title {
     display: block;
+    overflow-wrap: anywhere;
 }
 
-.fkp_diagnostic_alert__description {}
+.fkp_diagnostic_alert__description {
+    overflow-wrap: anywhere;
+}
 
 .fkp_diagnostic_alert__summary {
     margin-top: 10px;
@@ -12111,8 +13707,10 @@ var styles4 = `
 
 .fkp_diagnostic_alert__summary__item {
     display: grid;
-    grid-template-columns: 16px auto 1fr;
+    grid-template-columns: 16px minmax(0, auto) minmax(0, 1fr);
     grid-column-gap: 10px;
+    min-width: 0;
+    overflow-wrap: anywhere;
 }
 
 .fkp_diagnostic_alert__summary__item--error {
@@ -12790,43 +14388,49 @@ function renderConnectionRow(connection) {
   const target = getTargetCellParts(connection);
   const source = getSourceCellParts(connection);
   const isClosing = closingConnectionIds.has(connection.id);
-  const closeButton = activeTab === "active" ? E(
-    "button",
-    {
-      class: "btn cbi-button fkp_monitoring-page__row-action",
-      title: _("Close connection"),
-      "aria-label": _("Close connection"),
-      type: "button",
-      value: connection.id,
-      ...isClosing ? { disabled: true } : {}
-    },
-    [renderXIcon24()]
-  ) : E("span", {}, "-");
+  const cells = [
+    renderTableCell(_("Host"), [renderValue(target.primary)]),
+    renderTableCell(_("Type"), [
+      renderValue(getNetwork(connection), "fkp_monitoring-page__network")
+    ]),
+    renderTableCell(_("Route"), [
+      renderValue(getRoute(connection), "fkp_monitoring-page__route")
+    ]),
+    renderTableCell(_("Time"), [
+      renderValue(formatConnectionDuration(connection))
+    ]),
+    renderTableCell(_("Downloaded"), [
+      renderValue(formatBytes2(connection.download))
+    ]),
+    renderTableCell(_("Uploaded"), [
+      renderValue(formatBytes2(connection.upload))
+    ]),
+    renderTableCell(_("Source"), [renderSourceValue(source)])
+  ];
+  if (activeTab === "active") {
+    cells.push(
+      renderTableCell(_("Close"), [
+        E(
+          "button",
+          {
+            class: "btn cbi-button fkp_monitoring-page__row-action",
+            title: _("Close connection"),
+            "aria-label": _("Close connection"),
+            type: "button",
+            value: connection.id,
+            ...isClosing ? { disabled: true } : {}
+          },
+          [renderXIcon24()]
+        )
+      ])
+    );
+  }
   return E(
     "tr",
     {
       class: isClosing ? "fkp_monitoring-page__row--closing" : ""
     },
-    [
-      renderTableCell(_("Host"), [renderValue(target.primary)]),
-      renderTableCell(_("Type"), [
-        renderValue(getNetwork(connection), "fkp_monitoring-page__network")
-      ]),
-      renderTableCell(_("Route"), [
-        renderValue(getRoute(connection), "fkp_monitoring-page__route")
-      ]),
-      renderTableCell(_("Time"), [
-        renderValue(formatConnectionDuration(connection))
-      ]),
-      renderTableCell(_("Downloaded"), [
-        renderValue(formatBytes2(connection.download))
-      ]),
-      renderTableCell(_("Uploaded"), [
-        renderValue(formatBytes2(connection.upload))
-      ]),
-      renderTableCell(_("Source"), [renderSourceValue(source)]),
-      renderTableCell(_("Close"), [closeButton])
-    ]
+    cells
   );
 }
 function renderStateRow(text, className = "") {
@@ -12835,7 +14439,7 @@ function renderStateRow(text, className = "") {
       "td",
       {
         class: "fkp_monitoring-page__state-cell",
-        colSpan: 8
+        colSpan: activeTab === "active" ? 8 : 7
       },
       [
         E(
@@ -12865,7 +14469,7 @@ function renderConnectionsTable(connections, state) {
             E("th", {}, `\u2193 ${_("Downloaded")}`),
             E("th", {}, `\u2191 ${_("Uploaded")}`),
             E("th", {}, _("Source")),
-            E("th", {}, _("Close"))
+            ...activeTab === "active" ? [E("th", {}, _("Close"))] : []
           ])
         ]),
         E("tbody", {}, rows)
@@ -13463,7 +15067,7 @@ async function initController3(controllerDependencies = {}) {
   monitoringControllerInitialized = true;
   onMount("monitoring-status").then(() => {
     registerLifecycleListeners3();
-    if (store.get().tabService.current === "monitoring") {
+    if (store.get().tabService.current === "monitoring" || isActiveLuciTab("monitoring")) {
       onPageMount3();
     }
   });
@@ -13494,8 +15098,8 @@ var styles5 = `
 }
 
 .fkp_monitoring-page {
-    --fkp-monitoring-control-height: 34px;
-    --fkp-monitoring-row-action-size: 24px;
+    --fkp-monitoring-control-height: 42px;
+    --fkp-monitoring-row-action-size: 42px;
     --fkp-monitoring-divider-color: rgba(127, 127, 127, 0.22);
     --fkp-monitoring-soft-bg: rgba(127, 127, 127, 0.08);
     --fkp-monitoring-soft-bg-hover: rgba(127, 127, 127, 0.14);
@@ -13519,10 +15123,10 @@ var styles5 = `
 }
 
 .fkp_monitoring-page .btn.fkp_monitoring-page__icon-button {
-    width: 32px;
-    height: 32px;
-    min-width: 32px;
-    min-height: 32px;
+    width: 42px;
+    height: 42px;
+    min-width: 42px;
+    min-height: 42px;
     padding: 0;
     box-sizing: border-box;
     display: flex;
@@ -13544,8 +15148,8 @@ var styles5 = `
 }
 
 .fkp_monitoring-page .btn.fkp_monitoring-page__icon-button--active {
-    background: rgba(25, 118, 210, 0.16) !important;
-    color: var(--primary-color-high, #1976d2) !important;
+    background: var(--fkp-selected, rgba(20, 99, 94, 0.14)) !important;
+    color: var(--next-accent, var(--primary-color-high, #1976d2)) !important;
 }
 
 .fkp_monitoring-page .btn.fkp_monitoring-page__icon-button:disabled {
@@ -13566,19 +15170,25 @@ var styles5 = `
     color: color-mix(in srgb, var(--fkp-monitoring-danger-color) 70%, white) !important;
 }
 
-.fkp_monitoring-page #monitoring-pause-toggle.btn.fkp_monitoring-page__icon-button,
-.fkp_monitoring-page #monitoring-pause-toggle.btn.fkp_monitoring-page__icon-button--active {
+.fkp_monitoring-page #monitoring-pause-toggle.btn.fkp_monitoring-page__icon-button {
     order: 1;
-    border-color: rgba(128, 128, 128, 0.3) !important;
+    border-color: var(--next-line, rgba(128, 128, 128, 0.3)) !important;
     background: transparent !important;
     color: var(--text-color-medium, #888) !important;
 }
 
+.fkp_monitoring-page #monitoring-pause-toggle.btn.fkp_monitoring-page__icon-button--active {
+    order: 1;
+    border-color: var(--next-accent, var(--fkp-monitoring-paused-color)) !important;
+    background: var(--fkp-selected, rgba(20, 99, 94, 0.12)) !important;
+    color: var(--next-accent, var(--fkp-monitoring-paused-color)) !important;
+}
+
 .fkp_monitoring-page #monitoring-pause-toggle.btn.fkp_monitoring-page__icon-button:hover:not(:disabled),
 .fkp_monitoring-page #monitoring-pause-toggle.btn.fkp_monitoring-page__icon-button--active:hover:not(:disabled) {
-    border-color: rgba(128, 128, 128, 0.6) !important;
-    background: transparent !important;
-    color: var(--text-color-high, #eee) !important;
+    border-color: var(--next-accent, rgba(128, 128, 128, 0.6)) !important;
+    background: var(--fkp-hover, transparent) !important;
+    color: var(--next-accent, var(--text-color-high, #eee)) !important;
 }
 
 .fkp_monitoring-page__icon-button svg,
@@ -13610,9 +15220,10 @@ var styles5 = `
 
 .fkp_monitoring-page__tabs {
     display: inline-flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: 2px;
-    width: max-content;
+    max-width: 100%;
     padding: 2px;
     border: 1px solid var(--fkp-monitoring-divider-color);
     border-radius: 6px;
@@ -13621,10 +15232,10 @@ var styles5 = `
 }
 
 .fkp_monitoring-page .btn.fkp_monitoring-page__tab {
-    height: calc(var(--fkp-monitoring-control-height) - 6px);
-    min-height: calc(var(--fkp-monitoring-control-height) - 6px);
+    height: auto;
+    min-height: 42px;
     margin: 0;
-    padding: 0 12px;
+    padding: 6px 12px;
     border: 0 !important;
     border-radius: 4px;
     background: transparent !important;
@@ -13635,7 +15246,7 @@ var styles5 = `
     justify-content: center;
     gap: 8px;
     font-weight: 600;
-    line-height: 1;
+    line-height: 1.2;
 }
 
 .fkp_monitoring-page .btn.fkp_monitoring-page__tab:hover {
@@ -13644,8 +15255,8 @@ var styles5 = `
 }
 
 .fkp_monitoring-page .btn.fkp_monitoring-page__tab--active {
-    background: rgba(25, 118, 210, 0.16) !important;
-    color: var(--primary-color-high, #1976d2) !important;
+    background: var(--fkp-selected, rgba(20, 99, 94, 0.14)) !important;
+    color: var(--next-accent, var(--primary-color-high, #1976d2)) !important;
     font-weight: 700;
 }
 
@@ -13670,8 +15281,8 @@ var styles5 = `
 }
 
 .fkp_monitoring-page__tab--active .fkp_monitoring-page__tab-badge {
-    background: rgba(25, 118, 210, 0.22);
-    color: var(--primary-color-high, #1976d2);
+    background: color-mix(in srgb, var(--next-accent, #14635e) 18%, transparent);
+    color: var(--next-accent, var(--primary-color-high, #1976d2));
 }
 
 .fkp_monitoring-page__filters {
@@ -13741,13 +15352,15 @@ var styles5 = `
 
 .fkp_monitoring-page__table-wrap {
     width: 100%;
+    max-width: 100%;
     overflow-x: auto;
     margin-bottom: 0;
 }
 
 .fkp_monitoring-page__table {
     width: 100%;
-    min-width: 840px;
+    max-width: 100%;
+    min-width: 0;
     table-layout: fixed;
     border-collapse: collapse;
     border-spacing: 0;
@@ -13761,7 +15374,9 @@ var styles5 = `
     box-sizing: border-box;
     text-align: left;
     vertical-align: middle;
+    min-width: 0;
     overflow: hidden;
+    text-overflow: ellipsis;
     white-space: nowrap;
 }
 
@@ -13775,7 +15390,7 @@ var styles5 = `
 }
 
 .fkp_monitoring-page__table th:nth-child(1) {
-    width: 28%;
+    width: 24%;
 }
 
 .fkp_monitoring-page__table th:nth-child(2) {
@@ -13783,19 +15398,19 @@ var styles5 = `
 }
 
 .fkp_monitoring-page__table th:nth-child(3) {
-    width: 16%;
+    width: 15%;
 }
 
 .fkp_monitoring-page__table th:nth-child(4) {
-    width: 8%;
+    width: 7.5%;
 }
 
 .fkp_monitoring-page__table th:nth-child(5) {
-    width: 9.5%;
+    width: 11.5%;
 }
 
 .fkp_monitoring-page__table th:nth-child(6) {
-    width: 8.5%;
+    width: 10.5%;
 }
 
 .fkp_monitoring-page__table th:nth-child(7) {
@@ -13803,7 +15418,7 @@ var styles5 = `
 }
 
 .fkp_monitoring-page__table th:nth-child(8) {
-    width: 8%;
+    width: 9.5%;
 }
 
 .fkp_monitoring-page__table tbody tr:last-child td {
@@ -13853,6 +15468,7 @@ var styles5 = `
     align-items: baseline;
     justify-content: flex-start;
     gap: 5px;
+    min-width: 0;
 }
 
 .fkp_monitoring-page__source-name {
@@ -13891,7 +15507,9 @@ var styles5 = `
 
 .fkp_monitoring-page__route {
     display: inline-block;
-    width: auto;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
     padding: 2px 6px;
     border-radius: 4px;
     background: rgba(128, 128, 128, 0.15);
@@ -13960,11 +15578,14 @@ var styles5 = `
 .fkp_monitoring-page__state {
     min-height: 90px;
     width: 100%;
+    padding: 12px;
     display: flex;
     align-items: center;
     justify-content: center;
     color: var(--text-color-medium);
     text-align: center;
+    white-space: normal;
+    overflow-wrap: anywhere;
     box-sizing: border-box;
 }
 
@@ -14008,6 +15629,7 @@ var styles5 = `
     .fkp_monitoring-page__table td {
         display: block;
         width: 100%;
+        max-width: 100%;
     }
 
     .fkp_monitoring-page__table tr {
@@ -14024,18 +15646,25 @@ var styles5 = `
         gap: 8px;
         border: 0;
         border-bottom: 1px solid var(--fkp-monitoring-divider-color);
-        padding: 4px 0;
+        padding: 6px 0;
         box-sizing: border-box;
         text-align: left;
+        white-space: normal;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+    }
+
+    .fkp_monitoring-page__table td.fkp_monitoring-page__state-cell {
+        display: block;
+        grid-template-columns: none;
     }
 
     .fkp_monitoring-page__table td::before {
         content: attr(data-label);
         color: var(--text-color-medium);
         font-weight: 700;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
+        overflow-wrap: anywhere;
+        white-space: normal;
     }
 
     .fkp_monitoring-page__table td:last-child {
@@ -14046,11 +15675,21 @@ var styles5 = `
         padding: 0;
     }
 
+    .fkp_monitoring-page__value,
+    .fkp_monitoring-page__source-name,
+    .fkp_monitoring-page__source-ip,
+    .fkp_monitoring-page__route {
+        white-space: normal;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+    }
+
     .fkp_monitoring-page__value {
         text-align: right;
     }
 
     .fkp_monitoring-page__source-value {
+        flex-wrap: wrap;
         justify-content: flex-end;
     }
 
@@ -14087,12 +15726,17 @@ var styles5 = `
         width: 100%;
     }
 
-    .fkp_monitoring-page__table td {
-        grid-template-columns: 1fr;
+    .fkp_monitoring-page__table td,
+    .fkp_monitoring-page__table td:last-child {
+        grid-template-columns: minmax(0, 1fr);
         gap: 2px;
+        text-align: left;
     }
 
-    .fkp_monitoring-page__value {
+    .fkp_monitoring-page__value,
+    .fkp_monitoring-page__table td:nth-child(4) .fkp_monitoring-page__value,
+    .fkp_monitoring-page__table td:nth-child(5) .fkp_monitoring-page__value,
+    .fkp_monitoring-page__table td:nth-child(6) .fkp_monitoring-page__value {
         text-align: left;
     }
 
@@ -14123,6 +15767,7 @@ function render4() {
 var object2 = (value) => value && typeof value === "object" ? value : {};
 function showComponentImpact(options) {
   const root = document.createElement("div");
+  root.className = "fkp-component-impact";
   const text = (tag, value) => {
     const node = document.createElement(tag);
     node.textContent = value;
@@ -14135,9 +15780,11 @@ function showComponentImpact(options) {
     options.action === "remove" ? "\u0423\u0434\u0430\u043B\u0438\u0442\u044C \u043F\u043E\u0441\u043B\u0435 \u043F\u0440\u043E\u0441\u043C\u043E\u0442\u0440\u0430" : "\u0423\u0441\u0442\u0430\u043D\u043E\u0432\u0438\u0442\u044C \u043F\u043E\u0441\u043B\u0435 \u043F\u0440\u043E\u0441\u043C\u043E\u0442\u0440\u0430"
   );
   start.type = "button";
+  start.className = options.action === "remove" ? "btn cbi-button cbi-button-remove" : "btn cbi-button cbi-button-positive";
   start.disabled = true;
   const cancel = text("button", "\u041E\u0442\u043C\u0435\u043D\u0430");
   cancel.type = "button";
+  cancel.className = "btn cbi-button";
   let active = true;
   cancel.onclick = () => {
     active = false;
@@ -14159,7 +15806,10 @@ function showComponentImpact(options) {
     ui.hideModal();
     options.proceed();
   };
-  root.append(result, cancel, start);
+  const buttonRow = document.createElement("div");
+  buttonRow.className = "button-row";
+  buttonRow.append(cancel, start);
+  root.append(result, buttonRow);
   ui.showModal("\u0412\u043B\u0438\u044F\u043D\u0438\u0435 \u0438\u0437\u043C\u0435\u043D\u0435\u043D\u0438\u044F \u043A\u043E\u043C\u043F\u043E\u043D\u0435\u043D\u0442\u0430", root);
   void executeShellCommand({
     command: "/usr/bin/forkop",
@@ -14304,9 +15954,18 @@ function getLatestVersion(component) {
   }
   return checkResult.latest_version || void 0;
 }
+function isSafeHttpsReleaseUrl(url) {
+  if (!url) return false;
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
 function getGitHubReleaseUrl(component) {
   const checkResult = getVisibleCheckResult(component);
-  if (!checkResult || !shouldShowInstallAfterCheck(component) || !checkResult.release_url) {
+  if (!checkResult || !shouldShowInstallAfterCheck(component) || !isSafeHttpsReleaseUrl(checkResult.release_url)) {
     return void 0;
   }
   return checkResult.release_url;
@@ -15000,7 +16659,7 @@ function renderComponentCard(card) {
     if (checkResult.status === "outdated") {
       labelText = _("Update is available:");
       const versionToShow = checkResult.latest_version || card.latestVersion || card.version;
-      if (checkResult.release_url) {
+      if (isSafeHttpsReleaseUrl(checkResult.release_url)) {
         latestValueNodes.push(
           E(
             "a",
@@ -15021,7 +16680,7 @@ function renderComponentCard(card) {
     } else if (checkResult.status === "dev") {
       labelText = `${_("Installed version is newer than release")}. ${_("Latest version:")}`;
       const versionToShow = checkResult.latest_version || card.latestVersion;
-      if (checkResult.release_url) {
+      if (isSafeHttpsReleaseUrl(checkResult.release_url)) {
         latestValueNodes.push(
           E(
             "a",
@@ -15107,39 +16766,70 @@ function renderComponentCard(card) {
       onClick: () => previewComponentAction(action)
     });
   });
-  if (primaryButtons.length > 0 || dangerButtons.length > 0) {
+  const variantButtons = variantActions.map((action) => {
+    const loading2 = updatesActions[action.key].loading;
+    return renderButton({
+      text: action.text,
+      icon: action.icon,
+      loading: loading2,
+      disabled: systemInfoLoading || serviceRuntimeActionLoading || anyActionLoading && !loading2,
+      onClick: () => previewComponentAction(action)
+    });
+  });
+  if (primaryButtons.length > 0) {
+    const overflowBusy = [...variantActions, ...dangerActions].some(
+      (a) => updatesActions[a.key].loading
+    );
+    const hasSecondary = variantButtons.length > 0 || dangerButtons.length > 0;
     actionElements.push(
       E("div", { class: "fkp_updates-page__component__actions-main" }, [
         ...primaryButtons,
-        ...dangerButtons
+        ...hasSecondary ? [
+          createActionMenu(
+            variantButtons.length > 0 ? "\u0421\u0431\u043E\u0440\u043A\u0438" : "\u0415\u0449\u0451",
+            [
+              ...variantButtons.length > 0 ? [
+                actionMenuHeading(_("Install another build:")),
+                ...variantButtons
+              ] : [],
+              ...variantButtons.length > 0 && dangerButtons.length > 0 ? [actionMenuDivider()] : [],
+              ...dangerButtons
+            ],
+            {
+              ariaLabel: `\u0414\u0435\u0439\u0441\u0442\u0432\u0438\u044F: ${card.title}`,
+              open: overflowBusy,
+              busy: overflowBusy
+            }
+          )
+        ] : []
       ])
     );
-  }
-  if (variantActions.length > 0) {
-    const variantButtons = variantActions.map((action) => {
-      const loading2 = updatesActions[action.key].loading;
-      return renderButton({
-        text: action.text,
-        icon: action.icon,
-        loading: loading2,
-        disabled: systemInfoLoading || serviceRuntimeActionLoading || anyActionLoading && !loading2,
-        onClick: () => previewComponentAction(action)
-      });
-    });
-    actionElements.push(
-      E("div", { class: "fkp_updates-page__component__variants" }, [
+  } else {
+    if (dangerButtons.length > 0) {
+      actionElements.push(
         E(
           "div",
-          { class: "fkp_updates-page__component__variants-title" },
-          _("Install another build:")
-        ),
-        E(
-          "div",
-          { class: "fkp_updates-page__component__variants-buttons" },
-          variantButtons
+          { class: "fkp_updates-page__component__actions-main" },
+          dangerButtons
         )
-      ])
-    );
+      );
+    }
+    if (variantButtons.length > 0) {
+      actionElements.push(
+        E("div", { class: "fkp_updates-page__component__variants" }, [
+          E(
+            "div",
+            { class: "fkp_updates-page__component__variants-title" },
+            _("Install another build:")
+          ),
+          E(
+            "div",
+            { class: "fkp_updates-page__component__variants-buttons" },
+            variantButtons
+          )
+        ])
+      );
+    }
   }
   const actionsContainer = E(
     "div",
@@ -15158,15 +16848,44 @@ function renderComponentCard(card) {
   cardChildren.push(actionsContainer);
   return E("div", { class: "fkp_updates-page__component" }, cardChildren);
 }
+async function checkAllInstalledUpdates() {
+  const checkActions = getComponentCards().flatMap((card) => card.actions).filter((act) => act.action === "check_update");
+  for (const act of checkActions) {
+    if (!updatesMounted) break;
+    await handleComponentAction(act);
+  }
+}
 function renderUpdatesComponents() {
   const container = document.getElementById("fkp_updates-components");
   if (!container) {
     return;
   }
+  const cards = getComponentCards();
   const columns = [[], []];
-  getComponentCards().forEach((card) => {
+  cards.forEach((card) => {
     columns[card.column].push(renderComponentCard(card));
   });
+  const pageRoot = document.getElementById("updates-status");
+  if (pageRoot) {
+    let toolbar = document.getElementById("fkp_updates-toolbar");
+    if (!toolbar) {
+      toolbar = E("div", {
+        id: "fkp_updates-toolbar",
+        class: "fkp_updates-page__toolbar"
+      });
+      pageRoot.prepend(toolbar);
+    }
+    const busy = isAnyActionLoading() || isServiceRuntimeActionLoading() || isSystemInfoLoading();
+    toolbar.replaceChildren(
+      renderButton({
+        text: "\u041F\u0440\u043E\u0432\u0435\u0440\u0438\u0442\u044C \u0432\u0441\u0435 \u043E\u0431\u043D\u043E\u0432\u043B\u0435\u043D\u0438\u044F",
+        icon: renderSearchIcon24,
+        loading: busy,
+        disabled: busy,
+        onClick: () => void checkAllInstalledUpdates()
+      })
+    );
+  }
   return preserveScrollForPage(() => {
     container.replaceChildren(
       E("div", { class: "fkp_updates-page__components-column" }, columns[0]),
@@ -15280,6 +16999,7 @@ var styles6 = `
 
 .fkp_updates-page {
     width: 100%;
+    min-width: 0;
 }
 
 .fkp_updates-page__components {
@@ -15287,23 +17007,26 @@ var styles6 = `
     align-items: flex-start;
     gap: 10px;
     width: 100%;
+    min-width: 0;
     flex-wrap: wrap;
 }
 
 .fkp_updates-page__components-column {
     display: flex;
-    flex: 1 1 auto;
+    flex: 1 1 280px;
     flex-direction: column;
     gap: 10px;
-    min-width: max-content;
+    min-width: 0;
+    max-width: 100%;
 }
 
-@media (max-width: 760px) {
+@media (max-width: 960px) {
     .fkp_updates-page__components {
         flex-direction: column;
     }
 
     .fkp_updates-page__components-column {
+        flex-basis: auto;
         width: 100%;
         min-width: 0;
     }
@@ -15316,7 +17039,8 @@ var styles6 = `
     display: flex;
     flex-direction: column;
     gap: 10px;
-    min-width: max-content;
+    min-width: 0;
+    max-width: 100%;
 }
 
 .fkp_updates-page__component__header {
@@ -15324,6 +17048,7 @@ var styles6 = `
     align-items: center;
     flex-wrap: wrap;
     gap: 8px;
+    min-width: 0;
     border-bottom: 1px var(--background-color-low, lightgray) solid;
     padding-bottom: 8px;
     margin-bottom: 2px;
@@ -15334,27 +17059,34 @@ var styles6 = `
     font-size: 16px;
     font-weight: bold;
     line-height: 1.2;
+    min-width: 0;
+    overflow-wrap: anywhere;
 }
 
 .fkp_updates-page__component__header-version {
     color: var(--text-color-medium, #888);
     font-size: 13px;
     font-weight: normal;
+    min-width: 0;
+    overflow-wrap: anywhere;
 }
 
 .fkp_updates-page__component__details {
     display: flex;
     flex-direction: column;
     gap: 6px;
+    min-width: 0;
 }
 
 .fkp_updates-page__component__info-row {
     display: flex;
     justify-content: flex-start;
     align-items: center;
+    flex-wrap: wrap;
     min-height: 24px;
     gap: 8px;
-    white-space: nowrap;
+    min-width: 0;
+    white-space: normal;
 }
 
 .fkp_updates-page__component__info-label {
@@ -15368,6 +17100,7 @@ var styles6 = `
     font-size: 13px;
     text-align: left;
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: 6px;
     min-width: 0;
@@ -15383,6 +17116,7 @@ var styles6 = `
     color: var(--link-color, #3498db) !important;
     text-decoration: underline;
     font-weight: bold;
+    overflow-wrap: anywhere;
 }
 
 .fkp_updates-page__component__release-version-link:hover {
@@ -15394,6 +17128,7 @@ var styles6 = `
     flex-direction: column;
     gap: 10px;
     margin-top: auto;
+    min-width: 0;
 }
 
 .fkp_updates-page__component__actions--with-details {
@@ -15405,8 +17140,9 @@ var styles6 = `
     display: flex;
     justify-content: flex-start;
     align-items: center;
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
     gap: 6px;
+    min-width: 0;
 }
 
 .fkp_updates-page__component__variants {
@@ -15414,6 +17150,7 @@ var styles6 = `
     flex-direction: column;
     gap: 6px;
     margin-top: 4px;
+    min-width: 0;
 }
 
 .fkp_updates-page__component__variants-title {
@@ -15424,8 +17161,9 @@ var styles6 = `
 
 .fkp_updates-page__component__variants-buttons {
     display: flex;
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
     gap: 6px;
+    min-width: 0;
 }
 `;
 
@@ -15527,8 +17265,8 @@ ${PartialStyles}
 
 /* Skeleton styles*/
 .skeleton {
-    background-color: var(--background-color-low, #e0e0e0);
-    border-radius: 4px;
+    background-color: var(--next-subtle, var(--background-color-low, #e0e0e0));
+    border-radius: 8px;
     position: relative;
     overflow: hidden;
 }
@@ -15543,7 +17281,7 @@ ${PartialStyles}
     background: linear-gradient(
             90deg,
             transparent,
-            rgba(255, 255, 255, 0.4),
+            color-mix(in srgb, var(--next-fg, #fff) 10%, transparent),
             transparent
     );
     animation: skeleton-shimmer 1.6s infinite;
@@ -15557,18 +17295,20 @@ ${PartialStyles}
 /* Toast */
 .toast-container {
     position: fixed;
-    bottom: 30px;
-    left: 50%;
-    transform: translateX(-50%);
+    bottom: max(16px, env(safe-area-inset-bottom, 0px));
+    left: 16px;
+    right: 16px;
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: 10px;
     z-index: 9999;
     font-family: system-ui, sans-serif;
+    pointer-events: none;
 }
 
 .toast {
+    box-sizing: border-box;
     opacity: 0;
     transform: translateY(10px);
     transition: opacity 0.3s ease, transform 0.3s ease;
@@ -15577,9 +17317,12 @@ ${PartialStyles}
     color: #fff;
     font-size: 14px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-    min-width: 220px;
-    max-width: 340px;
+    min-width: 0;
+    width: auto;
+    max-width: min(360px, 100%);
+    overflow-wrap: anywhere;
     text-align: center;
+    pointer-events: auto;
 }
 
 .toast-success {
@@ -15593,6 +17336,17 @@ ${PartialStyles}
 .toast.visible {
     opacity: 1;
     transform: translateY(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .rotate,
+    .skeleton::after {
+        animation: none !important;
+    }
+
+    .toast {
+        transition: none !important;
+    }
 }
 ${workspaceStyles}
 `;
@@ -15720,10 +17474,17 @@ function renderDeviceProfileTools(request, initialRequest = request, area = "all
     h.textContent = text;
     group.append(h);
   };
-  const note = (text) => {
+  const note = (text, target = group) => {
     const p = document.createElement("p");
     p.textContent = text;
-    group.append(p);
+    target.append(p);
+    return p;
+  };
+  const actionsRow = (target = group) => {
+    const row = document.createElement("div");
+    row.className = "fkp-next-actions";
+    target.append(row);
+    return row;
   };
   const field = (tag, name2) => {
     const label = document.createElement("label");
@@ -15758,7 +17519,7 @@ function renderDeviceProfileTools(request, initialRequest = request, area = "all
     if (!response.success) throw new Error(response.error || "request_failed");
     return response.data;
   };
-  const button = (text, output, task) => {
+  const button = (text, output, task, target = group) => {
     const b = document.createElement("button");
     b.type = "button";
     b.textContent = text;
@@ -15775,18 +17536,13 @@ function renderDeviceProfileTools(request, initialRequest = request, area = "all
         output.setAttribute("aria-busy", "false");
       }
     });
-    group.append(b);
+    target.append(b);
     return b;
   };
   heading("\u0423\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430");
   note(
     "\u0417\u0434\u0435\u0441\u044C \u043F\u043E\u043A\u0430\u0437\u0430\u043D\u044B \u0441\u043E\u0445\u0440\u0430\u043D\u0451\u043D\u043D\u044B\u0435 \u043D\u0430\u0437\u043D\u0430\u0447\u0435\u043D\u0438\u044F \u043C\u0430\u0440\u0448\u0440\u0443\u0442\u043E\u0432. \u041E\u0441\u0442\u0430\u043B\u044C\u043D\u044B\u0435 \u0443\u0441\u043B\u043E\u0432\u0438\u044F \u0432\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u044F \u0438 \u0438\u0441\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u044F \u0437\u0430\u0434\u0430\u044E\u0442\u0441\u044F \u0432 \u043F\u0440\u0430\u0432\u0438\u043B\u0430\u0445."
   );
-  const rules = document.createElement("button");
-  rules.type = "button";
-  rules.textContent = "\u041E\u0442\u043A\u0440\u044B\u0442\u044C \u0443\u0441\u043B\u043E\u0432\u0438\u044F \u0432 \u043F\u0440\u0430\u0432\u0438\u043B\u0430\u0445";
-  rules.onclick = () => root.closest(".cbi-map")?.querySelector('.cbi-tabmenu [data-tab="section"] a')?.click();
-  group.append(rules);
   const devices = document.createElement("ul");
   group.append(devices);
   const device = field("input", "\u0410\u0434\u0440\u0435\u0441 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430");
@@ -15797,6 +17553,11 @@ function renderDeviceProfileTools(request, initialRequest = request, area = "all
   const route = field("select", "\u041C\u0430\u0440\u0448\u0440\u0443\u0442 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430");
   options(route, []);
   const deviceResult = result("\u0420\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430");
+  const deviceActions = actionsRow();
+  const rules = document.createElement("button");
+  rules.type = "button";
+  rules.textContent = "\u041E\u0442\u043A\u0440\u044B\u0442\u044C \u0443\u0441\u043B\u043E\u0432\u0438\u044F \u0432 \u043F\u0440\u0430\u0432\u0438\u043B\u0430\u0445";
+  rules.onclick = () => root.closest(".cbi-map")?.querySelector('.cbi-tabmenu [data-tab="section"] a')?.click();
   let assignments = [];
   const routeLabels = /* @__PURE__ */ new Map([
     ["direct", "\u0412\u0441\u0435\u0433\u0434\u0430 \u043D\u0430\u043F\u0440\u044F\u043C\u0443\u044E"],
@@ -15807,7 +17568,11 @@ function renderDeviceProfileTools(request, initialRequest = request, area = "all
     devices.replaceChildren();
     for (const item of assignments) {
       const li = document.createElement("li");
-      li.textContent = `${item.address} \u2192 ${routeLabels.get(item.section) || item.section}`;
+      const label = document.createElement("span");
+      label.textContent = `${item.address} \u2192 ${routeLabels.get(item.section) || item.section}`;
+      const itemActions = document.createElement("div");
+      itemActions.className = "fkp-next-item-actions";
+      li.append(label, itemActions);
       try {
         requireIPv4(item.address);
       } catch {
@@ -15822,7 +17587,7 @@ function renderDeviceProfileTools(request, initialRequest = request, area = "all
           }))
             deviceResult.textContent = "\u041E\u0442\u043A\u0440\u043E\u0439\u0442\u0435 \u044D\u0442\u043E \u043F\u0440\u0430\u0432\u0438\u043B\u043E \u0432 \u043F\u043E\u043B\u043D\u043E\u043C \u0440\u0435\u0434\u0430\u043A\u0442\u043E\u0440\u0435: IPv6 \u0438 \u043F\u043E\u0434\u0441\u0435\u0442\u0438 \u0441\u043E\u0445\u0440\u0430\u043D\u044F\u044E\u0442\u0441\u044F \u0431\u0435\u0437 \u0438\u0437\u043C\u0435\u043D\u0435\u043D\u0438\u0439.";
         };
-        li.append(native);
+        itemActions.append(native);
         devices.append(li);
         continue;
       }
@@ -15834,10 +17599,22 @@ function renderDeviceProfileTools(request, initialRequest = request, area = "all
         route.value = item.section === "nxt_direct" ? "direct" : item.section;
         device.focus();
       };
-      const reset = button("\u041F\u043E \u043E\u0431\u0449\u0438\u043C \u043F\u0440\u0430\u0432\u0438\u043B\u0430\u043C", deviceResult, async () => {
-        await saveDevice(item.address, "");
-      });
-      li.append(edit, reset);
+      itemActions.append(edit);
+      const resetHolder = document.createElement("div");
+      const reset = button(
+        "\u041F\u043E \u043E\u0431\u0449\u0438\u043C \u043F\u0440\u0430\u0432\u0438\u043B\u0430\u043C",
+        deviceResult,
+        async () => {
+          await saveDevice(item.address, "");
+        },
+        resetHolder
+      );
+      itemActions.append(
+        createActionMenu("\u22EF", [reset], {
+          compact: true,
+          ariaLabel: `\u0414\u0435\u0439\u0441\u0442\u0432\u0438\u044F: ${item.address}`
+        })
+      );
       devices.append(li);
     }
     if (!assignments.length)
@@ -15869,74 +17646,140 @@ function renderDeviceProfileTools(request, initialRequest = request, area = "all
     const refreshed = await loadDevices();
     deviceResult.textContent = `\u041C\u0430\u0440\u0448\u0440\u0443\u0442 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430 \u0441\u043E\u0445\u0440\u0430\u043D\u0451\u043D \u0438 \u043F\u0440\u0438\u043C\u0435\u043D\u0451\u043D: ${address} \u2192 ${routeLabels.get(section) || section}.${refreshed ? "" : " \u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u043E\u0431\u043D\u043E\u0432\u0438\u0442\u044C \u0441\u043F\u0438\u0441\u043E\u043A \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432; \u043F\u043E\u043A\u0430\u0437\u0430\u043D\u044B \u043F\u0440\u0435\u0436\u043D\u0438\u0435 \u0434\u0430\u043D\u043D\u044B\u0435."}`;
   };
-  button("\u0421\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u044C \u043C\u0430\u0440\u0448\u0440\u0443\u0442 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430", deviceResult, async () => {
-    if (!device.value.trim() || !route.value)
-      throw new Error("\u0422\u0440\u0435\u0431\u0443\u044E\u0442\u0441\u044F \u0430\u0434\u0440\u0435\u0441 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430 \u0438 \u043C\u0430\u0440\u0448\u0440\u0443\u0442");
-    await saveDevice(
-      device.value,
-      route.value === "inherit" ? "" : route.value
-    );
+  const saveDeviceButton = button(
+    "\u0421\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u044C \u043C\u0430\u0440\u0448\u0440\u0443\u0442 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430",
+    deviceResult,
+    async () => {
+      if (!device.value.trim() || !route.value)
+        throw new Error("\u0422\u0440\u0435\u0431\u0443\u044E\u0442\u0441\u044F \u0430\u0434\u0440\u0435\u0441 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430 \u0438 \u043C\u0430\u0440\u0448\u0440\u0443\u0442");
+      await saveDevice(
+        device.value,
+        route.value === "inherit" ? "" : route.value
+      );
+    },
+    deviceActions
+  );
+  saveDeviceButton.className = "fkp-next-primary-action";
+  const deviceMoreMenu = createActionMenu("\u0415\u0449\u0451", [], {
+    ariaLabel: "\u0414\u043E\u043F\u043E\u043B\u043D\u0438\u0442\u0435\u043B\u044C\u043D\u044B\u0435 \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u044F \u0441 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430\u043C\u0438"
   });
-  button("\u041E\u0431\u043D\u043E\u0432\u0438\u0442\u044C \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430", deviceResult, async () => {
-    await loadDevices();
-  });
+  const deviceMorePopover = deviceMoreMenu.querySelector(
+    ".fkp-action-menu__popover"
+  );
+  deviceActions.append(deviceMoreMenu);
+  button(
+    "\u041E\u0431\u043D\u043E\u0432\u0438\u0442\u044C \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430",
+    deviceResult,
+    async () => {
+      await loadDevices();
+    },
+    deviceMorePopover
+  );
+  decorateActionMenuItems(deviceMorePopover);
   heading("\u0418\u0433\u0440\u043E\u0432\u044B\u0435 \u043F\u0440\u0435\u0441\u0435\u0442\u044B");
   note(
     "\u041F\u0440\u0435\u0441\u0435\u0442\u044B \u043D\u0430\u043F\u0440\u0430\u0432\u043B\u044F\u044E\u0442 \u0434\u043E\u043C\u0435\u043D\u044B \u043C\u0430\u0433\u0430\u0437\u0438\u043D\u043E\u0432 \u0438 \u0437\u0430\u0433\u0440\u0443\u0437\u043E\u043A. \u0418\u0433\u0440\u043E\u0432\u044B\u0435 \u0441\u0435\u0441\u0441\u0438\u0438 \u0441\u043E\u0445\u0440\u0430\u043D\u044F\u044E\u0442 \u0442\u0435\u043A\u0443\u0449\u0443\u044E \u043C\u0430\u0440\u0448\u0440\u0443\u0442\u0438\u0437\u0430\u0446\u0438\u044E."
   );
+  const preset = field("select", "\u0418\u0433\u0440\u043E\u0432\u043E\u0439 \u043F\u0440\u0435\u0441\u0435\u0442");
+  options(preset, [
+    { value: "steam", label: "Steam" },
+    { value: "playstation", label: "PlayStation" },
+    { value: "xbox", label: "Xbox" },
+    {
+      value: "console",
+      label: "\u0418\u0433\u0440\u043E\u0432\u0430\u044F \u043A\u043E\u043D\u0441\u043E\u043B\u044C (TCP \u0447\u0435\u0440\u0435\u0437 \u043F\u0440\u043E\u043A\u0441\u0438, UDP \u043D\u0430\u043F\u0440\u044F\u043C\u0443\u044E)"
+    }
+  ]);
+  const gamingRoute = field("select", "\u0418\u0433\u0440\u043E\u0432\u043E\u0439 \u043C\u0430\u0440\u0448\u0440\u0443\u0442");
+  options(gamingRoute, []);
   const scope = field("select", "\u041E\u0445\u0432\u0430\u0442 \u0438\u0433\u0440\u043E\u0432\u043E\u0433\u043E \u043F\u0440\u0435\u0441\u0435\u0442\u0430");
   options(scope, [
     { value: "all", label: "\u0412\u0441\u0435 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430" },
     { value: "selected", label: "\u0412\u044B\u0431\u0440\u0430\u043D\u043D\u043E\u0435 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u043E" }
   ]);
   const gamingDevice = field("input", "\u0418\u0433\u0440\u043E\u0432\u043E\u0435 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u043E");
+  const gamingDeviceLabel = gamingDevice.closest("label");
   attachDevicePicker(gamingDevice, root);
-  note(
+  const gamingDeviceNote = note(
     "\u0414\u043B\u044F \u0432\u044B\u0431\u0440\u0430\u043D\u043D\u043E\u0433\u043E \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430 \u043D\u0443\u0436\u0435\u043D IPv4. \u041F\u043E\u0434\u0441\u043A\u0430\u0437\u043A\u0438 DHCP \u043D\u0435 \u044F\u0432\u043B\u044F\u044E\u0442\u0441\u044F \u043E\u043D\u043B\u0430\u0439\u043D-\u0441\u0442\u0430\u0442\u0443\u0441\u043E\u043C."
   );
-  const preset = field("select", "\u0418\u0433\u0440\u043E\u0432\u043E\u0439 \u043F\u0440\u0435\u0441\u0435\u0442");
-  options(preset, [
-    { value: "steam", label: "Steam" },
-    { value: "playstation", label: "PlayStation" },
-    { value: "xbox", label: "Xbox" }
-  ]);
-  const gamingRoute = field("select", "\u0418\u0433\u0440\u043E\u0432\u043E\u0439 \u043C\u0430\u0440\u0448\u0440\u0443\u0442");
-  options(gamingRoute, []);
+  const consoleCheckLabel = document.createElement("label");
+  consoleCheckLabel.className = "fkp-next-check";
+  const consoleModeCheck = document.createElement("input");
+  consoleModeCheck.type = "checkbox";
+  consoleModeCheck.dataset.gamingConsoleMode = "";
+  consoleModeCheck.setAttribute(
+    "aria-label",
+    "\u041A\u043E\u043D\u0441\u043E\u043B\u044C\u043D\u044B\u0439 \u0440\u0435\u0436\u0438\u043C (TCP \u0447\u0435\u0440\u0435\u0437 \u043F\u0440\u043E\u043A\u0441\u0438, UDP \u043D\u0430\u043F\u0440\u044F\u043C\u0443\u044E)"
+  );
+  consoleCheckLabel.append(
+    consoleModeCheck,
+    "\u041A\u043E\u043D\u0441\u043E\u043B\u044C\u043D\u044B\u0439 \u0440\u0435\u0436\u0438\u043C (TCP \u0447\u0435\u0440\u0435\u0437 \u043F\u0440\u043E\u043A\u0441\u0438, UDP \u043D\u0430\u043F\u0440\u044F\u043C\u0443\u044E)"
+  );
+  group.append(consoleCheckLabel);
+  let userConsoleChecked = false;
   const gamingPreview = result("\u041F\u0440\u0435\u0434\u0432\u0430\u0440\u0438\u0442\u0435\u043B\u044C\u043D\u044B\u0439 \u043E\u0445\u0432\u0430\u0442 \u043F\u0440\u0435\u0441\u0435\u0442\u0430");
   const showScope = () => {
-    gamingDevice.disabled = scope.value !== "selected";
-    gamingPreview.textContent = scope.value ? `\u042D\u0442\u043E\u0442 \u043F\u0440\u0435\u0441\u0435\u0442 \u0437\u0430\u0442\u0440\u043E\u043D\u0435\u0442 ${scope.value === "all" ? "\u0432\u0441\u0435 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430" : gamingDevice.value.trim() || "\u0432\u044B\u0431\u0440\u0430\u043D\u043D\u043E\u0435 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u043E \u2014 \u0443\u043A\u0430\u0436\u0438\u0442\u0435 IPv4"} \u2192 ${routeLabels.get(gamingRoute.value) || "\u0432\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u043C\u0430\u0440\u0448\u0440\u0443\u0442"}.` : "\u0412\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u044F\u0432\u043D\u043E: \u0432\u0441\u0435 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430 \u0438\u043B\u0438 \u0432\u044B\u0431\u0440\u0430\u043D\u043D\u043E\u0435 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u043E.";
+    if (preset.value === "console" && scope.value !== "selected") {
+      scope.value = "selected";
+    }
+    const selectedScope = scope.value === "selected";
+    gamingDevice.disabled = !selectedScope;
+    gamingDeviceLabel.hidden = !selectedScope;
+    gamingDeviceNote.hidden = !selectedScope;
+    const forcedConsole = preset.value === "console";
+    consoleModeCheck.disabled = forcedConsole;
+    consoleModeCheck.checked = forcedConsole ? true : userConsoleChecked;
+    const modeSuffix = consoleModeCheck.checked || forcedConsole ? " \xB7 UDP \u043D\u0430\u043F\u0440\u044F\u043C\u0443\u044E (Open NAT)" : "";
+    gamingPreview.textContent = scope.value ? `\u042D\u0442\u043E\u0442 \u043F\u0440\u0435\u0441\u0435\u0442 \u0437\u0430\u0442\u0440\u043E\u043D\u0435\u0442 ${scope.value === "all" ? "\u0432\u0441\u0435 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430" : gamingDevice.value.trim() || "\u0432\u044B\u0431\u0440\u0430\u043D\u043D\u043E\u0435 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u043E \u2014 \u0443\u043A\u0430\u0436\u0438\u0442\u0435 IPv4"} \u2192 ${routeLabels.get(gamingRoute.value) || "\u0432\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u043C\u0430\u0440\u0448\u0440\u0443\u0442"}${modeSuffix}.` : "\u0412\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u044F\u0432\u043D\u043E: \u0432\u0441\u0435 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430 \u0438\u043B\u0438 \u0432\u044B\u0431\u0440\u0430\u043D\u043D\u043E\u0435 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u043E.";
   };
   scope.onchange = showScope;
+  preset.onchange = showScope;
+  consoleModeCheck.onchange = () => {
+    userConsoleChecked = consoleModeCheck.checked;
+    showScope();
+  };
   gamingDevice.oninput = showScope;
   gamingRoute.onchange = showScope;
   showScope();
   const gamingResult = result("\u0420\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442 \u0438\u0433\u0440\u043E\u0432\u043E\u0433\u043E \u043F\u0440\u0435\u0441\u0435\u0442\u0430");
-  button("\u041F\u0440\u0438\u043C\u0435\u043D\u0438\u0442\u044C \u0438\u0433\u0440\u043E\u0432\u043E\u0439 \u043F\u0440\u0435\u0441\u0435\u0442", gamingResult, async () => {
-    if (!preset.value || !gamingRoute.value)
-      throw new Error("\u0422\u0440\u0435\u0431\u0443\u044E\u0442\u0441\u044F \u0438\u0433\u0440\u043E\u0432\u043E\u0439 \u043F\u0440\u0435\u0441\u0435\u0442 \u0438 \u043C\u0430\u0440\u0448\u0440\u0443\u0442");
-    if (!scope.value)
-      throw new Error(
-        "\u0412\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u043E\u0445\u0432\u0430\u0442 \u0438\u0433\u0440\u043E\u0432\u043E\u0433\u043E \u043F\u0440\u0435\u0441\u0435\u0442\u0430: \u0432\u0441\u0435 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430 \u0438\u043B\u0438 \u0432\u044B\u0431\u0440\u0430\u043D\u043D\u043E\u0435 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u043E"
-      );
-    if (gamingRoute.selectedOptions[0]?.disabled)
-      throw new Error("\u0412\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u0434\u043E\u0441\u0442\u0443\u043F\u043D\u044B\u0439 \u0438\u0433\u0440\u043E\u0432\u043E\u0439 \u043C\u0430\u0440\u0448\u0440\u0443\u0442");
-    const payload = {
-      preset: preset.value,
-      section: gamingRoute.value
-    };
-    if (scope.value === "selected")
-      payload.device = requireIPv4(gamingDevice.value);
-    await call("gaming_apply", payload);
-    gamingResult.textContent = "\u0418\u0433\u0440\u043E\u0432\u043E\u0439 \u043F\u0440\u0435\u0441\u0435\u0442 \u043F\u0440\u0438\u043C\u0435\u043D\u0451\u043D.";
-  });
+  const gamingActions = actionsRow();
+  const applyGamingButton = button(
+    "\u041F\u0440\u0438\u043C\u0435\u043D\u0438\u0442\u044C \u0438\u0433\u0440\u043E\u0432\u043E\u0439 \u043F\u0440\u0435\u0441\u0435\u0442",
+    gamingResult,
+    async () => {
+      if (!preset.value || !gamingRoute.value)
+        throw new Error("\u0422\u0440\u0435\u0431\u0443\u044E\u0442\u0441\u044F \u0438\u0433\u0440\u043E\u0432\u043E\u0439 \u043F\u0440\u0435\u0441\u0435\u0442 \u0438 \u043C\u0430\u0440\u0448\u0440\u0443\u0442");
+      if (!scope.value)
+        throw new Error(
+          "\u0412\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u043E\u0445\u0432\u0430\u0442 \u0438\u0433\u0440\u043E\u0432\u043E\u0433\u043E \u043F\u0440\u0435\u0441\u0435\u0442\u0430: \u0432\u0441\u0435 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430 \u0438\u043B\u0438 \u0432\u044B\u0431\u0440\u0430\u043D\u043D\u043E\u0435 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u043E"
+        );
+      if (preset.value === "console" && scope.value !== "selected")
+        throw new Error(
+          "\u0414\u043B\u044F \u043F\u0440\u0435\u0441\u0435\u0442\u0430 \u0438\u0433\u0440\u043E\u0432\u043E\u0439 \u043A\u043E\u043D\u0441\u043E\u043B\u0438 \u0432\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u043A\u043E\u043D\u043A\u0440\u0435\u0442\u043D\u043E\u0435 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u043E \u0441 IPv4"
+        );
+      if (gamingRoute.selectedOptions[0]?.disabled)
+        throw new Error("\u0412\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u0434\u043E\u0441\u0442\u0443\u043F\u043D\u044B\u0439 \u0438\u0433\u0440\u043E\u0432\u043E\u0439 \u043C\u0430\u0440\u0448\u0440\u0443\u0442");
+      const payload = {
+        preset: preset.value,
+        section: gamingRoute.value
+      };
+      if (scope.value === "selected" || preset.value === "console")
+        payload.device = requireIPv4(gamingDevice.value);
+      if (consoleModeCheck.checked || preset.value === "console")
+        payload.console_mode = true;
+      await call("gaming_apply", payload);
+      gamingResult.textContent = "\u0418\u0433\u0440\u043E\u0432\u043E\u0439 \u043F\u0440\u0435\u0441\u0435\u0442 \u043F\u0440\u0438\u043C\u0435\u043D\u0451\u043D.";
+    },
+    gamingActions
+  );
+  applyGamingButton.className = "fkp-next-primary-action";
   heading("\u0418\u043C\u043F\u043E\u0440\u0442 \u0438 \u044D\u043A\u0441\u043F\u043E\u0440\u0442 \u043F\u0440\u043E\u0444\u0438\u043B\u0435\u0439");
   note(
     "\u042D\u043A\u0441\u043F\u043E\u0440\u0442 \u0441\u043E\u0434\u0435\u0440\u0436\u0438\u0442 \u043F\u0430\u0440\u043E\u043B\u0438 \u0438 \u043A\u043B\u044E\u0447\u0438. \u0425\u0440\u0430\u043D\u0438\u0442\u0435 \u0444\u0430\u0439\u043B \u0432 \u0437\u0430\u0449\u0438\u0449\u0451\u043D\u043D\u043E\u043C \u043C\u0435\u0441\u0442\u0435. \u0418\u043C\u043F\u043E\u0440\u0442 \u0441\u043E\u0445\u0440\u0430\u043D\u044F\u0435\u0442 \u043F\u0440\u043E\u0444\u0438\u043B\u044C \u0431\u0435\u0437 \u0430\u043A\u0442\u0438\u0432\u0430\u0446\u0438\u0438."
   );
   const exportName = field("select", "\u041F\u0440\u043E\u0444\u0438\u043B\u044C \u0434\u043B\u044F \u044D\u043A\u0441\u043F\u043E\u0440\u0442\u0430");
   options(exportName, []);
-  const profileResult = result("\u0420\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442 \u043F\u0440\u043E\u0444\u0438\u043B\u044F");
   let profilesGeneration = 0;
   let profilesUpdated = "";
   const loadProfiles = async (read = request, announce = true) => {
@@ -15960,26 +17803,7 @@ function renderDeviceProfileTools(request, initialRequest = request, area = "all
       return false;
     }
   };
-  button("\u0421\u043A\u0430\u0447\u0430\u0442\u044C \u043F\u0440\u043E\u0444\u0438\u043B\u044C", profileResult, async () => {
-    if (!exportName.value) throw new Error("\u0422\u0440\u0435\u0431\u0443\u0435\u0442\u0441\u044F \u043F\u0440\u043E\u0444\u0438\u043B\u044C \u0434\u043B\u044F \u044D\u043A\u0441\u043F\u043E\u0440\u0442\u0430");
-    const data = await call("profile_export", { name: exportName.value });
-    if (typeof data.config !== "string") throw new Error("invalid_response");
-    const url = URL.createObjectURL(
-      new Blob([data.config], { type: "text/plain;charset=utf-8" })
-    );
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = `${data.name.replace(/[^a-zA-Z0-9_.-]/g, "_")}.uci`;
-    anchor.hidden = true;
-    root.append(anchor);
-    try {
-      anchor.click();
-      profileResult.textContent = "\u0421\u043A\u0430\u0447\u0438\u0432\u0430\u043D\u0438\u0435 \u043F\u0440\u043E\u0444\u0438\u043B\u044F \u043D\u0430\u0447\u0430\u0442\u043E.";
-    } finally {
-      anchor.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 0);
-    }
-  });
+  const exportActions = actionsRow();
   const name = field("input", "\u041D\u0430\u0437\u0432\u0430\u043D\u0438\u0435 \u0438\u043C\u043F\u043E\u0440\u0442\u0438\u0440\u0443\u0435\u043C\u043E\u0433\u043E \u043F\u0440\u043E\u0444\u0438\u043B\u044F");
   const file = field("input", "\u0424\u0430\u0439\u043B \u043F\u0440\u043E\u0444\u0438\u043B\u044F");
   file.type = "file";
@@ -15987,6 +17811,34 @@ function renderDeviceProfileTools(request, initialRequest = request, area = "all
   const config = field("textarea", "\u041A\u043E\u043D\u0444\u0438\u0433\u0443\u0440\u0430\u0446\u0438\u044F \u043F\u0440\u043E\u0444\u0438\u043B\u044F");
   config.rows = 5;
   config.autocomplete = "off";
+  const profileResult = result("\u0420\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442 \u043F\u0440\u043E\u0444\u0438\u043B\u044F");
+  button(
+    "\u0421\u043A\u0430\u0447\u0430\u0442\u044C \u043F\u0440\u043E\u0444\u0438\u043B\u044C",
+    profileResult,
+    async () => {
+      if (!exportName.value) throw new Error("\u0422\u0440\u0435\u0431\u0443\u0435\u0442\u0441\u044F \u043F\u0440\u043E\u0444\u0438\u043B\u044C \u0434\u043B\u044F \u044D\u043A\u0441\u043F\u043E\u0440\u0442\u0430");
+      const data = await call("profile_export", {
+        name: exportName.value
+      });
+      if (typeof data.config !== "string") throw new Error("invalid_response");
+      const url = URL.createObjectURL(
+        new Blob([data.config], { type: "text/plain;charset=utf-8" })
+      );
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `${data.name.replace(/[^a-zA-Z0-9_.-]/g, "_")}.uci`;
+      anchor.hidden = true;
+      root.append(anchor);
+      try {
+        anchor.click();
+        profileResult.textContent = "\u0421\u043A\u0430\u0447\u0438\u0432\u0430\u043D\u0438\u0435 \u043F\u0440\u043E\u0444\u0438\u043B\u044F \u043D\u0430\u0447\u0430\u0442\u043E.";
+      } finally {
+        anchor.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 0);
+      }
+    },
+    exportActions
+  );
   let fileReadGeneration = 0;
   file.addEventListener("change", async () => {
     const generation = ++fileReadGeneration;
@@ -16001,28 +17853,40 @@ function renderDeviceProfileTools(request, initialRequest = request, area = "all
       profileResult.textContent = "\u0424\u0430\u0439\u043B \u0437\u0430\u0433\u0440\u0443\u0436\u0435\u043D. \u041F\u0440\u043E\u0432\u0435\u0440\u044C\u0442\u0435 \u043A\u043E\u043D\u0444\u0438\u0433\u0443\u0440\u0430\u0446\u0438\u044E \u0438 \u0438\u043C\u043F\u043E\u0440\u0442\u0438\u0440\u0443\u0439\u0442\u0435 \u043F\u0440\u043E\u0444\u0438\u043B\u044C.";
     } catch {
       if (generation !== fileReadGeneration) return;
-      profileResult.textContent = "file_read_failed";
+      profileResult.textContent = "\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u043F\u0440\u043E\u0447\u0438\u0442\u0430\u0442\u044C \u0432\u044B\u0431\u0440\u0430\u043D\u043D\u044B\u0439 \u0444\u0430\u0439\u043B.";
     }
   });
-  button("\u0418\u043C\u043F\u043E\u0440\u0442\u0438\u0440\u043E\u0432\u0430\u0442\u044C \u043F\u0440\u043E\u0444\u0438\u043B\u044C", profileResult, async () => {
-    if (!name.value.trim() || !config.value.trim())
-      throw new Error("\u0422\u0440\u0435\u0431\u0443\u044E\u0442\u0441\u044F \u043D\u0430\u0437\u0432\u0430\u043D\u0438\u0435 \u043F\u0440\u043E\u0444\u0438\u043B\u044F \u0438 \u043A\u043E\u043D\u0444\u0438\u0433\u0443\u0440\u0430\u0446\u0438\u044F");
-    await call("profile_import", {
-      name: name.value.trim(),
-      config: config.value
-    });
-    config.value = "";
-    file.value = "";
-    profileResult.textContent = "\u041F\u0440\u043E\u0444\u0438\u043B\u044C \u0438\u043C\u043F\u043E\u0440\u0442\u0438\u0440\u043E\u0432\u0430\u043D \u0431\u0435\u0437 \u0430\u043A\u0442\u0438\u0432\u0430\u0446\u0438\u0438.";
-    root.dispatchEvent(
-      new CustomEvent("forkop:profiles-changed", { bubbles: true })
-    );
-    if (!await loadProfiles(request, false))
-      profileResult.textContent += " \u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u043E\u0431\u043D\u043E\u0432\u0438\u0442\u044C \u0441\u043F\u0438\u0441\u043E\u043A \u043F\u0440\u043E\u0444\u0438\u043B\u0435\u0439.";
-  });
-  button("\u041E\u0431\u043D\u043E\u0432\u0438\u0442\u044C \u043F\u0440\u043E\u0444\u0438\u043B\u0438", profileResult, async () => {
-    await loadProfiles();
-  });
+  const importActions = actionsRow();
+  const importButton = button(
+    "\u0418\u043C\u043F\u043E\u0440\u0442\u0438\u0440\u043E\u0432\u0430\u0442\u044C \u043F\u0440\u043E\u0444\u0438\u043B\u044C",
+    profileResult,
+    async () => {
+      if (!name.value.trim() || !config.value.trim())
+        throw new Error("\u0422\u0440\u0435\u0431\u0443\u044E\u0442\u0441\u044F \u043D\u0430\u0437\u0432\u0430\u043D\u0438\u0435 \u043F\u0440\u043E\u0444\u0438\u043B\u044F \u0438 \u043A\u043E\u043D\u0444\u0438\u0433\u0443\u0440\u0430\u0446\u0438\u044F");
+      await call("profile_import", {
+        name: name.value.trim(),
+        config: config.value
+      });
+      config.value = "";
+      file.value = "";
+      profileResult.textContent = "\u041F\u0440\u043E\u0444\u0438\u043B\u044C \u0438\u043C\u043F\u043E\u0440\u0442\u0438\u0440\u043E\u0432\u0430\u043D \u0431\u0435\u0437 \u0430\u043A\u0442\u0438\u0432\u0430\u0446\u0438\u0438.";
+      root.dispatchEvent(
+        new CustomEvent("forkop:profiles-changed", { bubbles: true })
+      );
+      if (!await loadProfiles(request, false))
+        profileResult.textContent += " \u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u043E\u0431\u043D\u043E\u0432\u0438\u0442\u044C \u0441\u043F\u0438\u0441\u043E\u043A \u043F\u0440\u043E\u0444\u0438\u043B\u0435\u0439.";
+    },
+    importActions
+  );
+  importButton.className = "fkp-next-primary-action";
+  button(
+    "\u041E\u0431\u043D\u043E\u0432\u0438\u0442\u044C \u043F\u0440\u043E\u0444\u0438\u043B\u0438",
+    profileResult,
+    async () => {
+      await loadProfiles();
+    },
+    importActions
+  );
   if (area !== "profiles") {
     deviceResult.textContent = "\u0417\u0430\u0433\u0440\u0443\u0437\u043A\u0430 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u2026";
     void loadDevices(initialRequest);
@@ -16035,7 +17899,7 @@ function renderDeviceProfileTools(request, initialRequest = request, area = "all
   let routesUpdated = "";
   const routesFreshness = document.createElement("p");
   routesFreshness.setAttribute("aria-label", "\u0410\u043A\u0442\u0443\u0430\u043B\u044C\u043D\u043E\u0441\u0442\u044C \u043C\u0430\u0440\u0448\u0440\u0443\u0442\u043E\u0432");
-  gamingResult.after(routesFreshness);
+  gamingActions.after(routesFreshness);
   const loadRoutes = (read = request, announce = false) => {
     const generation = ++routesGeneration;
     return call("status", {}, read).then((raw) => {
@@ -16084,10 +17948,16 @@ function renderDeviceProfileTools(request, initialRequest = request, area = "all
   const routeError = () => gamingResult.textContent = `\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0437\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044C \u043C\u0430\u0440\u0448\u0440\u0443\u0442\u044B. \u041D\u0430\u0436\u043C\u0438\u0442\u0435 \xAB\u041E\u0431\u043D\u043E\u0432\u0438\u0442\u044C \u043C\u0430\u0440\u0448\u0440\u0443\u0442\u044B\xBB.${routesUpdated ? ` \u041F\u043E\u043A\u0430\u0437\u0430\u043D\u044B \u0434\u0430\u043D\u043D\u044B\u0435 \u043E\u0442 ${routesUpdated}.` : ""}`;
   if (area !== "profiles") {
     void loadRoutes(initialRequest);
-    group = route.closest("section");
-    button("\u041E\u0431\u043D\u043E\u0432\u0438\u0442\u044C \u043C\u0430\u0440\u0448\u0440\u0443\u0442\u044B", gamingResult, async () => {
-      await loadRoutes(request, true);
-    });
+    button(
+      "\u041E\u0431\u043D\u043E\u0432\u0438\u0442\u044C \u043C\u0430\u0440\u0448\u0440\u0443\u0442\u044B",
+      gamingResult,
+      async () => {
+        await loadRoutes(request, true);
+      },
+      deviceMorePopover
+    );
+    deviceMorePopover.append(rules);
+    decorateActionMenuItems(deviceMorePopover);
   }
   root.addEventListener("forkop:refresh-tools", (event) => {
     const read = event.detail?.read || request;
@@ -16110,6 +17980,14 @@ function renderCompatibilityPanel(request, initialRequest = request, showHeading
     e.textContent = value;
     return e;
   };
+  const setEmptyOption = (select2, label) => {
+    select2.replaceChildren();
+    const opt = text("option", label);
+    opt.value = "";
+    opt.disabled = true;
+    select2.append(opt);
+    select2.value = "";
+  };
   if (showHeading) root.append(text("h3", "\u0421\u043E\u0432\u043C\u0435\u0441\u0442\u0438\u043C\u043E\u0441\u0442\u044C \u0441 3x-ui \u0438 Xray"));
   root.append(
     text(
@@ -16119,10 +17997,20 @@ function renderCompatibilityPanel(request, initialRequest = request, showHeading
   );
   const sectionLabel = text("label", "\u041F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435");
   const section = document.createElement("select");
+  section.setAttribute("aria-label", "\u041F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435");
+  setEmptyOption(section, "\u041D\u0435\u0442 \u0434\u043E\u0441\u0442\u0443\u043F\u043D\u044B\u0445 \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0439");
   sectionLabel.append(section);
   const outboundLabel = text("label", "\u0421\u0435\u0440\u0432\u0435\u0440 \u0434\u043B\u044F \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0438");
   const outbound = document.createElement("select");
-  outboundLabel.append(outbound);
+  outbound.setAttribute("aria-label", "\u0421\u0435\u0440\u0432\u0435\u0440 \u0434\u043B\u044F \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0438");
+  const outboundHint = text("small", "\u0421\u043D\u0430\u0447\u0430\u043B\u0430 \u0441\u043E\u043F\u043E\u0441\u0442\u0430\u0432\u044C\u0442\u0435 \u043D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438");
+  const clearOutbounds = () => {
+    outbound.replaceChildren();
+    outbound.disabled = true;
+    outboundHint.hidden = false;
+  };
+  clearOutbounds();
+  outboundLabel.append(outbound, outboundHint);
   const domainLabel = text("label", "\u0421\u0430\u0439\u0442 \u0434\u043B\u044F \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0438 \u0441\u043E\u0435\u0434\u0438\u043D\u0435\u043D\u0438\u044F");
   const domain = document.createElement("input");
   domain.name = "compatibility_domain";
@@ -16138,6 +18026,8 @@ function renderCompatibilityPanel(request, initialRequest = request, showHeading
     "p",
     "\u041C\u043E\u0436\u043D\u043E \u0432\u0441\u0442\u0430\u0432\u0438\u0442\u044C \u043F\u0430\u0440\u0430\u043C\u0435\u0442\u0440\u044B \u0432\u0445\u043E\u0434\u044F\u0449\u0435\u0433\u043E \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u044F \u0438\u0437 3x-ui. \u0414\u0430\u043D\u043D\u044B\u0435 \u0438\u0441\u043F\u043E\u043B\u044C\u0437\u0443\u044E\u0442\u0441\u044F \u0434\u043B\u044F \u0441\u043E\u043F\u043E\u0441\u0442\u0430\u0432\u043B\u0435\u043D\u0438\u044F; \u043F\u0430\u0440\u043E\u043B\u0438 \u0438 \u043A\u043B\u044E\u0447\u0438 \u043D\u0435 \u0432\u044B\u0432\u043E\u0434\u044F\u0442\u0441\u044F \u0432 \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442\u0430\u0445."
   );
+  const comparisonActions = document.createElement("div");
+  comparisonActions.className = "fkp-next-actions";
   const result = text("div", "\u041F\u0440\u043E\u0432\u0435\u0440\u043A\u0430 \u043D\u0435 \u0432\u044B\u043F\u043E\u043B\u043D\u044F\u043B\u0430\u0441\u044C");
   result.className = "fkp-next-result";
   result.setAttribute("role", "status");
@@ -16147,9 +18037,10 @@ function renderCompatibilityPanel(request, initialRequest = request, showHeading
     domainLabel,
     serverLabel,
     help,
+    comparisonActions,
     result
   );
-  function button(label, work, feedback = result) {
+  function button(label, work, feedback = result, target = root) {
     const b = text("button", label);
     b.type = "button";
     b.onclick = async () => {
@@ -16162,7 +18053,7 @@ function renderCompatibilityPanel(request, initialRequest = request, showHeading
         b.disabled = b === handshake && !outbound.value;
       }
     };
-    root.append(b);
+    target.append(b);
     return b;
   }
   let comparisonGeneration = 0;
@@ -16219,14 +18110,23 @@ function renderCompatibilityPanel(request, initialRequest = request, showHeading
     }
     const data = object3(response.data);
     const oldOutbound = outbound.value;
-    outbound.replaceChildren();
-    for (const raw of Array.isArray(data.outbounds) ? data.outbounds : []) {
-      const item = object3(raw);
-      const option = text("option", String(item.label || item.outbound_tag));
-      option.value = String(item.outbound_tag);
-      outbound.append(option);
+    const outbounds = Array.isArray(data.outbounds) ? data.outbounds : [];
+    if (!outbounds.length) {
+      clearOutbounds();
+    } else {
+      outbound.replaceChildren();
+      for (const raw of outbounds) {
+        const item = object3(raw);
+        const option = text("option", String(item.label || item.outbound_tag));
+        option.value = String(item.outbound_tag);
+        outbound.append(option);
+      }
+      outbound.disabled = false;
+      outboundHint.hidden = true;
+      outbound.value = [...outbound.options].some(
+        (o) => o.value === oldOutbound && o.value !== ""
+      ) ? oldOutbound : outbound.options[0]?.value || "";
     }
-    outbound.value = [...outbound.options].some((o) => o.value === oldOutbound) ? oldOutbound : outbound.options[0]?.value || "";
     handshake.disabled = !outbound.value;
     const status = String(data.status);
     const labels = {
@@ -16309,15 +18209,26 @@ function renderCompatibilityPanel(request, initialRequest = request, showHeading
       )
     );
   };
-  const compare = button("\u0421\u043E\u043F\u043E\u0441\u0442\u0430\u0432\u0438\u0442\u044C \u043D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438", () => comparison(false));
-  const handshake = button("\u041F\u0440\u043E\u0432\u0435\u0440\u0438\u0442\u044C \u0441\u043E\u0435\u0434\u0438\u043D\u0435\u043D\u0438\u0435", () => comparison(true));
+  const compare = button(
+    "\u0421\u043E\u043F\u043E\u0441\u0442\u0430\u0432\u0438\u0442\u044C \u043D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438",
+    () => comparison(false),
+    result,
+    comparisonActions
+  );
+  compare.className = "fkp-next-primary-action";
+  const handshake = button(
+    "\u041F\u0440\u043E\u0432\u0435\u0440\u0438\u0442\u044C \u0441\u043E\u0435\u0434\u0438\u043D\u0435\u043D\u0438\u0435",
+    () => comparison(true),
+    result,
+    comparisonActions
+  );
   handshake.disabled = true;
   outbound.onchange = invalidate;
   domain.oninput = invalidate;
   server.oninput = invalidate;
   section.onchange = () => {
     invalidate();
-    outbound.replaceChildren();
+    clearOutbounds();
     handshake.disabled = true;
     result.textContent = "\u041F\u0430\u0440\u0430\u043C\u0435\u0442\u0440\u044B \u0438\u0437\u043C\u0435\u043D\u0435\u043D\u044B \u2014 \u043F\u0440\u043E\u0432\u0435\u0440\u044C\u0442\u0435 \u0441\u043D\u043E\u0432\u0430. \u041F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435 \u0438\u0437\u043C\u0435\u043D\u0435\u043D\u043E. \u0421\u043E\u043F\u043E\u0441\u0442\u0430\u0432\u044C\u0442\u0435 \u043D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438 \u0437\u0430\u043D\u043E\u0432\u043E.";
   };
@@ -16338,7 +18249,9 @@ function renderCompatibilityPanel(request, initialRequest = request, showHeading
   const xrayVersion = document.createElement("input");
   xrayVersion.name = "compatibility_xray_version";
   xrayVersionLabel.append(xrayVersion);
-  root.append(panelVersionLabel, xrayVersionLabel);
+  const updateActions = document.createElement("div");
+  updateActions.className = "fkp-next-actions";
+  root.append(panelVersionLabel, xrayVersionLabel, updateActions);
   button(
     "\u041F\u0440\u043E\u0432\u0435\u0440\u0438\u0442\u044C \u043E\u0431\u043D\u043E\u0432\u043B\u0435\u043D\u0438\u044F 3x-ui \u0438 Xray",
     async () => {
@@ -16387,7 +18300,8 @@ function renderCompatibilityPanel(request, initialRequest = request, showHeading
         )
       );
     },
-    updates
+    updates,
+    updateActions
   );
   root.append(updates);
   let routesGeneration = 0;
@@ -16401,17 +18315,22 @@ function renderCompatibilityPanel(request, initialRequest = request, showHeading
         return;
       }
       const previous = section.value;
-      section.replaceChildren();
       const sections = object3(response.data).sections;
-      for (const raw of Array.isArray(sections) ? sections : []) {
-        const s = object3(raw);
-        const option = text("option", String(s.label || s.name));
-        option.value = String(s.name);
-        section.append(option);
+      const list2 = Array.isArray(sections) ? sections : [];
+      if (!list2.length) {
+        setEmptyOption(section, "\u041D\u0435\u0442 \u0434\u043E\u0441\u0442\u0443\u043F\u043D\u044B\u0445 \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0439");
+      } else {
+        section.replaceChildren();
+        for (const raw of list2) {
+          const s = object3(raw);
+          const option = text("option", String(s.label || s.name));
+          option.value = String(s.name);
+          section.append(option);
+        }
+        section.value = [...section.options].some(
+          (option) => option.value === previous && option.value !== ""
+        ) ? previous : section.options[0]?.value || "";
       }
-      section.value = [...section.options].some(
-        (option) => option.value === previous
-      ) ? previous : section.options[0]?.value || "";
       if (section.value !== previous)
         section.dispatchEvent(new Event("change"));
       result.textContent = "\u041F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u044F \u0437\u0430\u0433\u0440\u0443\u0436\u0435\u043D\u044B. \u041F\u0440\u043E\u0432\u0435\u0440\u043A\u0430 \u043D\u0435 \u0432\u044B\u043F\u043E\u043B\u043D\u044F\u043B\u0430\u0441\u044C.";
@@ -16420,9 +18339,14 @@ function renderCompatibilityPanel(request, initialRequest = request, showHeading
         result.textContent = "\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0437\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044C \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u044F. \u041D\u0430\u0436\u043C\u0438\u0442\u0435 \xAB\u041E\u0431\u043D\u043E\u0432\u0438\u0442\u044C \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u044F\xBB.";
     });
   }
-  button("\u041E\u0431\u043D\u043E\u0432\u0438\u0442\u044C \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u044F", async () => {
-    await refreshRoutes();
-  });
+  button(
+    "\u041E\u0431\u043D\u043E\u0432\u0438\u0442\u044C \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u044F",
+    async () => {
+      await refreshRoutes();
+    },
+    result,
+    comparisonActions
+  );
   root.addEventListener(
     "forkop:refresh-tools",
     (event) => void refreshRoutes(
@@ -16453,6 +18377,7 @@ function input(name, label, value = "") {
 function select(label, choices) {
   const wrap = el("label", label);
   const node = el("select");
+  node.setAttribute("aria-label", label);
   for (const [value, text] of choices) {
     const option = el("option", text);
     option.value = value;
@@ -16498,13 +18423,7 @@ function renderAdvancedPanel(request = nextRequest, loadConnections, lazy = fals
     mode.textContent = detailed ? "\u041F\u0440\u043E\u0441\u0442\u043E\u0439 \u0440\u0435\u0436\u0438\u043C" : "\u041F\u043E\u0434\u0440\u043E\u0431\u043D\u044B\u0439 \u0440\u0435\u0436\u0438\u043C";
     root.querySelectorAll("[data-detail]").forEach((node) => node.hidden = !detailed);
   };
-  const theme = select("\u0422\u0435\u043C\u0430", [
-    ["auto", "\u041A\u0430\u043A \u0432 LuCI"],
-    ["light", "\u0421\u0432\u0435\u0442\u043B\u0430\u044F"],
-    ["dark", "\u0422\u0451\u043C\u043D\u0430\u044F"]
-  ]);
-  theme.node.onchange = () => root.dataset.theme = theme.node.value;
-  header.append(title, mode, theme.wrap);
+  header.append(title, mode);
   if (lazy || area !== "all") header.replaceChildren();
   root.append(header);
   const message = el("p", "", "fkp-next-notice");
@@ -16662,8 +18581,8 @@ function renderAdvancedPanel(request = nextRequest, loadConnections, lazy = fals
       root.setAttribute("aria-busy", "false");
     }
   }
-  function action(text, handler) {
-    const b = el("button", text);
+  function action(text, handler, primary = false) {
+    const b = el("button", text, primary ? "fkp-next-primary-action" : "");
     b.type = "button";
     b.onclick = async () => {
       b.disabled = true;
@@ -16674,6 +18593,11 @@ function renderAdvancedPanel(request = nextRequest, loadConnections, lazy = fals
       }
     };
     return b;
+  }
+  function actionsRow(...buttons) {
+    const row = el("div", "", "fkp-next-actions");
+    row.append(...buttons);
+    return row;
   }
   const route = panel(
     "\u041F\u043E\u0447\u0435\u043C\u0443 \u0441\u0430\u0439\u0442 \u0438\u0434\u0451\u0442 \u0442\u0430\u043A?",
@@ -16687,7 +18611,9 @@ function renderAdvancedPanel(request = nextRequest, loadConnections, lazy = fals
     ["tcp", "TCP"],
     ["udp", "UDP"],
     ["quic", "QUIC"],
-    ["dns", "DNS"]
+    ["dns", "DNS"],
+    ["stun", "STUN / WebRTC"],
+    ["bittorrent", "BitTorrent"]
   ]);
   protocol.node.name = "route_protocol";
   const port = input("route_port", "\u041F\u043E\u0440\u0442", "443");
@@ -16718,105 +18644,115 @@ function renderAdvancedPanel(request = nextRequest, loadConnections, lazy = fals
     device.wrap,
     parameters,
     basis,
-    action("\u041E\u0431\u044A\u044F\u0441\u043D\u0438\u0442\u044C \u043C\u0430\u0440\u0448\u0440\u0443\u0442", async () => {
-      const generation = ++routeGeneration;
-      const key = routeKey();
-      const capturedDomain = domain.node.value.trim();
-      const capturedDevice = device.node.value.trim();
-      const capturedAt = (/* @__PURE__ */ new Date()).toLocaleString();
-      const capturedProtocol = protocol.node.value;
-      const capturedPort = port.node.value;
-      if (!capturedDomain || !/^\d+$/.test(capturedPort) || Number(capturedPort) < 1 || Number(capturedPort) > 65535) {
-        routeResult.textContent = "\u0423\u043A\u0430\u0436\u0438\u0442\u0435 \u0434\u043E\u043C\u0435\u043D/IP \u0438 \u0446\u0435\u043B\u044B\u0439 \u043F\u043E\u0440\u0442 \u043E\u0442 1 \u0434\u043E 65535.";
-        return;
-      }
-      const target = capturedDomain.includes(":") || /^\d+\.\d+\.\d+\.\d+$/.test(capturedDomain) ? { destination_ip: capturedDomain } : { domain: capturedDomain };
-      const r = await invoke("route_explain", {
-        ...target,
-        ...capturedDevice ? { device: capturedDevice } : {},
-        port: Number(capturedPort),
-        protocol: capturedProtocol
-      });
-      if (generation !== routeGeneration || key !== routeKey()) return;
-      routeResult.replaceChildren();
-      if (!r.success) return;
-      const data = object4(r.data);
-      const decision = object4(data.decision);
-      const decisionLabels = {
-        matched: "\u041F\u0440\u0430\u0432\u0438\u043B\u043E \u043D\u0430\u0439\u0434\u0435\u043D\u043E",
-        direct: "\u041D\u0430\u043F\u0440\u044F\u043C\u0443\u044E",
-        blocked: "\u0417\u0430\u0431\u043B\u043E\u043A\u0438\u0440\u043E\u0432\u0430\u043D\u043E",
-        indeterminate: "\u041D\u0435 \u043F\u043E\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043D\u043E"
-      };
-      routeResult.append(
-        el(
-          "strong",
-          `${decisionLabels[String(decision.status)] || "\u041D\u0435 \u043E\u043F\u0440\u0435\u0434\u0435\u043B\u0435\u043D\u043E"} \u2192 ${connectionLabel(decision.section || decision.outbound)}`
-        ),
-        el("p", "\u0414\u043E\u0441\u0442\u0443\u043F\u043D\u043E\u0441\u0442\u044C \u0441\u0430\u0439\u0442\u0430 \u043D\u0435 \u043F\u0440\u043E\u0432\u0435\u0440\u044F\u043B\u0430\u0441\u044C"),
-        el(
-          "p",
-          `\u0423\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u043E: ${capturedDevice || "\u043D\u0435 \u0443\u043A\u0430\u0437\u0430\u043D\u043E"} \u2192 \u0426\u0435\u043B\u044C: ${capturedDomain} \u2192 ${capturedProtocol.toUpperCase()}/${capturedPort} \xB7 \u0421\u043E\u0445\u0440\u0430\u043D\u0451\u043D\u043D\u0430\u044F \u043A\u043E\u043D\u0444\u0438\u0433\u0443\u0440\u0430\u0446\u0438\u044F \xB7 \u0418\u0441\u0442\u043E\u0447\u043D\u0438\u043A \u043F\u0440\u0430\u0432\u0438\u043B: \u0440\u043E\u0443\u0442\u0435\u0440 \xB7 ${capturedAt}`
-        )
-      );
-      const reasons = {
-        section_conditions: "\u0423\u0441\u043B\u043E\u0432\u0438\u044F \u043F\u0440\u0430\u0432\u0438\u043B\u0430",
-        fully_routed_ips: "\u041D\u0430\u0437\u043D\u0430\u0447\u0435\u043D\u0438\u0435 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430",
-        expired: "\u0421\u0440\u043E\u043A \u043F\u0440\u0430\u0432\u0438\u043B\u0430 \u0438\u0441\u0442\u0451\u043A",
-        exclude_ntp: "\u0418\u0441\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435 NTP",
-        hijack_dns: "\u041E\u0431\u0440\u0430\u0431\u043E\u0442\u043A\u0430 DNS",
-        disable_quic: "QUIC \u043E\u0442\u043A\u043B\u044E\u0447\u0451\u043D",
-        service_ip_check: "\u0421\u043B\u0443\u0436\u0435\u0431\u043D\u0430\u044F \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0430 \u0430\u0434\u0440\u0435\u0441\u0430"
-      };
-      const winner = (Array.isArray(data.trace) ? data.trace : []).map(object4).reverse().find((row) => row.match === "yes");
-      if (winner && decision.status !== "indeterminate")
-        routeResult.append(
-          el(
-            "p",
-            `\u041F\u0440\u0438\u0447\u0438\u043D\u0430: ${reasons[String(winner.reason)] || "\u0423\u0441\u043B\u043E\u0432\u0438\u0435 \u0438\u0437 \u0441\u043E\u0445\u0440\u0430\u043D\u0451\u043D\u043D\u044B\u0445 \u043F\u0440\u0430\u0432\u0438\u043B"}`
-          )
-        );
-      if (decision.status === "indeterminate") {
-        const missing = {
-          rule_set: "\u0441\u043E\u0434\u0435\u0440\u0436\u0438\u043C\u043E\u0435 \u043D\u0430\u0431\u043E\u0440\u0430 \u043F\u0440\u0430\u0432\u0438\u043B",
-          device: "\u0430\u0434\u0440\u0435\u0441 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430",
-          port: "\u043F\u043E\u0440\u0442",
-          destination: "\u0443\u0441\u043B\u043E\u0432\u0438\u0435 \u043D\u0430\u0437\u043D\u0430\u0447\u0435\u043D\u0438\u044F",
-          unsupported_action: "\u043F\u043E\u0434\u0434\u0435\u0440\u0436\u043A\u0430 \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u044F",
-          evaluation_limit: "\u043F\u0440\u0435\u0434\u0435\u043B \u0430\u043D\u0430\u043B\u0438\u0437\u0430"
-        };
-        routeResult.append(
-          el(
-            "p",
-            `\u041D\u0435 \u0445\u0432\u0430\u0442\u0430\u0435\u0442 \u0434\u0430\u043D\u043D\u044B\u0445: ${(Array.isArray(data.missing) ? data.missing : []).map((value) => missing[String(value)] || "\u043D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043D\u043E\u0435 \u0443\u0441\u043B\u043E\u0432\u0438\u0435").join(", ") || "\u0443\u0441\u043B\u043E\u0432\u0438\u044F \u043F\u0440\u0430\u0432\u0438\u043B\u0430"}.`
-          )
-        );
-      } else if (typeof decision.section === "string" && decision.section) {
-        routeResult.append(
-          action("\u041E\u0442\u043A\u0440\u044B\u0442\u044C \u043F\u0440\u0430\u0432\u0438\u043B\u043E", async () => {
-            if (!navigateToRule(root, {
-              kind: "edit",
-              section: String(decision.section),
-              option: "domain"
-            }))
-              message.textContent = "\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u043E\u0442\u043A\u0440\u044B\u0442\u044C \u0442\u043E\u0447\u043D\u043E\u0435 \u043F\u0440\u0430\u0432\u0438\u043B\u043E. \u041E\u0442\u043A\u0440\u043E\u0439\u0442\u0435 \u0440\u0430\u0437\u0434\u0435\u043B \u043F\u0440\u0430\u0432\u0438\u043B \u0438 \u043F\u043E\u0432\u0442\u043E\u0440\u0438\u0442\u0435.";
-          })
-        );
-      }
-      const trace = el("ol");
-      trace.dataset.detail = "true";
-      trace.hidden = root.dataset.mode !== "detailed";
-      for (const step of Array.isArray(data.trace) ? data.trace : []) {
-        const row = object4(step);
-        trace.append(
-          el(
-            "li",
-            `${connectionLabel(row.section, "")}: ${reasons[String(row.reason)] || row.reason || "\u0414\u043E\u043F\u043E\u043B\u043D\u0438\u0442\u0435\u043B\u044C\u043D\u043E\u0435 \u0443\u0441\u043B\u043E\u0432\u0438\u0435"} \xB7 ${row.match === "yes" ? "\u0441\u043E\u0432\u043F\u0430\u043B\u043E" : row.match === "no" ? "\u043D\u0435 \u0441\u043E\u0432\u043F\u0430\u043B\u043E" : "\u043D\u0435 \u043F\u043E\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043D\u043E"}`
-          )
-        );
-      }
-      routeResult.append(trace);
-    }),
+    actionsRow(
+      action(
+        "\u041E\u0431\u044A\u044F\u0441\u043D\u0438\u0442\u044C \u043C\u0430\u0440\u0448\u0440\u0443\u0442",
+        async () => {
+          const generation = ++routeGeneration;
+          const key = routeKey();
+          const capturedDomain = domain.node.value.trim();
+          const capturedDevice = device.node.value.trim();
+          const capturedAt = (/* @__PURE__ */ new Date()).toLocaleString();
+          const capturedProtocol = protocol.node.value;
+          const capturedPort = port.node.value;
+          if (!capturedDomain || !/^\d+$/.test(capturedPort) || Number(capturedPort) < 1 || Number(capturedPort) > 65535) {
+            routeResult.textContent = "\u0423\u043A\u0430\u0436\u0438\u0442\u0435 \u0434\u043E\u043C\u0435\u043D/IP \u0438 \u0446\u0435\u043B\u044B\u0439 \u043F\u043E\u0440\u0442 \u043E\u0442 1 \u0434\u043E 65535.";
+            return;
+          }
+          const target = capturedDomain.includes(":") || /^\d+\.\d+\.\d+\.\d+$/.test(capturedDomain) ? { destination_ip: capturedDomain } : { domain: capturedDomain };
+          const r = await invoke("route_explain", {
+            ...target,
+            ...capturedDevice ? { device: capturedDevice } : {},
+            port: Number(capturedPort),
+            protocol: capturedProtocol
+          });
+          if (generation !== routeGeneration || key !== routeKey()) return;
+          routeResult.replaceChildren();
+          if (!r.success) return;
+          const data = object4(r.data);
+          const decision = object4(data.decision);
+          const decisionLabels = {
+            matched: "\u041F\u0440\u0430\u0432\u0438\u043B\u043E \u043D\u0430\u0439\u0434\u0435\u043D\u043E",
+            direct: "\u041D\u0430\u043F\u0440\u044F\u043C\u0443\u044E",
+            blocked: "\u0417\u0430\u0431\u043B\u043E\u043A\u0438\u0440\u043E\u0432\u0430\u043D\u043E",
+            indeterminate: "\u041D\u0435 \u043F\u043E\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043D\u043E"
+          };
+          routeResult.append(
+            el(
+              "strong",
+              `${decisionLabels[String(decision.status)] || "\u041D\u0435 \u043E\u043F\u0440\u0435\u0434\u0435\u043B\u0435\u043D\u043E"} \u2192 ${connectionLabel(decision.section || decision.outbound)}`
+            ),
+            el("p", "\u0414\u043E\u0441\u0442\u0443\u043F\u043D\u043E\u0441\u0442\u044C \u0441\u0430\u0439\u0442\u0430 \u043D\u0435 \u043F\u0440\u043E\u0432\u0435\u0440\u044F\u043B\u0430\u0441\u044C"),
+            el(
+              "p",
+              `\u0423\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u043E: ${capturedDevice || "\u043D\u0435 \u0443\u043A\u0430\u0437\u0430\u043D\u043E"} \u2192 \u0426\u0435\u043B\u044C: ${capturedDomain} \u2192 ${capturedProtocol.toUpperCase()}/${capturedPort} \xB7 \u0421\u043E\u0445\u0440\u0430\u043D\u0451\u043D\u043D\u0430\u044F \u043A\u043E\u043D\u0444\u0438\u0433\u0443\u0440\u0430\u0446\u0438\u044F \xB7 \u0418\u0441\u0442\u043E\u0447\u043D\u0438\u043A \u043F\u0440\u0430\u0432\u0438\u043B: \u0440\u043E\u0443\u0442\u0435\u0440 \xB7 ${capturedAt}`
+            )
+          );
+          const reasons = {
+            section_conditions: "\u0423\u0441\u043B\u043E\u0432\u0438\u044F \u043F\u0440\u0430\u0432\u0438\u043B\u0430",
+            fully_routed_ips: "\u041D\u0430\u0437\u043D\u0430\u0447\u0435\u043D\u0438\u0435 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430",
+            expired: "\u0421\u0440\u043E\u043A \u043F\u0440\u0430\u0432\u0438\u043B\u0430 \u0438\u0441\u0442\u0451\u043A",
+            exclude_ntp: "\u0418\u0441\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435 NTP",
+            hijack_dns: "\u041E\u0431\u0440\u0430\u0431\u043E\u0442\u043A\u0430 DNS",
+            disable_quic: "QUIC \u043E\u0442\u043A\u043B\u044E\u0447\u0451\u043D",
+            service_ip_check: "\u0421\u043B\u0443\u0436\u0435\u0431\u043D\u0430\u044F \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0430 \u0430\u0434\u0440\u0435\u0441\u0430",
+            console_udp_direct: "\u041A\u043E\u043D\u0441\u043E\u043B\u044C\u043D\u044B\u0439 \u0440\u0435\u0436\u0438\u043C: UDP \u0438\u0434\u0451\u0442 \u043D\u0430\u043F\u0440\u044F\u043C\u0443\u044E (Open NAT)",
+            console_protocol_required: "\u041A\u043E\u043D\u0441\u043E\u043B\u044C\u043D\u044B\u0439 \u0440\u0435\u0436\u0438\u043C \u0442\u0440\u0435\u0431\u0443\u0435\u0442 \u0443\u043A\u0430\u0437\u0430\u043D\u0438\u044F \u043F\u0440\u043E\u0442\u043E\u043A\u043E\u043B\u0430 TCP/UDP",
+            bittorrent_direct: "\u041F\u0440\u044F\u043C\u043E\u0439 \u043E\u0431\u0445\u043E\u0434 BitTorrent \u0432\u043D\u0435 \u0442\u0443\u043D\u043D\u0435\u043B\u044F"
+          };
+          const winner = (Array.isArray(data.trace) ? data.trace : []).map(object4).reverse().find((row) => row.match === "yes");
+          if (winner && decision.status !== "indeterminate")
+            routeResult.append(
+              el(
+                "p",
+                `\u041F\u0440\u0438\u0447\u0438\u043D\u0430: ${reasons[String(winner.reason)] || "\u0423\u0441\u043B\u043E\u0432\u0438\u0435 \u0438\u0437 \u0441\u043E\u0445\u0440\u0430\u043D\u0451\u043D\u043D\u044B\u0445 \u043F\u0440\u0430\u0432\u0438\u043B"}`
+              )
+            );
+          if (decision.status === "indeterminate") {
+            const missing = {
+              rule_set: "\u0441\u043E\u0434\u0435\u0440\u0436\u0438\u043C\u043E\u0435 \u043D\u0430\u0431\u043E\u0440\u0430 \u043F\u0440\u0430\u0432\u0438\u043B",
+              device: "\u0430\u0434\u0440\u0435\u0441 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430",
+              port: "\u043F\u043E\u0440\u0442",
+              protocol: "\u043F\u0440\u043E\u0442\u043E\u043A\u043E\u043B (TCP/UDP)",
+              destination: "\u0443\u0441\u043B\u043E\u0432\u0438\u0435 \u043D\u0430\u0437\u043D\u0430\u0447\u0435\u043D\u0438\u044F",
+              unsupported_action: "\u043F\u043E\u0434\u0434\u0435\u0440\u0436\u043A\u0430 \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u044F",
+              evaluation_limit: "\u043F\u0440\u0435\u0434\u0435\u043B \u0430\u043D\u0430\u043B\u0438\u0437\u0430"
+            };
+            routeResult.append(
+              el(
+                "p",
+                `\u041D\u0435 \u0445\u0432\u0430\u0442\u0430\u0435\u0442 \u0434\u0430\u043D\u043D\u044B\u0445: ${(Array.isArray(data.missing) ? data.missing : []).map((value) => missing[String(value)] || "\u043D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043D\u043E\u0435 \u0443\u0441\u043B\u043E\u0432\u0438\u0435").join(", ") || "\u0443\u0441\u043B\u043E\u0432\u0438\u044F \u043F\u0440\u0430\u0432\u0438\u043B\u0430"}.`
+              )
+            );
+          } else if (typeof decision.section === "string" && decision.section) {
+            routeResult.append(
+              action("\u041E\u0442\u043A\u0440\u044B\u0442\u044C \u043F\u0440\u0430\u0432\u0438\u043B\u043E", async () => {
+                if (!navigateToRule(root, {
+                  kind: "edit",
+                  section: String(decision.section),
+                  option: "domain"
+                }))
+                  message.textContent = "\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u043E\u0442\u043A\u0440\u044B\u0442\u044C \u0442\u043E\u0447\u043D\u043E\u0435 \u043F\u0440\u0430\u0432\u0438\u043B\u043E. \u041E\u0442\u043A\u0440\u043E\u0439\u0442\u0435 \u0440\u0430\u0437\u0434\u0435\u043B \u043F\u0440\u0430\u0432\u0438\u043B \u0438 \u043F\u043E\u0432\u0442\u043E\u0440\u0438\u0442\u0435.";
+              })
+            );
+          }
+          const trace = el("ol");
+          trace.dataset.detail = "true";
+          trace.hidden = root.dataset.mode !== "detailed";
+          for (const step of Array.isArray(data.trace) ? data.trace : []) {
+            const row = object4(step);
+            trace.append(
+              el(
+                "li",
+                `${connectionLabel(row.section, "")}: ${reasons[String(row.reason)] || row.reason || "\u0414\u043E\u043F\u043E\u043B\u043D\u0438\u0442\u0435\u043B\u044C\u043D\u043E\u0435 \u0443\u0441\u043B\u043E\u0432\u0438\u0435"} \xB7 ${row.match === "yes" ? "\u0441\u043E\u0432\u043F\u0430\u043B\u043E" : row.match === "no" ? "\u043D\u0435 \u0441\u043E\u0432\u043F\u0430\u043B\u043E" : "\u043D\u0435 \u043F\u043E\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043D\u043E"}`
+              )
+            );
+          }
+          routeResult.append(trace);
+        },
+        true
+      )
+    ),
     routeResult
   );
   const probeSection = select("\u041C\u0430\u0440\u0448\u0440\u0443\u0442 \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0438", [
@@ -16860,14 +18796,22 @@ function renderAdvancedPanel(request = nextRequest, loadConnections, lazy = fals
   protocol.node.onchange = invalidateRoute;
   port.node.oninput = invalidateRoute;
   probeSection.node.onchange = invalidateProbe;
-  const probeSettings = el("div");
-  route.append(probeSection.wrap, probeAction, probeResult, probeSettings);
+  const probeSettings = el("div", "", "fkp-next-actions");
+  route.append(
+    probeSection.wrap,
+    actionsRow(probeAction),
+    probeResult,
+    probeSettings
+  );
   const profiles = panel(
     "\u041F\u0440\u043E\u0444\u0438\u043B\u0438 \u0438 \u0432\u043E\u0441\u0441\u0442\u0430\u043D\u043E\u0432\u043B\u0435\u043D\u0438\u0435",
     "\u0421\u043D\u0430\u0447\u0430\u043B\u0430 \u0441\u0440\u0430\u0432\u043D\u0438\u0442\u0435 \u043F\u0440\u043E\u0444\u0438\u043B\u044C. \u041F\u0440\u0438 \u043F\u0440\u0438\u043C\u0435\u043D\u0435\u043D\u0438\u0438 \u0441\u043E\u0445\u0440\u0430\u043D\u044F\u0435\u0442\u0441\u044F \u043F\u0440\u0435\u0434\u044B\u0434\u0443\u0449\u0430\u044F \u0440\u0430\u0431\u043E\u0447\u0430\u044F \u043A\u043E\u043D\u0444\u0438\u0433\u0443\u0440\u0430\u0446\u0438\u044F.",
     "settings"
   );
-  const profile = select("\u0421\u043E\u0445\u0440\u0430\u043D\u0451\u043D\u043D\u044B\u0439 \u043F\u0440\u043E\u0444\u0438\u043B\u044C", []);
+  const profile = select("\u0421\u043E\u0445\u0440\u0430\u043D\u0451\u043D\u043D\u044B\u0439 \u043F\u0440\u043E\u0444\u0438\u043B\u044C", [
+    ["", "\u041D\u0435\u0442 \u0441\u043E\u0445\u0440\u0430\u043D\u0451\u043D\u043D\u044B\u0445 \u043F\u0440\u043E\u0444\u0438\u043B\u0435\u0439"]
+  ]);
+  profile.node.options[0].disabled = true;
   const profileName = input("profile_name", "\u041D\u0430\u0437\u0432\u0430\u043D\u0438\u0435 \u043D\u043E\u0432\u043E\u0433\u043E \u043F\u0440\u043E\u0444\u0438\u043B\u044F");
   const profileResult = el("div", "", "fkp-next-result");
   profileResult.setAttribute("aria-live", "polite");
@@ -16891,44 +18835,59 @@ function renderAdvancedPanel(request = nextRequest, loadConnections, lazy = fals
   profile.node.onchange = () => {
     invalidatePreview();
   };
-  profiles.append(
-    profile.wrap,
-    action("\u0421\u0440\u0430\u0432\u043D\u0438\u0442\u044C \u043F\u0440\u043E\u0444\u0438\u043B\u044C", async () => {
-      invalidatePreview();
-      const generation = previewGeneration;
-      const requestedName = profile.node.value;
-      const r = await invoke(
-        "profile_diff",
-        { name: requestedName },
-        profileResult
-      );
-      const data = object4(r.data);
-      if (r.success && requestedName === profile.node.value && generation === previewGeneration && data.current_digest && data.profile_digest) {
-        previewName = requestedName;
-        previewDigest = String(data.current_digest);
-        previewProfileDigest = String(data.profile_digest);
-        apply.disabled = false;
-      }
-    }),
-    apply,
-    profileName.wrap,
-    action("\u0421\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u044C \u0442\u0435\u043A\u0443\u0449\u0438\u0439 \u043F\u0440\u043E\u0444\u0438\u043B\u044C", async () => {
-      invalidatePreview();
-      await invoke(
-        "profile_save",
-        { name: profileName.node.value },
-        profileResult
-      );
-      await refreshProfiles();
-    }),
-    profileResult
-  );
   const rollback = action("\u0412\u0435\u0440\u043D\u0443\u0442\u044C \u043F\u0440\u0435\u0434\u044B\u0434\u0443\u0449\u0443\u044E \u043A\u043E\u043D\u0444\u0438\u0433\u0443\u0440\u0430\u0446\u0438\u044E", async () => {
     await invoke("rollback", { expected: digest }, profileResult);
     await refreshStatus();
   });
   rollback.disabled = true;
-  profiles.append(rollback);
+  rollback.dataset.danger = "true";
+  profiles.append(
+    profile.wrap,
+    actionsRow(
+      action(
+        "\u0421\u0440\u0430\u0432\u043D\u0438\u0442\u044C \u043F\u0440\u043E\u0444\u0438\u043B\u044C",
+        async () => {
+          invalidatePreview();
+          const requestedName = profile.node.value;
+          if (!requestedName) {
+            profileResult.textContent = "\u0421\u043D\u0430\u0447\u0430\u043B\u0430 \u0441\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u0435 \u0438\u043B\u0438 \u0438\u043C\u043F\u043E\u0440\u0442\u0438\u0440\u0443\u0439\u0442\u0435 \u043F\u0440\u043E\u0444\u0438\u043B\u044C.";
+            return;
+          }
+          const generation = previewGeneration;
+          const r = await invoke(
+            "profile_diff",
+            { name: requestedName },
+            profileResult
+          );
+          const data = object4(r.data);
+          if (r.success && requestedName === profile.node.value && generation === previewGeneration && data.current_digest && data.profile_digest) {
+            previewName = requestedName;
+            previewDigest = String(data.current_digest);
+            previewProfileDigest = String(data.profile_digest);
+            apply.disabled = false;
+          }
+        },
+        true
+      ),
+      apply
+    ),
+    profileName.wrap,
+    actionsRow(
+      action("\u0421\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u044C \u0442\u0435\u043A\u0443\u0449\u0438\u0439 \u043F\u0440\u043E\u0444\u0438\u043B\u044C", async () => {
+        invalidatePreview();
+        await invoke(
+          "profile_save",
+          { name: profileName.node.value },
+          profileResult
+        );
+        await refreshProfiles();
+      }),
+      createActionMenu("\u0415\u0449\u0451", [rollback], {
+        ariaLabel: "\u0414\u043E\u043F\u043E\u043B\u043D\u0438\u0442\u0435\u043B\u044C\u043D\u044B\u0435 \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u044F \u043F\u0440\u043E\u0444\u0438\u043B\u044F"
+      })
+    ),
+    profileResult
+  );
   const recoveryNotice = el(
     "p",
     "\u041F\u0440\u0438\u043C\u0435\u043D\u0435\u043D\u0438\u0435 \u0431\u044B\u043B\u043E \u043F\u0440\u0435\u0440\u0432\u0430\u043D\u043E. \u0412\u043E\u0441\u0441\u0442\u0430\u043D\u043E\u0432\u0438\u0442\u0435 \u0442\u0440\u0430\u043D\u0437\u0430\u043A\u0446\u0438\u044E, \u0437\u0430\u0442\u0435\u043C \u043F\u0440\u043E\u0432\u0435\u0440\u044C\u0442\u0435 \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442."
@@ -16949,6 +18908,7 @@ function renderAdvancedPanel(request = nextRequest, loadConnections, lazy = fals
   recoveryNotice.hidden = true;
   recover.hidden = true;
   const recovery = el("div");
+  recovery.hidden = true;
   recovery.append(recoveryNotice, recover, recoveryResult);
   root.insertBefore(recovery, content);
   const temporary = panel(
@@ -16969,18 +18929,24 @@ function renderAdvancedPanel(request = nextRequest, loadConnections, lazy = fals
     td.wrap,
     ts.wrap,
     ttl.wrap,
-    action("\u0414\u043E\u0431\u0430\u0432\u0438\u0442\u044C \u0432\u0440\u0435\u043C\u0435\u043D\u043D\u043E\u0435 \u043F\u0440\u0430\u0432\u0438\u043B\u043E", async () => {
-      if (!ts.node.value || ts.node.selectedOptions[0]?.disabled) {
-        message.textContent = "\u0412\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u0434\u043E\u0441\u0442\u0443\u043F\u043D\u044B\u0439 \u043C\u0430\u0440\u0448\u0440\u0443\u0442.";
-        return;
-      }
-      await invoke("temporary_add", {
-        domain: td.node.value.trim(),
-        section: ts.node.value,
-        ttl: Number(ttl.node.value)
-      });
-      await refreshTemporary();
-    }),
+    actionsRow(
+      action(
+        "\u0414\u043E\u0431\u0430\u0432\u0438\u0442\u044C \u0432\u0440\u0435\u043C\u0435\u043D\u043D\u043E\u0435 \u043F\u0440\u0430\u0432\u0438\u043B\u043E",
+        async () => {
+          if (!ts.node.value || ts.node.selectedOptions[0]?.disabled) {
+            message.textContent = "\u0412\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u0434\u043E\u0441\u0442\u0443\u043F\u043D\u044B\u0439 \u043C\u0430\u0440\u0448\u0440\u0443\u0442.";
+            return;
+          }
+          await invoke("temporary_add", {
+            domain: td.node.value.trim(),
+            section: ts.node.value,
+            ttl: Number(ttl.node.value)
+          });
+          await refreshTemporary();
+        },
+        true
+      )
+    ),
     tempList
   );
   const recommendations = panel(
@@ -16990,8 +18956,7 @@ function renderAdvancedPanel(request = nextRequest, loadConnections, lazy = fals
   );
   const rs = connection("\u041F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435", "smart");
   const recList = el("div");
-  const proxySettings = el("div");
-  recommendations.append(proxySettings);
+  const proxySettings = el("div", "", "fkp-next-actions");
   const recommendationDomain = input(
     "recommendation_domain",
     "\u0414\u043E\u043C\u0435\u043D \u0434\u043B\u044F \u0441\u0440\u0430\u0432\u043D\u0435\u043D\u0438\u044F"
@@ -17011,37 +18976,43 @@ function renderAdvancedPanel(request = nextRequest, loadConnections, lazy = fals
   );
   autoDetect.node.type = "checkbox";
   autoDetect.wrap.className = "fkp-next-check";
+  autoDetect.wrap.prepend(autoDetect.node);
   const autoResult = el("p", "", "fkp-next-result");
   autoResult.setAttribute("aria-live", "polite");
   scanResult.setAttribute("aria-live", "polite");
-  const scanAction = action("\u041F\u0440\u043E\u0432\u0435\u0440\u0438\u0442\u044C \u0434\u0440\u0443\u0433\u043E\u0439 \u043C\u0430\u0440\u0448\u0440\u0443\u0442", async () => {
-    if (!rs.node.value || rs.node.selectedOptions[0]?.disabled) {
-      scanResult.textContent = "\u0412\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u0434\u043E\u0441\u0442\u0443\u043F\u043D\u043E\u0435 \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435 \u0441 \u043D\u0430\u0441\u0442\u0440\u043E\u0435\u043D\u043D\u044B\u043C \u043B\u043E\u043A\u0430\u043B\u044C\u043D\u044B\u043C \u043F\u0440\u043E\u043A\u0441\u0438.";
-      return;
-    }
-    const generation = ++scanGeneration;
-    const key = scanKey();
-    const context = `\u0426\u0435\u043B\u044C: ${recommendationDomain.node.value.trim()} \xB7 \u041F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435: ${rs.node.selectedOptions[0]?.textContent || rs.node.value} \xB7 \u0418\u0441\u0442\u043E\u0447\u043D\u0438\u043A: \u0441 \u0440\u043E\u0443\u0442\u0435\u0440\u0430, \u043D\u0435 \u0441 \u043A\u043B\u0438\u0435\u043D\u0442\u0441\u043A\u043E\u0433\u043E \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430 \xB7 ${(/* @__PURE__ */ new Date()).toLocaleString()}`;
-    const r = await invoke("recommendation_scan", {
-      domain: recommendationDomain.node.value.trim(),
-      section: rs.node.value
-    });
-    if (generation !== scanGeneration || key !== scanKey()) return;
-    if (r.success) {
-      const data = object4(r.data);
-      const current = object4(data.current), target = object4(data.section);
-      scanResult.textContent = `\u0422\u0435\u043A\u0443\u0449\u0438\u0439 \u043C\u0430\u0440\u0448\u0440\u0443\u0442: ${current.reachable === true ? "\u0435\u0441\u0442\u044C \u0441\u0435\u0442\u0435\u0432\u043E\u0439 \u043E\u0442\u0432\u0435\u0442" : current.reachable === false ? "\u043D\u0435\u0442 \u043E\u0442\u0432\u0435\u0442\u0430" : "\u0441\u043C. \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442\u044B \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0438"}. \u0412\u044B\u0431\u0440\u0430\u043D\u043D\u043E\u0435 \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435: ${target.reachable === true ? "\u0435\u0441\u0442\u044C \u0441\u0435\u0442\u0435\u0432\u043E\u0439 \u043E\u0442\u0432\u0435\u0442" : target.reachable === false ? "\u043D\u0435\u0442 \u043E\u0442\u0432\u0435\u0442\u0430" : "\u0441\u043C. \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442\u044B \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0438"}. ${context}. \u0420\u0435\u043A\u043E\u043C\u0435\u043D\u0434\u0430\u0446\u0438\u044F \u043F\u043E\u044F\u0432\u043B\u044F\u0435\u0442\u0441\u044F \u043F\u043E\u0441\u043B\u0435 \u043F\u043E\u0432\u0442\u043E\u0440\u043D\u044B\u0445 \u043D\u0430\u0431\u043B\u044E\u0434\u0435\u043D\u0438\u0439; \u043F\u0440\u0430\u0432\u0438\u043B\u0430 \u0430\u0432\u0442\u043E\u043C\u0430\u0442\u0438\u0447\u0435\u0441\u043A\u0438 \u043D\u0435 \u043F\u0440\u0438\u043C\u0435\u043D\u044F\u044E\u0442\u0441\u044F.`;
-      await refreshRecommendations();
-    } else
-      scanResult.textContent = `\u0421\u0440\u0430\u0432\u043D\u0435\u043D\u0438\u0435 \u043D\u0435 \u0432\u044B\u043F\u043E\u043B\u043D\u0435\u043D\u043E: ${r.error || "\u043D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043D\u0430\u044F \u043E\u0448\u0438\u0431\u043A\u0430"}. ${context}`;
-  });
+  const scanAction = action(
+    "\u041F\u0440\u043E\u0432\u0435\u0440\u0438\u0442\u044C \u0434\u0440\u0443\u0433\u043E\u0439 \u043C\u0430\u0440\u0448\u0440\u0443\u0442",
+    async () => {
+      if (!rs.node.value || rs.node.selectedOptions[0]?.disabled) {
+        scanResult.textContent = "\u0412\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u0434\u043E\u0441\u0442\u0443\u043F\u043D\u043E\u0435 \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435 \u0441 \u043D\u0430\u0441\u0442\u0440\u043E\u0435\u043D\u043D\u044B\u043C \u043B\u043E\u043A\u0430\u043B\u044C\u043D\u044B\u043C \u043F\u0440\u043E\u043A\u0441\u0438.";
+        return;
+      }
+      const generation = ++scanGeneration;
+      const key = scanKey();
+      const context = `\u0426\u0435\u043B\u044C: ${recommendationDomain.node.value.trim()} \xB7 \u041F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435: ${rs.node.selectedOptions[0]?.textContent || rs.node.value} \xB7 \u0418\u0441\u0442\u043E\u0447\u043D\u0438\u043A: \u0441 \u0440\u043E\u0443\u0442\u0435\u0440\u0430, \u043D\u0435 \u0441 \u043A\u043B\u0438\u0435\u043D\u0442\u0441\u043A\u043E\u0433\u043E \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430 \xB7 ${(/* @__PURE__ */ new Date()).toLocaleString()}`;
+      const r = await invoke("recommendation_scan", {
+        domain: recommendationDomain.node.value.trim(),
+        section: rs.node.value
+      });
+      if (generation !== scanGeneration || key !== scanKey()) return;
+      if (r.success) {
+        const data = object4(r.data);
+        const current = object4(data.current), target = object4(data.section);
+        scanResult.textContent = `\u0422\u0435\u043A\u0443\u0449\u0438\u0439 \u043C\u0430\u0440\u0448\u0440\u0443\u0442: ${current.reachable === true ? "\u0435\u0441\u0442\u044C \u0441\u0435\u0442\u0435\u0432\u043E\u0439 \u043E\u0442\u0432\u0435\u0442" : current.reachable === false ? "\u043D\u0435\u0442 \u043E\u0442\u0432\u0435\u0442\u0430" : "\u0441\u043C. \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442\u044B \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0438"}. \u0412\u044B\u0431\u0440\u0430\u043D\u043D\u043E\u0435 \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435: ${target.reachable === true ? "\u0435\u0441\u0442\u044C \u0441\u0435\u0442\u0435\u0432\u043E\u0439 \u043E\u0442\u0432\u0435\u0442" : target.reachable === false ? "\u043D\u0435\u0442 \u043E\u0442\u0432\u0435\u0442\u0430" : "\u0441\u043C. \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442\u044B \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0438"}. ${context}. \u0420\u0435\u043A\u043E\u043C\u0435\u043D\u0434\u0430\u0446\u0438\u044F \u043F\u043E\u044F\u0432\u043B\u044F\u0435\u0442\u0441\u044F \u043F\u043E\u0441\u043B\u0435 \u043F\u043E\u0432\u0442\u043E\u0440\u043D\u044B\u0445 \u043D\u0430\u0431\u043B\u044E\u0434\u0435\u043D\u0438\u0439; \u043F\u0440\u0430\u0432\u0438\u043B\u0430 \u0430\u0432\u0442\u043E\u043C\u0430\u0442\u0438\u0447\u0435\u0441\u043A\u0438 \u043D\u0435 \u043F\u0440\u0438\u043C\u0435\u043D\u044F\u044E\u0442\u0441\u044F.`;
+        await refreshRecommendations();
+      } else
+        scanResult.textContent = `\u0421\u0440\u0430\u0432\u043D\u0435\u043D\u0438\u0435 \u043D\u0435 \u0432\u044B\u043F\u043E\u043B\u043D\u0435\u043D\u043E: ${r.error || "\u043D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043D\u0430\u044F \u043E\u0448\u0438\u0431\u043A\u0430"}. ${context}`;
+    },
+    true
+  );
   recommendationDomain.node.oninput = invalidateScan;
   rs.node.onchange = invalidateScan;
   recommendations.append(
     recommendationDomain.wrap,
     rs.wrap,
-    scanAction,
+    actionsRow(scanAction),
     scanResult,
+    proxySettings,
     recList
   );
   recommendations.append(
@@ -17050,17 +19021,19 @@ function renderAdvancedPanel(request = nextRequest, loadConnections, lazy = fals
       "p",
       "\u041F\u043E\u0438\u0441\u043A \u0432\u044B\u043F\u043E\u043B\u043D\u044F\u0435\u0442\u0441\u044F \u0440\u0430\u0437 \u0432 \u043C\u0438\u043D\u0443\u0442\u0443 \u043F\u043E\u0441\u043B\u0435 \u0432\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u044F. \u041C\u0430\u0440\u0448\u0440\u0443\u0442\u044B \u043C\u0435\u043D\u044F\u044E\u0442\u0441\u044F \u0442\u043E\u043B\u044C\u043A\u043E \u043F\u043E\u0441\u043B\u0435 \u043F\u0440\u0438\u043D\u044F\u0442\u0438\u044F \u0440\u0435\u043A\u043E\u043C\u0435\u043D\u0434\u0430\u0446\u0438\u0438."
     ),
-    action("\u0421\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u044C \u0430\u0432\u0442\u043E\u043C\u0430\u0442\u0438\u0447\u0435\u0441\u043A\u0438\u0439 \u043F\u043E\u0438\u0441\u043A", async () => {
-      if (autoDetect.node.checked && (!rs.node.value || rs.node.selectedOptions[0]?.disabled)) {
-        autoResult.textContent = "\u0412\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u0434\u043E\u0441\u0442\u0443\u043F\u043D\u043E\u0435 \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435 \u0441 \u043D\u0430\u0441\u0442\u0440\u043E\u0435\u043D\u043D\u044B\u043C \u043B\u043E\u043A\u0430\u043B\u044C\u043D\u044B\u043C \u043F\u0440\u043E\u043A\u0441\u0438.";
-        return;
-      }
-      const r = await invoke("smart_detect_configure", {
-        enabled: autoDetect.node.checked,
-        section: rs.node.value
-      });
-      autoResult.textContent = r.success ? "\u041D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438 \u0430\u0432\u0442\u043E\u043C\u0430\u0442\u0438\u0447\u0435\u0441\u043A\u043E\u0433\u043E \u043F\u043E\u0438\u0441\u043A\u0430 \u0441\u043E\u0445\u0440\u0430\u043D\u0435\u043D\u044B." : r.error === "section_probe_unavailable" ? "\u0412\u043A\u043B\u044E\u0447\u0438\u0442\u0435 \u043B\u043E\u043A\u0430\u043B\u044C\u043D\u044B\u0439 SOCKS \u0434\u043B\u044F \u0432\u044B\u0431\u0440\u0430\u043D\u043D\u043E\u0433\u043E \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u044F \u0432 \u0440\u0430\u0441\u0448\u0438\u0440\u0435\u043D\u043D\u044B\u0445 \u043D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0430\u0445 \u0438 \u043F\u043E\u0432\u0442\u043E\u0440\u0438\u0442\u0435 \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u0435." : `\u041D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438 \u043D\u0435 \u0441\u043E\u0445\u0440\u0430\u043D\u0435\u043D\u044B: ${r.error || "\u043D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043D\u0430\u044F \u043E\u0448\u0438\u0431\u043A\u0430"}`;
-    }),
+    actionsRow(
+      action("\u0421\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u044C \u0430\u0432\u0442\u043E\u043C\u0430\u0442\u0438\u0447\u0435\u0441\u043A\u0438\u0439 \u043F\u043E\u0438\u0441\u043A", async () => {
+        if (autoDetect.node.checked && (!rs.node.value || rs.node.selectedOptions[0]?.disabled)) {
+          autoResult.textContent = "\u0412\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u0434\u043E\u0441\u0442\u0443\u043F\u043D\u043E\u0435 \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435 \u0441 \u043D\u0430\u0441\u0442\u0440\u043E\u0435\u043D\u043D\u044B\u043C \u043B\u043E\u043A\u0430\u043B\u044C\u043D\u044B\u043C \u043F\u0440\u043E\u043A\u0441\u0438.";
+          return;
+        }
+        const r = await invoke("smart_detect_configure", {
+          enabled: autoDetect.node.checked,
+          section: rs.node.value
+        });
+        autoResult.textContent = r.success ? "\u041D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438 \u0430\u0432\u0442\u043E\u043C\u0430\u0442\u0438\u0447\u0435\u0441\u043A\u043E\u0433\u043E \u043F\u043E\u0438\u0441\u043A\u0430 \u0441\u043E\u0445\u0440\u0430\u043D\u0435\u043D\u044B." : r.error === "section_probe_unavailable" ? "\u0412\u043A\u043B\u044E\u0447\u0438\u0442\u0435 \u043B\u043E\u043A\u0430\u043B\u044C\u043D\u044B\u0439 SOCKS \u0434\u043B\u044F \u0432\u044B\u0431\u0440\u0430\u043D\u043D\u043E\u0433\u043E \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u044F \u0432 \u0440\u0430\u0441\u0448\u0438\u0440\u0435\u043D\u043D\u044B\u0445 \u043D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0430\u0445 \u0438 \u043F\u043E\u0432\u0442\u043E\u0440\u0438\u0442\u0435 \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u0435." : `\u041D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438 \u043D\u0435 \u0441\u043E\u0445\u0440\u0430\u043D\u0435\u043D\u044B: ${r.error || "\u043D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043D\u0430\u044F \u043E\u0448\u0438\u0431\u043A\u0430"}`;
+      })
+    ),
     autoResult
   );
   let statusGeneration = 0;
@@ -17092,6 +19065,7 @@ function renderAdvancedPanel(request = nextRequest, loadConnections, lazy = fals
     recoveryNotice.hidden = d.recovery_pending !== true;
     recover.hidden = d.recovery_pending !== true;
     recover.disabled = d.recovery_pending !== true;
+    recovery.hidden = d.recovery_pending !== true && !recoveryResult.textContent;
     sections = (Array.isArray(d.sections) ? d.sections : []).map(
       (s) => {
         const o = object4(s);
@@ -17147,25 +19121,50 @@ function renderAdvancedPanel(request = nextRequest, loadConnections, lazy = fals
       [probeSettings, "probe", probeResult]
     ]) {
       settings.replaceChildren();
-      for (const target of targets.filter(
+      const ineligible = targets.filter(
         (t) => !targetEligibility(t, use).eligible
-      )) {
+      );
+      const openRuleFor = (target) => {
         const option = targetEligibility(target, use).settingsOption;
-        const supportsProxy = option === "mixed_proxy_enabled";
-        const b = el(
-          "button",
-          `${supportsProxy ? "\u041D\u0430\u0441\u0442\u0440\u043E\u0438\u0442\u044C \u043B\u043E\u043A\u0430\u043B\u044C\u043D\u044B\u0439 \u043F\u0440\u043E\u043A\u0441\u0438" : "\u041D\u0430\u0441\u0442\u0440\u043E\u0438\u0442\u044C \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u0435 \u043F\u0440\u0430\u0432\u0438\u043B\u0430"}: ${target.label}`
-        );
-        b.type = "button";
-        b.onclick = () => {
-          if (!navigateToRule(root, {
-            kind: "edit",
-            section: target.name,
-            option
-          }))
-            result.textContent = "\u041E\u0442\u043A\u0440\u043E\u0439\u0442\u0435 \u044D\u0442\u043E \u043F\u0440\u0430\u0432\u0438\u043B\u043E \u0438 \u043D\u0430\u0441\u0442\u0440\u043E\u0439\u0442\u0435 \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u0435 \u0438 \u043B\u043E\u043A\u0430\u043B\u044C\u043D\u044B\u0439 \u043F\u0440\u043E\u043A\u0441\u0438.";
+        if (!navigateToRule(root, {
+          kind: "edit",
+          section: target.name,
+          option
+        }))
+          result.textContent = "\u041E\u0442\u043A\u0440\u043E\u0439\u0442\u0435 \u044D\u0442\u043E \u043F\u0440\u0430\u0432\u0438\u043B\u043E \u0438 \u043D\u0430\u0441\u0442\u0440\u043E\u0439\u0442\u0435 \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u0435 \u0438 \u043B\u043E\u043A\u0430\u043B\u044C\u043D\u044B\u0439 \u043F\u0440\u043E\u043A\u0441\u0438.";
+      };
+      if (ineligible.length > 2) {
+        const picker = el("select");
+        picker.setAttribute("aria-label", "\u041F\u0440\u0430\u0432\u0438\u043B\u043E \u0434\u043B\u044F \u043D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438");
+        for (const target of ineligible) {
+          const option = targetEligibility(target, use).settingsOption;
+          const supportsProxy = option === "mixed_proxy_enabled";
+          const opt = el(
+            "option",
+            `${supportsProxy ? "\u041D\u0430\u0441\u0442\u0440\u043E\u0438\u0442\u044C \u043B\u043E\u043A\u0430\u043B\u044C\u043D\u044B\u0439 \u043F\u0440\u043E\u043A\u0441\u0438" : "\u041D\u0430\u0441\u0442\u0440\u043E\u0438\u0442\u044C \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u0435 \u043F\u0440\u0430\u0432\u0438\u043B\u0430"}: ${target.label}`
+          );
+          opt.value = target.name;
+          picker.append(opt);
+        }
+        const openBtn = el("button", "\u041D\u0430\u0441\u0442\u0440\u043E\u0438\u0442\u044C \u0432\u044B\u0431\u0440\u0430\u043D\u043D\u043E\u0435 \u043F\u0440\u0430\u0432\u0438\u043B\u043E");
+        openBtn.type = "button";
+        openBtn.onclick = () => {
+          const chosen = ineligible.find((t) => t.name === picker.value);
+          if (chosen) openRuleFor(chosen);
         };
-        settings.append(b);
+        settings.append(picker, openBtn);
+      } else {
+        for (const target of ineligible) {
+          const option = targetEligibility(target, use).settingsOption;
+          const supportsProxy = option === "mixed_proxy_enabled";
+          const b = el(
+            "button",
+            `${supportsProxy ? "\u041D\u0430\u0441\u0442\u0440\u043E\u0438\u0442\u044C \u043B\u043E\u043A\u0430\u043B\u044C\u043D\u044B\u0439 \u043F\u0440\u043E\u043A\u0441\u0438" : "\u041D\u0430\u0441\u0442\u0440\u043E\u0438\u0442\u044C \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u0435 \u043F\u0440\u0430\u0432\u0438\u043B\u0430"}: ${target.label}`
+          );
+          b.type = "button";
+          b.onclick = () => openRuleFor(target);
+          settings.append(b);
+        }
       }
     }
   }
@@ -17179,10 +19178,18 @@ function renderAdvancedPanel(request = nextRequest, loadConnections, lazy = fals
       return;
     }
     profile.node.replaceChildren();
-    for (const p of items(r.data)) {
-      const o = el("option", String(p.name));
-      o.value = String(p.name);
-      profile.node.append(o);
+    const profileList = items(r.data);
+    if (!profileList.length) {
+      const emptyOpt = el("option", "\u041D\u0435\u0442 \u0441\u043E\u0445\u0440\u0430\u043D\u0451\u043D\u043D\u044B\u0445 \u043F\u0440\u043E\u0444\u0438\u043B\u0435\u0439");
+      emptyOpt.value = "";
+      emptyOpt.disabled = true;
+      profile.node.append(emptyOpt);
+    } else {
+      for (const p of profileList) {
+        const o = el("option", String(p.name));
+        o.value = String(p.name);
+        profile.node.append(o);
+      }
     }
     apply.disabled = previewName !== profile.node.value || !previewName;
   }
@@ -17307,7 +19314,22 @@ function renderAdvancedPanel(request = nextRequest, loadConnections, lazy = fals
       message.textContent = "\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0437\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044C \u0434\u0430\u043D\u043D\u044B\u0435. \u041D\u0430\u0436\u043C\u0438\u0442\u0435 \xAB\u041E\u0431\u043D\u043E\u0432\u0438\u0442\u044C \u0434\u0430\u043D\u043D\u044B\u0435\xBB.";
     }
   };
-  header.append(action("\u041E\u0431\u043D\u043E\u0432\u0438\u0442\u044C \u0434\u0430\u043D\u043D\u044B\u0435", refreshVisible));
+  const refreshVisibleBtn = action("\u041E\u0431\u043D\u043E\u0432\u0438\u0442\u044C \u0434\u0430\u043D\u043D\u044B\u0435", refreshVisible);
+  if (area === "devices") {
+    const devPopover = root.querySelector(
+      ".fkp-next-actions details.fkp-action-menu > .fkp-action-menu__popover"
+    );
+    if (devPopover) {
+      refreshVisibleBtn.classList.add("fkp-action-menu__item");
+      refreshVisibleBtn.setAttribute("role", "menuitem");
+      devPopover.prepend(refreshVisibleBtn);
+      header.hidden = true;
+    } else {
+      header.append(refreshVisibleBtn);
+    }
+  } else {
+    header.append(refreshVisibleBtn);
+  }
   root.addEventListener("forkop:refresh", () => {
     void refreshVisible();
   });
@@ -17343,22 +19365,7 @@ function renderNextPanel(request = nextRequest, loadConnections, adapters = {}) 
     el2("h2", "\u041F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435"),
     el2("p", "\u0421\u043E\u0441\u0442\u043E\u044F\u043D\u0438\u0435 \u0440\u043E\u0443\u0442\u0435\u0440\u0430 \u0438 \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0430 \u0434\u043E\u0441\u0442\u0443\u043F\u0430 \u0432 \u0441\u0435\u0442\u044C.")
   );
-  const theme = el2("label", "\u0422\u0435\u043C\u0430");
-  const themes = el2("select");
-  for (const [value, label] of [
-    ["auto", "\u041A\u0430\u043A \u0432 LuCI"],
-    ["light", "\u0421\u0432\u0435\u0442\u043B\u0430\u044F"],
-    ["dark", "\u0422\u0451\u043C\u043D\u0430\u044F"]
-  ]) {
-    const option = el2("option", label);
-    option.value = value;
-    themes.append(option);
-  }
-  themes.onchange = () => {
-    root.dataset.theme = themes.value;
-  };
-  theme.append(themes);
-  if (!adapters.workspace) header.append(title, theme);
+  if (!adapters.workspace) header.append(title);
   else root.dataset.workspace = "true";
   root.append(header);
   const service = el2("p", "\u0421\u043E\u0441\u0442\u043E\u044F\u043D\u0438\u0435 \u0441\u0435\u0440\u0432\u0438\u0441\u0430 \u043D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043D\u043E", "fkp-next-service");
@@ -17387,6 +19394,53 @@ function renderNextPanel(request = nextRequest, loadConnections, adapters = {}) 
   const serviceControl = el2("button", "\u0412\u043A\u043B\u044E\u0447\u0438\u0442\u044C \u0441\u0435\u0440\u0432\u0438\u0441");
   serviceControl.type = "button";
   serviceControl.disabled = true;
+  const heroActions = el2("div", "", "fkp-next-hero-actions");
+  const heroOverflow = createActionMenu("\u0415\u0449\u0451", [], {
+    ariaLabel: "\u0414\u043E\u043F\u043E\u043B\u043D\u0438\u0442\u0435\u043B\u044C\u043D\u044B\u0435 \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u044F"
+  });
+  const heroOverflowPopover = heroOverflow.querySelector(
+    ".fkp-action-menu__popover"
+  );
+  const heroOverflowDivider = actionMenuDivider();
+  const heroRefs = {};
+  function syncServiceControlPlacement() {
+    if (!adapters.changeService) {
+      heroOverflow.hidden = !heroOverflowPopover.querySelector("button");
+      return;
+    }
+    if (runtime?.running === false) {
+      serviceControl.classList.remove(
+        "fkp-action-menu__item",
+        "fkp-action-menu__danger"
+      );
+      serviceControl.removeAttribute("role");
+      delete serviceControl.dataset.danger;
+      heroOverflowDivider.remove();
+      if (heroRefs.add && heroRefs.add.parentElement === heroActions) {
+        heroActions.insertBefore(serviceControl, heroRefs.add);
+      } else {
+        heroActions.insertBefore(serviceControl, heroOverflow);
+      }
+    } else {
+      if (runtime?.running === true) {
+        serviceControl.dataset.danger = "true";
+      } else {
+        delete serviceControl.dataset.danger;
+        serviceControl.classList.remove("fkp-action-menu__danger");
+      }
+      if (heroRefs.refresh && heroOverflowPopover.contains(heroRefs.refresh)) {
+        heroOverflowPopover.append(heroOverflowDivider, serviceControl);
+      } else {
+        heroOverflowDivider.remove();
+        heroOverflowPopover.append(serviceControl);
+      }
+      decorateActionMenuItems(heroOverflowPopover);
+      if (runtime?.running !== true) {
+        serviceControl.classList.remove("fkp-action-menu__danger");
+      }
+    }
+    heroOverflow.hidden = !heroOverflowPopover.querySelector("button");
+  }
   function updateServiceControl() {
     serviceControl.textContent = runtime?.running === true ? "\u041E\u0442\u043A\u043B\u044E\u0447\u0438\u0442\u044C \u0441\u0435\u0440\u0432\u0438\u0441" : "\u0412\u043A\u043B\u044E\u0447\u0438\u0442\u044C \u0441\u0435\u0440\u0432\u0438\u0441";
     serviceControl.disabled = servicePending || runtime?.pending === true || typeof runtime?.running !== "boolean" || Boolean(runtime?.error);
@@ -17394,6 +19448,7 @@ function renderNextPanel(request = nextRequest, loadConnections, adapters = {}) 
       "aria-busy",
       String(servicePending || runtime?.pending === true)
     );
+    syncServiceControlPlacement();
   }
   serviceControl.onclick = async () => {
     if (serviceControl.disabled || !adapters.changeService) return;
@@ -17443,26 +19498,23 @@ function renderNextPanel(request = nextRequest, loadConnections, adapters = {}) 
     "fkp-next-summary"
   );
   const serverHeading = el2("h3", "\u041E\u0441\u043D\u043E\u0432\u043D\u043E\u0435 \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435");
-  server.append(
-    serverHeading,
-    selected,
-    action("\u0418\u0437\u043C\u0435\u043D\u0438\u0442\u044C \u0441\u0435\u0440\u0432\u0435\u0440", async () => {
-      notice.textContent = "\u041E\u0442\u043A\u0440\u044B\u0432\u0430\u0435\u043C \u0432\u044B\u0431\u043E\u0440 \u0441\u0435\u0440\u0432\u0435\u0440\u0430\u2026";
-      try {
-        if (adapters.openServers) await adapters.openServers();
-        else {
-          const tab = document.querySelector(
-            '.cbi-tabmenu [data-tab="dashboard"] a, .cbi-tabmenu [data-tab="dashboard"] button'
-          );
-          if (!tab) throw new Error("navigation_unavailable");
-          tab.click();
-        }
-        notice.textContent = "";
-      } catch {
-        notice.textContent = "\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u043E\u0442\u043A\u0440\u044B\u0442\u044C \u0432\u044B\u0431\u043E\u0440 \u0441\u0435\u0440\u0432\u0435\u0440\u0430. \u041E\u0442\u043A\u0440\u043E\u0439\u0442\u0435 \u0432\u043A\u043B\u0430\u0434\u043A\u0443 Dashboard \u0432 LuCI.";
+  const changeServer = action("\u0418\u0437\u043C\u0435\u043D\u0438\u0442\u044C \u0441\u0435\u0440\u0432\u0435\u0440", async () => {
+    notice.textContent = "\u041E\u0442\u043A\u0440\u044B\u0432\u0430\u0435\u043C \u0432\u044B\u0431\u043E\u0440 \u0441\u0435\u0440\u0432\u0435\u0440\u0430\u2026";
+    try {
+      if (adapters.openServers) await adapters.openServers();
+      else {
+        const tab = document.querySelector(
+          '.cbi-tabmenu [data-tab="dashboard"] a, .cbi-tabmenu [data-tab="dashboard"] button'
+        );
+        if (!tab) throw new Error("navigation_unavailable");
+        tab.click();
       }
-    })
-  );
+      notice.textContent = "";
+    } catch {
+      notice.textContent = "\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u043E\u0442\u043A\u0440\u044B\u0442\u044C \u0432\u044B\u0431\u043E\u0440 \u0441\u0435\u0440\u0432\u0435\u0440\u0430. \u041E\u0442\u043A\u0440\u043E\u0439\u0442\u0435 \u0432\u043A\u043B\u0430\u0434\u043A\u0443 Dashboard \u0432 LuCI.";
+    }
+  });
+  changeServer.className = "fkp-next-primary-action";
   const addConnection = action("\u0414\u043E\u0431\u0430\u0432\u0438\u0442\u044C \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435", async () => {
     notice.textContent = "\u041E\u0442\u043A\u0440\u044B\u0432\u0430\u0435\u043C \u043D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438 \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u044F\u2026";
     try {
@@ -17474,12 +19526,16 @@ function renderNextPanel(request = nextRequest, loadConnections, adapters = {}) 
       notice.textContent = "\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u043E\u0442\u043A\u0440\u044B\u0442\u044C \u043D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438. \u041E\u0442\u043A\u0440\u043E\u0439\u0442\u0435 \u0432\u043A\u043B\u0430\u0434\u043A\u0443 \xAB\u041F\u0440\u0430\u0432\u0438\u043B\u0430\xBB \u0432 LuCI.";
     }
   });
+  heroRefs.add = addConnection;
+  heroActions.append(changeServer, addConnection);
+  if (adapters.workspace || adapters.changeService) {
+    heroActions.append(heroOverflow);
+  }
   const setupHelp = el2(
     "p",
     "\u0414\u043E\u0431\u0430\u0432\u044C\u0442\u0435 \u0441\u0441\u044B\u043B\u043A\u0443 \u0438\u043B\u0438 \u043F\u043E\u0434\u043F\u0438\u0441\u043A\u0443, \u043F\u0440\u043E\u0432\u0435\u0440\u044C\u0442\u0435 \u0443\u0441\u043B\u043E\u0432\u0438\u044F \u043F\u0440\u0430\u0432\u0438\u043B\u0430, \u0441\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u0435 \u0438 \u043F\u0440\u0438\u043C\u0435\u043D\u0438\u0442\u0435 \u0438\u0437\u043C\u0435\u043D\u0435\u043D\u0438\u044F. \u0417\u0430\u0442\u0435\u043C \u0432\u0435\u0440\u043D\u0438\u0442\u0435\u0441\u044C \u043A \u0432\u044B\u0431\u043E\u0440\u0443 \u0443\u0437\u043B\u0430.",
     "fkp-next-help"
   );
-  server.append(addConnection, setupHelp);
   const check = el2("details", "", "fkp-next-probe");
   check.append(el2("summary", "\u041F\u0440\u043E\u0432\u0435\u0440\u0438\u0442\u044C \u0441\u043E\u0435\u0434\u0438\u043D\u0435\u043D\u0438\u0435"));
   const domainLabel = el2("label", "\u0421\u0430\u0439\u0442 \u0434\u043B\u044F \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0438");
@@ -17489,7 +19545,6 @@ function renderNextPanel(request = nextRequest, loadConnections, adapters = {}) 
   domain.autocomplete = "off";
   domain.setAttribute("aria-label", "\u0421\u0430\u0439\u0442 \u0434\u043B\u044F \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0438");
   domainLabel.append(domain);
-  check.append(domainLabel);
   const probeButton = action("\u041F\u0440\u043E\u0432\u0435\u0440\u0438\u0442\u044C \u0441\u043E\u0435\u0434\u0438\u043D\u0435\u043D\u0438\u0435", async () => {
     if (!visible()) return;
     const target = domain.value.trim();
@@ -17529,27 +19584,156 @@ function renderNextPanel(request = nextRequest, loadConnections, adapters = {}) 
     }
   });
   probeButton.className = "fkp-next-primary-action";
+  const probeForm = el2("div", "", "fkp-next-probe-form");
+  probeForm.append(domainLabel, probeButton);
   check.append(
-    probeButton,
+    probeForm,
     el2(
       "p",
       "\u041F\u0440\u043E\u0432\u0435\u0440\u043A\u0430 \u0438\u0441\u043F\u043E\u043B\u044C\u0437\u0443\u0435\u0442 \u0442\u0435\u043A\u0443\u0449\u0438\u0439 \u043C\u0430\u0440\u0448\u0440\u0443\u0442 \u0440\u043E\u0443\u0442\u0435\u0440\u0430. \u0421\u043E\u0441\u0442\u043E\u044F\u043D\u0438\u0435 \u043F\u0440\u043E\u0446\u0435\u0441\u0441\u0430 \u0438 \u043F\u0440\u0435\u0436\u043D\u044F\u044F \u0437\u0430\u0434\u0435\u0440\u0436\u043A\u0430 \u043D\u0435 \u043F\u043E\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0430\u044E\u0442 \u0434\u043E\u0441\u0442\u0443\u043F\u043D\u043E\u0441\u0442\u044C \u0441\u0430\u0439\u0442\u0430.",
       "fkp-next-help"
     )
   );
+  server.append(serverHeading, selected, heroActions, setupHelp, check);
+  let primarySectionName;
+  function activateMapTab(tabName) {
+    const scope = root.closest(".cbi-map") || document;
+    const tab = scope.querySelector(
+      `.cbi-tabmenu [data-tab="${tabName}"] a, .cbi-tabmenu [data-tab="${tabName}"] button`
+    );
+    if (!tab) return null;
+    tab.click();
+    return [
+      ...scope.querySelectorAll(".cbi-map-tabbed > [data-tab]")
+    ].find((node) => node.dataset.tab === tabName) || null;
+  }
+  function createScenarioCard(id, heading, subtitle, onSelect) {
+    const card = el2("button", "", "fkp-scenario-card");
+    card.type = "button";
+    card.dataset.scenario = id;
+    card.append(
+      el2("strong", heading, "fkp-scenario-title"),
+      el2("span", subtitle, "fkp-scenario-desc")
+    );
+    card.onclick = () => {
+      void onSelect();
+    };
+    return card;
+  }
+  const scenarios = el2("section", "", "fkp-next-panel fkp-next-scenarios");
+  scenarios.append(el2("h3", "\u0411\u044B\u0441\u0442\u0440\u044B\u0435 \u0441\u0446\u0435\u043D\u0430\u0440\u0438\u0438"));
+  const scenarioGrid = el2("div", "", "fkp-scenario-grid");
+  scenarioGrid.append(
+    createScenarioCard(
+      "vpn-warp",
+      "WireGuard, AmneziaWG \u0438\u043B\u0438 WARP",
+      "\u0418\u043C\u043F\u043E\u0440\u0442 .conf \u0438\u043B\u0438 \u0432\u044B\u043F\u0443\u0441\u043A \u0431\u0435\u0441\u043F\u043B\u0430\u0442\u043D\u043E\u0433\u043E \u043F\u0440\u043E\u0444\u0438\u043B\u044F Cloudflare WARP \u0432 1 \u043A\u043B\u0438\u043A.",
+      async () => {
+        const destination = primarySectionName ? {
+          kind: "edit",
+          section: primarySectionName,
+          option: "_wg_warp_helper"
+        } : { kind: "create", option: "_wg_warp_helper" };
+        if (navigateToRule(root, destination)) {
+          notice.textContent = "";
+          return;
+        }
+        if (adapters.openRules) {
+          await adapters.openRules();
+          notice.textContent = "";
+          return;
+        }
+        notice.textContent = "\u041E\u0442\u043A\u0440\u043E\u0439\u0442\u0435 \u0440\u0430\u0437\u0434\u0435\u043B \xAB\u041F\u0440\u0430\u0432\u0438\u043B\u0430\xBB, \u0447\u0442\u043E\u0431\u044B \u0438\u043C\u043F\u043E\u0440\u0442\u0438\u0440\u043E\u0432\u0430\u0442\u044C .conf \u0438\u043B\u0438 \u0432\u044B\u043F\u0443\u0441\u0442\u0438\u0442\u044C \u043F\u0440\u043E\u0444\u0438\u043B\u044C WARP.";
+      }
+    ),
+    createScenarioCard(
+      "gaming-nat",
+      "\u0418\u0433\u0440\u044B \u0438 \u043A\u043E\u043D\u0441\u043E\u043B\u0438 (Open NAT)",
+      "PlayStation, Xbox \u0438 \u041F\u041A: \u043E\u0431\u0445\u043E\u0434 \u0431\u043B\u043E\u043A\u0438\u0440\u043E\u0432\u043E\u043A \u0434\u043B\u044F \u0432\u0445\u043E\u0434\u0430 \u0438 \u043F\u0440\u044F\u043C\u043E\u0439 UDP \u0431\u0435\u0437 \u043F\u043E\u0442\u0435\u0440\u0438 \u043F\u0438\u043D\u0433\u0430.",
+      () => {
+        const pane = activateMapTab("devices");
+        if (pane) {
+          const gamingInput = pane.querySelector(
+            '[aria-label="\u0418\u0433\u0440\u043E\u0432\u043E\u0435 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u043E"], input'
+          );
+          gamingInput?.focus();
+          gamingInput?.scrollIntoView?.({ block: "center" });
+          notice.textContent = "";
+          return;
+        }
+        if (!adapters.workspace) {
+          advanced.open = true;
+          advanced.dispatchEvent(new Event("toggle"));
+          const gamingSummary = [
+            ...advanced.querySelectorAll("summary")
+          ].find((s) => s.textContent?.includes("\u0423\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430"));
+          if (gamingSummary?.parentElement instanceof HTMLDetailsElement)
+            gamingSummary.parentElement.open = true;
+          gamingSummary?.focus();
+          return;
+        }
+        notice.textContent = "\u041E\u0442\u043A\u0440\u043E\u0439\u0442\u0435 \u0440\u0430\u0437\u0434\u0435\u043B \xAB\u0423\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430\xBB \u0434\u043B\u044F \u0432\u044B\u0431\u043E\u0440\u0430 \u0438\u0433\u0440\u043E\u0432\u043E\u0433\u043E \u043F\u0440\u0435\u0441\u0435\u0442\u0430 \u0438\u043B\u0438 \u043A\u043E\u043D\u0441\u043E\u043B\u044C\u043D\u043E\u0433\u043E \u0440\u0435\u0436\u0438\u043C\u0430.";
+      }
+    ),
+    createScenarioCard(
+      "tspu-check",
+      "\u041D\u0435 \u0433\u0440\u0443\u0437\u0438\u0442\u0441\u044F \u0432\u0438\u0434\u0435\u043E \u0438\u043B\u0438 \u0441\u0430\u0439\u0442",
+      "\u0414\u0438\u0430\u0433\u043D\u043E\u0441\u0442\u0438\u043A\u0430 \u043F\u043E 4 \u044D\u0442\u0430\u043F\u0430\u043C (DNS \u2192 TCP \u2192 TLS \u2192 \u043B\u0438\u043C\u0438\u0442 \u0422\u0421\u041F\u0423 16\u201320 \u041A\u0411) \u0438 \u0434\u043E\u0431\u0430\u0432\u043B\u0435\u043D\u0438\u0435 \u0432 \u043E\u0431\u0445\u043E\u0434.",
+      () => {
+        const pane = activateMapTab("diagnostic");
+        if (pane) {
+          const tspuInput = pane.querySelector(
+            'input[name="tspu_domain"]'
+          );
+          tspuInput?.focus();
+          tspuInput?.scrollIntoView?.({ block: "center" });
+          notice.textContent = "";
+          return;
+        }
+        check.open = true;
+        domain.focus();
+      }
+    ),
+    createScenarioCard(
+      "torrents-direct",
+      "\u0422\u043E\u0440\u0440\u0435\u043D\u0442\u044B \u0438 \u043C\u0435\u0434\u0438\u0430\u0441\u0435\u0440\u0432\u0435\u0440 \u043C\u0438\u043C\u043E VPN",
+      "BitTorrent \u0438 \u043B\u043E\u043A\u0430\u043B\u044C\u043D\u044B\u0439 TorrServer \u0438\u0434\u0443\u0442 \u043D\u0430\u043F\u0440\u044F\u043C\u0443\u044E \u0447\u0435\u0440\u0435\u0437 \u043F\u0440\u043E\u0432\u0430\u0439\u0434\u0435\u0440\u0430, \u043D\u0435 \u043D\u0430\u0433\u0440\u0443\u0436\u0430\u044F \u0441\u0435\u0440\u0432\u0435\u0440.",
+      () => {
+        const pane = activateMapTab("settings");
+        if (pane) {
+          const field = pane.querySelector(
+            "#cbid\\.forkop\\.settings\\.bittorrent_direct"
+          ) || pane.querySelector(
+            "#cbi-forkop-settings-bittorrent_direct input"
+          ) || pane.querySelector(
+            "#cbi-forkop-settings-bittorrent_direct"
+          );
+          let parent = field?.parentElement;
+          while (parent && parent !== pane) {
+            if (parent instanceof HTMLDetailsElement) parent.open = true;
+            parent = parent.parentElement;
+          }
+          field?.focus();
+          field?.scrollIntoView?.({ block: "center" });
+          notice.textContent = "";
+          return;
+        }
+        notice.textContent = "\u041E\u0442\u043A\u0440\u043E\u0439\u0442\u0435 \u0440\u0430\u0437\u0434\u0435\u043B \xAB\u041D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438\xBB \u2192 \xAB\u041F\u0440\u044F\u043C\u043E\u0439 \u0442\u0440\u0430\u0444\u0438\u043A \u0438 \u0442\u043E\u0440\u0440\u0435\u043D\u0442\u044B\xBB.";
+      }
+    )
+  );
+  scenarios.append(scenarioGrid);
   const everyday = el2("div", "", "fkp-next-content");
   everyday.append(status, server);
-  root.append(everyday, check);
-  if (adapters.changeService) root.append(serviceControl);
+  root.append(everyday, scenarios);
   const traffic = el2("section", "", "fkp-next-panel fkp-next-traffic");
   const trafficOutput = el2("div");
   traffic.append(el2("h3", "\u0422\u0440\u0430\u0444\u0438\u043A"), trafficOutput);
   root.append(traffic);
   const routes = el2("section", "", "fkp-next-panel fkp-next-routes");
-  routes.append(el2("h3", "\u0414\u043E\u043F\u043E\u043B\u043D\u0438\u0442\u0435\u043B\u044C\u043D\u044B\u0435 \u043C\u0430\u0440\u0448\u0440\u0443\u0442\u044B"));
-  const routesOutput = el2("div", "\u0414\u0430\u043D\u043D\u044B\u0435 \u043C\u0430\u0440\u0448\u0440\u0443\u0442\u043E\u0432 \u043F\u043E\u043A\u0430 \u043D\u0435\u0434\u043E\u0441\u0442\u0443\u043F\u043D\u044B.");
-  routes.append(
-    routesOutput,
+  const routesHead = el2("div", "", "fkp-next-section-head");
+  routesHead.append(
+    el2("h3", "\u0414\u043E\u043F\u043E\u043B\u043D\u0438\u0442\u0435\u043B\u044C\u043D\u044B\u0435 \u043C\u0430\u0440\u0448\u0440\u0443\u0442\u044B"),
     action("\u041E\u0442\u043A\u0440\u044B\u0442\u044C \u043F\u0440\u0430\u0432\u0438\u043B\u0430", async () => {
       try {
         if (adapters.openRules) await adapters.openRules();
@@ -17565,6 +19749,12 @@ function renderNextPanel(request = nextRequest, loadConnections, adapters = {}) 
       }
     })
   );
+  const routesOutput = el2(
+    "div",
+    "\u0414\u0430\u043D\u043D\u044B\u0435 \u043C\u0430\u0440\u0448\u0440\u0443\u0442\u043E\u0432 \u043F\u043E\u043A\u0430 \u043D\u0435\u0434\u043E\u0441\u0442\u0443\u043F\u043D\u044B.",
+    "fkp-next-routes-list"
+  );
+  routes.append(routesHead, routesOutput);
   root.append(routes);
   const advanced = el2("details", "", "fkp-next-advanced");
   advanced.append(el2("summary", "\u0420\u0430\u0441\u0448\u0438\u0440\u0435\u043D\u043D\u044B\u0435 \u043D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438 \u0438 \u0434\u0438\u0430\u0433\u043D\u043E\u0441\u0442\u0438\u043A\u0430"));
@@ -17645,6 +19835,7 @@ function renderNextPanel(request = nextRequest, loadConnections, adapters = {}) 
             if (signature !== selectedSignature) invalidateProbe();
             selectedSignature = signature;
             const primary = groups2.find((g) => g.sectionName === "main") || groups2[0];
+            primarySectionName = primary?.sectionName || void 0;
             serverHeading.textContent = primary && primary.sectionName !== "main" ? "\u041F\u0435\u0440\u0432\u043E\u0435 \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435" : "\u041E\u0441\u043D\u043E\u0432\u043D\u043E\u0435 \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435";
             selected.replaceChildren();
             routesOutput.replaceChildren();
@@ -17689,8 +19880,14 @@ function renderNextPanel(request = nextRequest, loadConnections, adapters = {}) 
     await Promise.all(tasks);
   }
   const refreshControl = action("\u041E\u0431\u043D\u043E\u0432\u0438\u0442\u044C \u0434\u0430\u043D\u043D\u044B\u0435", refresh);
-  if (adapters.workspace) root.append(refreshControl);
-  else header.append(refreshControl);
+  heroRefs.refresh = refreshControl;
+  if (adapters.workspace) {
+    heroOverflowPopover.prepend(refreshControl);
+    decorateActionMenuItems(heroOverflowPopover);
+  } else {
+    header.append(refreshControl);
+  }
+  syncServiceControlPlacement();
   function configurationChanged() {
     invalidateProbe();
     generation++;
@@ -17756,19 +19953,24 @@ var settingsGroups = {
   },
   network: {
     title: "\u0421\u0435\u0442\u0435\u0432\u044B\u0435 \u0438\u043D\u0442\u0435\u0440\u0444\u0435\u0439\u0441\u044B",
-    help: "\u0418\u0437 \u043A\u0430\u043A\u043E\u0439 \u0441\u0435\u0442\u0438 \u043F\u0440\u0438\u043D\u0438\u043C\u0430\u0442\u044C \u0442\u0440\u0430\u0444\u0438\u043A \u0438 \u0447\u0435\u0440\u0435\u0437 \u043A\u0430\u043A\u043E\u0439 \u0438\u043D\u0442\u0435\u0440\u0444\u0435\u0439\u0441 \u0432\u044B\u0445\u043E\u0434\u0438\u0442\u044C \u0432 \u0438\u043D\u0442\u0435\u0440\u043D\u0435\u0442."
+    help: "\u0418\u0437 \u043A\u0430\u043A\u043E\u0439 \u043B\u043E\u043A\u0430\u043B\u044C\u043D\u043E\u0439 \u0441\u0435\u0442\u0438 \u043F\u0440\u0438\u043D\u0438\u043C\u0430\u0442\u044C \u0442\u0440\u0430\u0444\u0438\u043A, \u0447\u0435\u0440\u0435\u0437 \u043A\u0430\u043A\u043E\u0439 \u0438\u043D\u0442\u0435\u0440\u0444\u0435\u0439\u0441 \u0432\u044B\u0445\u043E\u0434\u0438\u0442\u044C \u0432 \u0438\u043D\u0442\u0435\u0440\u043D\u0435\u0442, \u043C\u043E\u043D\u0438\u0442\u043E\u0440\u0438\u043D\u0433 \u0441\u0431\u043E\u0435\u0432 WAN \u0438 \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0430 \u0437\u0430\u0434\u0435\u0440\u0436\u043A\u0438."
+  },
+  direct: {
+    title: "\u041F\u0440\u044F\u043C\u043E\u0439 \u0442\u0440\u0430\u0444\u0438\u043A \u0438 \u0442\u043E\u0440\u0440\u0435\u043D\u0442\u044B",
+    help: "\u041F\u0440\u044F\u043C\u043E\u0439 \u043E\u0431\u0445\u043E\u0434 BitTorrent, \u043B\u043E\u043A\u0430\u043B\u044C\u043D\u043E\u0433\u043E \u043C\u0435\u0434\u0438\u0430\u0441\u0435\u0440\u0432\u0435\u0440\u0430 TorrServer \u0438 \u0441\u0438\u043D\u0445\u0440\u043E\u043D\u0438\u0437\u0430\u0446\u0438\u0438 NTP \u043C\u0438\u043C\u043E \u0442\u0443\u043D\u043D\u0435\u043B\u0435\u0439, \u0430 \u0442\u0430\u043A\u0436\u0435 \u043E\u0442\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435 QUIC (HTTP/3) \u043F\u0440\u0438 \u0437\u0430\u0432\u0438\u0441\u0430\u043D\u0438\u044F\u0445 \u0432\u0438\u0434\u0435\u043E."
   },
   controller: {
     title: "\u0414\u043E\u0441\u0442\u0443\u043F \u043A \u043A\u043E\u043D\u0442\u0440\u043E\u043B\u043B\u0435\u0440\u0443",
-    help: "YACD \u2014 \u043E\u0442\u0434\u0435\u043B\u044C\u043D\u0430\u044F \u043F\u0430\u043D\u0435\u043B\u044C \u0443\u043F\u0440\u0430\u0432\u043B\u0435\u043D\u0438\u044F. \u0414\u043B\u044F \u043E\u0431\u044B\u0447\u043D\u043E\u0439 \u0440\u0430\u0431\u043E\u0442\u044B \u0447\u0435\u0440\u0435\u0437 LuCI \u0432\u043A\u043B\u044E\u0447\u0430\u0442\u044C \u0435\u0451 \u043D\u0435 \u0442\u0440\u0435\u0431\u0443\u0435\u0442\u0441\u044F."
+    help: "YACD \u2014 \u043E\u0442\u0434\u0435\u043B\u044C\u043D\u0430\u044F \u0432\u043D\u0435\u0448\u043D\u044F\u044F \u043F\u0430\u043D\u0435\u043B\u044C \u0443\u043F\u0440\u0430\u0432\u043B\u0435\u043D\u0438\u044F. \u0414\u043B\u044F \u0440\u0430\u0431\u043E\u0442\u044B \u0447\u0435\u0440\u0435\u0437 LuCI \u0432\u043A\u043B\u044E\u0447\u0430\u0442\u044C \u0435\u0451 \u043D\u0435 \u0442\u0440\u0435\u0431\u0443\u0435\u0442\u0441\u044F.",
+    collapsed: true
   },
   updates: {
     title: "\u041E\u0431\u043D\u043E\u0432\u043B\u0435\u043D\u0438\u044F \u0438 \u0437\u0430\u0433\u0440\u0443\u0437\u043A\u0438",
-    help: "\u0420\u0430\u0441\u043F\u0438\u0441\u0430\u043D\u0438\u0435 \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0438 \u043A\u043E\u043C\u043F\u043E\u043D\u0435\u043D\u0442\u043E\u0432 \u0438 \u0437\u0430\u0433\u0440\u0443\u0437\u043A\u0438 \u0441\u043F\u0438\u0441\u043A\u043E\u0432. \u0418\u0441\u0442\u043E\u0447\u043D\u0438\u043A\u0438 \u0441\u0435\u0440\u0432\u0435\u0440\u043E\u0432 \u0438 \u0438\u0445 \u043F\u043E\u0434\u043F\u0438\u0441\u043A\u0438 \u0437\u0430\u0434\u0430\u044E\u0442\u0441\u044F \u0432 \u043F\u0440\u0430\u0432\u0438\u043B\u0430\u0445."
+    help: "\u0420\u0430\u0441\u043F\u0438\u0441\u0430\u043D\u0438\u0435 \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0438 \u043A\u043E\u043C\u043F\u043E\u043D\u0435\u043D\u0442\u043E\u0432 \u0438 \u0430\u0432\u0442\u043E\u043C\u0430\u0442\u0438\u0447\u0435\u0441\u043A\u043E\u0433\u043E \u043E\u0431\u043D\u043E\u0432\u043B\u0435\u043D\u0438\u044F \u0441\u043F\u0438\u0441\u043A\u043E\u0432. \u0418\u0441\u0442\u043E\u0447\u043D\u0438\u043A\u0438 \u0441\u0435\u0440\u0432\u0435\u0440\u043E\u0432 \u0438 \u0438\u0445 \u043F\u043E\u0434\u043F\u0438\u0441\u043A\u0438 \u0437\u0430\u0434\u0430\u044E\u0442\u0441\u044F \u0432 \u043F\u0440\u0430\u0432\u0438\u043B\u0430\u0445."
   },
   system: {
     title: "\u0421\u0438\u0441\u0442\u0435\u043C\u043D\u044B\u0435 \u043F\u0430\u0440\u0430\u043C\u0435\u0442\u0440\u044B",
-    help: "\u0425\u0440\u0430\u043D\u0435\u043D\u0438\u0435 \u043A\u043E\u043D\u0444\u0438\u0433\u0443\u0440\u0430\u0446\u0438\u0438 \u0438 \u043A\u044D\u0448\u0430, \u0436\u0443\u0440\u043D\u0430\u043B, DHCP, QUIC \u0438 NTP.",
+    help: "\u041F\u0443\u0442\u0438 \u0445\u0440\u0430\u043D\u0435\u043D\u0438\u044F \u043A\u043E\u043D\u0444\u0438\u0433\u0443\u0440\u0430\u0446\u0438\u0438 \u0438 \u043A\u044D\u0448\u0430 sing-box, \u0443\u0440\u043E\u0432\u0435\u043D\u044C \u0436\u0443\u0440\u043D\u0430\u043B\u0430 \u0438 \u0441\u043E\u0432\u043C\u0435\u0441\u0442\u0438\u043C\u043E\u0441\u0442\u044C \u0441 DHCP.",
     collapsed: true
   }
 };
@@ -17779,12 +19981,12 @@ var ruleGroups = {
   },
   sources: {
     title: "\u0418\u0441\u0442\u043E\u0447\u043D\u0438\u043A\u0438 \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u044F",
-    help: "\u0414\u043E\u0431\u0430\u0432\u044C\u0442\u0435 \u0441\u0441\u044B\u043B\u043A\u0438 \u0438\u043B\u0438 \u043F\u043E\u0434\u043F\u0438\u0441\u043A\u0443. \u0422\u0430\u043A\u0436\u0435 \u0434\u043E\u0441\u0442\u0443\u043F\u043D\u044B VPN-\u0438\u043D\u0442\u0435\u0440\u0444\u0435\u0439\u0441, JSON, \u0430\u0432\u0442\u043E\u043C\u0430\u0442\u0438\u0447\u0435\u0441\u043A\u0438\u0439 \u0432\u044B\u0431\u043E\u0440 URLTest \u0438 \u043F\u0435\u0440\u0435\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435 \u043F\u043E \u043F\u0440\u0438\u043E\u0440\u0438\u0442\u0435\u0442\u0443."
+    help: "\u0414\u043E\u0431\u0430\u0432\u044C\u0442\u0435 \u0441\u0441\u044B\u043B\u043A\u0438, \u0438\u043C\u043F\u043E\u0440\u0442\u0438\u0440\u0443\u0439\u0442\u0435 WireGuard / AmneziaWG .conf, \u0432\u044B\u043F\u0443\u0441\u0442\u0438\u0442\u0435 \u0431\u0435\u0441\u043F\u043B\u0430\u0442\u043D\u044B\u0439 Cloudflare WARP \u0438\u043B\u0438 \u0443\u043A\u0430\u0436\u0438\u0442\u0435 \u043F\u043E\u0434\u043F\u0438\u0441\u043A\u0443 \u0441 \u043F\u0440\u0435\u0434\u043F\u0440\u043E\u0441\u043C\u043E\u0442\u0440\u043E\u043C \u0441\u0435\u0440\u0432\u0435\u0440\u043E\u0432."
   },
   dns: { title: "DNS \u0434\u043B\u044F \u044D\u0442\u043E\u0433\u043E \u043F\u0440\u0430\u0432\u0438\u043B\u0430" },
   advanced: {
-    title: "\u041A\u0430\u0441\u043A\u0430\u0434, \u043B\u043E\u043A\u0430\u043B\u044C\u043D\u044B\u0439 \u043F\u0440\u043E\u043A\u0441\u0438 \u0438 \u0434\u043E\u043F\u043E\u043B\u043D\u0438\u0442\u0435\u043B\u044C\u043D\u044B\u0435 \u043F\u0430\u0440\u0430\u043C\u0435\u0442\u0440\u044B",
-    help: "\u041F\u0440\u043E\u043C\u0435\u0436\u0443\u0442\u043E\u0447\u043D\u044B\u0439 \u0441\u0435\u0440\u0432\u0435\u0440, HTTP/SOCKS-\u0434\u043E\u0441\u0442\u0443\u043F, \u0440\u0430\u0437\u0440\u0435\u0448\u0435\u043D\u0438\u0435 IP \u0438 \u043E\u0442\u043E\u0431\u0440\u0430\u0436\u0435\u043D\u0438\u0435 \u0441\u0435\u0440\u0432\u0435\u0440\u043E\u0432.",
+    title: "\u041A\u0430\u0441\u043A\u0430\u0434, \u043B\u043E\u043A\u0430\u043B\u044C\u043D\u044B\u0439 \u043F\u0440\u043E\u043A\u0441\u0438, \u043A\u043E\u043D\u0441\u043E\u043B\u044C\u043D\u044B\u0439 \u0440\u0435\u0436\u0438\u043C \u0438 \u0434\u043E\u043F\u043E\u043B\u043D\u0438\u0442\u0435\u043B\u044C\u043D\u044B\u0435 \u043F\u0430\u0440\u0430\u043C\u0435\u0442\u0440\u044B",
+    help: "\u041A\u043E\u043D\u0441\u043E\u043B\u044C\u043D\u044B\u0439 \u0440\u0435\u0436\u0438\u043C (Open NAT: TCP \u0447\u0435\u0440\u0435\u0437 \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435, \u0438\u0433\u0440\u043E\u0432\u043E\u0439 UDP \u043D\u0430\u043F\u0440\u044F\u043C\u0443\u044E), \u043F\u0440\u043E\u043C\u0435\u0436\u0443\u0442\u043E\u0447\u043D\u044B\u0439 \u0441\u0435\u0440\u0432\u0435\u0440, HTTP/SOCKS-\u0434\u043E\u0441\u0442\u0443\u043F \u0438 \u0444\u0438\u043B\u044C\u0442\u0440\u0430\u0446\u0438\u044F \u0441\u0435\u0440\u0432\u0435\u0440\u043E\u0432.",
     collapsed: true
   },
   other: { title: "\u041F\u0430\u0440\u0430\u043C\u0435\u0442\u0440\u044B \u0432\u044B\u0431\u0440\u0430\u043D\u043D\u043E\u0433\u043E \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u044F" }
@@ -17808,21 +20010,26 @@ var inboundGroups = {
   security: { title: "\u0417\u0430\u0449\u0438\u0442\u0430 \u0441\u043E\u0435\u0434\u0438\u043D\u0435\u043D\u0438\u044F: TLS \u0438 REALITY" },
   transport: { title: "\u0422\u0440\u0430\u043D\u0441\u043F\u043E\u0440\u0442" },
   credentials: { title: "\u0423\u0447\u0451\u0442\u043D\u044B\u0435 \u0434\u0430\u043D\u043D\u044B\u0435 \u0438 \u043F\u0430\u0440\u0430\u043C\u0435\u0442\u0440\u044B \u043F\u0440\u043E\u0442\u043E\u043A\u043E\u043B\u0430" },
-  route: { title: "\u041C\u0430\u0440\u0448\u0440\u0443\u0442 \u0432\u0445\u043E\u0434\u044F\u0449\u0435\u0433\u043E \u0442\u0440\u0430\u0444\u0438\u043A\u0430" }
+  route: { title: "\u041C\u0430\u0440\u0448\u0440\u0443\u0442 \u0432\u0445\u043E\u0434\u044F\u0449\u0435\u0433\u043E \u0442\u0440\u0430\u0444\u0438\u043A\u0430" },
+  advanced: {
+    title: "\u0414\u043E\u043F\u043E\u043B\u043D\u0438\u0442\u0435\u043B\u044C\u043D\u044B\u0435 \u043F\u0430\u0440\u0430\u043C\u0435\u0442\u0440\u044B \u0438 \u0442\u0430\u0439\u043C\u0430\u0443\u0442\u044B",
+    help: "\u0422\u0430\u0439\u043C\u0430\u0443\u0442\u044B \u0440\u0443\u043A\u043E\u043F\u043E\u0436\u0430\u0442\u0438\u0439, \u0442\u043E\u043D\u043A\u0430\u044F \u043D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0430 \u043F\u0440\u043E\u0442\u043E\u043A\u043E\u043B\u043E\u0432 \u0438 \u043D\u0438\u0437\u043A\u043E\u0443\u0440\u043E\u0432\u043D\u0435\u0432\u044B\u0435 \u043B\u0438\u043C\u0438\u0442\u044B.",
+    collapsed: true
+  }
 };
 function keyOf(field) {
   return field.id.slice(field.id.lastIndexOf("-") + 1);
 }
 function settingsGroup(key) {
   if (/^(dns_|bootstrap_dns)/.test(key)) return "dns";
-  if (/^(source_network|https_domain_routing|enable_output|output_network|enable_badwan|badwan)/.test(
+  if (/^(source_network|https_domain_routing|enable_output|output_network|enable_badwan|badwan|latency_test)/.test(
     key
   ))
     return "network";
+  if (/^(bittorrent_direct|torrserver_direct|disable_quic|exclude_ntp)$/.test(key))
+    return "direct";
   if (/^(enable_yacd|yacd_)/.test(key)) return "controller";
-  if (/^(list_update|update_interval|component_update|download_|latency_test)/.test(
-    key
-  ))
+  if (/^(list_update|update_interval|component_update|download_)/.test(key))
     return "updates";
   return "system";
 }
@@ -17830,15 +20037,18 @@ function ruleGroup(key) {
   if (["enabled", "label", "action"].includes(key)) return "action";
   if ([
     "selector_proxy_links",
+    "_wg_warp_helper",
     "subscription_url",
+    "_subscription_preview",
     "interfaces",
     "outbound_jsons",
     "urltest",
-    "priority_group"
+    "priority_group",
+    "_extended_preview"
   ].includes(key))
     return "sources";
   if (/^(dns_|bootstrap_dns)/.test(key)) return "dns";
-  if (/^(outbound_detour|mixed_proxy|sort_by_latency|resolve_real_ip|dashboard_filter)/.test(
+  if (/^(outbound_detour|mixed_proxy|sort_by_latency|resolve_real_ip|dashboard_filter|console_mode)/.test(
     key
   ))
     return "advanced";
@@ -17859,11 +20069,15 @@ function conditionGroup(key) {
   return "other";
 }
 function inboundGroup(key) {
+  if (/^(mtproto_(concurrency|max_connections|domain_fronting|prefer_ip|auto_update|allow_fallback|tolerate_|idle_|handshake_)|reality_max_time_difference|tls_alpn)$/.test(
+    key
+  ))
+    return "advanced";
   if (/^(tls_|reality_|security$|client_fingerprint)/.test(key))
     return "security";
   if (/^transport/.test(key)) return "transport";
   if (/^(route_|routing_|outbound|detour)/.test(key)) return "route";
-  if (/^(server_(username|password)|socks_auth|shadowsocks_|vmess_|vless_|hysteria2_|mtproto_|tailscale_)/.test(
+  if (/^(server_(username|password|uuid)|socks_auth|shadowsocks_|vmess_|vless_|hysteria2_|mtproto_|tailscale_)/.test(
     key
   ))
     return "credentials";
@@ -17957,7 +20171,7 @@ var pageHelp = {
   diagnostic: "\u041D\u0430\u0447\u043D\u0438\u0442\u0435 \u0441 \u0434\u0438\u0430\u0433\u043D\u043E\u0441\u0442\u0438\u043A\u0438: \u043E\u043D\u0430 \u043F\u0440\u043E\u0432\u0435\u0440\u0438\u0442 DNS, \u044F\u0434\u0440\u043E \u0438 \u043C\u0430\u0440\u0448\u0440\u0443\u0442\u0438\u0437\u0430\u0446\u0438\u044E. \u0416\u0443\u0440\u043D\u0430\u043B \u0438 \u0443\u043F\u0440\u0430\u0432\u043B\u0435\u043D\u0438\u0435 \u0441\u0435\u0440\u0432\u0438\u0441\u043E\u043C \u0434\u043E\u0441\u0442\u0443\u043F\u043D\u044B \u043D\u0438\u0436\u0435.",
   route_tools: "\u0423\u0437\u043D\u0430\u0439\u0442\u0435, \u043A\u0430\u043A\u043E\u0435 \u043F\u0440\u0430\u0432\u0438\u043B\u043E \u0432\u044B\u0431\u0438\u0440\u0430\u0435\u0442\u0441\u044F \u0434\u043B\u044F \u0441\u0430\u0439\u0442\u0430, \u0438 \u043E\u0442\u0434\u0435\u043B\u044C\u043D\u043E \u043F\u0440\u043E\u0432\u0435\u0440\u044C\u0442\u0435 \u0435\u0433\u043E \u0434\u043E\u0441\u0442\u0443\u043F\u043D\u043E\u0441\u0442\u044C.",
   monitoring: "\u041F\u043E\u0441\u043C\u043E\u0442\u0440\u0438\u0442\u0435 \u0442\u0435\u043A\u0443\u0449\u0438\u0435 \u0441\u043E\u0435\u0434\u0438\u043D\u0435\u043D\u0438\u044F, \u0442\u0440\u0430\u0444\u0438\u043A \u0438 \u0436\u0443\u0440\u043D\u0430\u043B \u0440\u0430\u0431\u043E\u0442\u044B. \u0414\u0430\u043D\u043D\u044B\u0435 \u043E\u0431\u043D\u043E\u0432\u043B\u044F\u044E\u0442\u0441\u044F, \u043F\u043E\u043A\u0430 \u0440\u0430\u0437\u0434\u0435\u043B \u043E\u0442\u043A\u0440\u044B\u0442.",
-  settings: "\u041D\u0430\u0441\u0442\u0440\u043E\u0439\u0442\u0435 DNS, \u0441\u0435\u0442\u0435\u0432\u044B\u0435 \u0438\u043D\u0442\u0435\u0440\u0444\u0435\u0439\u0441\u044B, \u0434\u043E\u0441\u0442\u0443\u043F \u043A \u043A\u043E\u043D\u0442\u0440\u043E\u043B\u043B\u0435\u0440\u0443 \u0438 \u0440\u0430\u0441\u043F\u0438\u0441\u0430\u043D\u0438\u0435 \u043E\u0431\u043D\u043E\u0432\u043B\u0435\u043D\u0438\u0439. \u041F\u0430\u0440\u0430\u043C\u0435\u0442\u0440\u044B \u0441\u0438\u0441\u0442\u0435\u043C\u044B \u0441\u043E\u0431\u0440\u0430\u043D\u044B \u043E\u0442\u0434\u0435\u043B\u044C\u043D\u043E.",
+  settings: "\u041D\u0430\u0441\u0442\u0440\u043E\u0439\u0442\u0435 DNS, \u0441\u0435\u0442\u0435\u0432\u044B\u0435 \u0438\u043D\u0442\u0435\u0440\u0444\u0435\u0439\u0441\u044B, \u043F\u0440\u044F\u043C\u043E\u0439 \u043E\u0431\u0445\u043E\u0434 \u0442\u043E\u0440\u0440\u0435\u043D\u0442\u043E\u0432 \u0438 \u0440\u0430\u0441\u043F\u0438\u0441\u0430\u043D\u0438\u0435 \u043E\u0431\u043D\u043E\u0432\u043B\u0435\u043D\u0438\u0439. \u041F\u0430\u0440\u0430\u043C\u0435\u0442\u0440\u044B \u0441\u0438\u0441\u0442\u0435\u043C\u044B \u0441\u043E\u0431\u0440\u0430\u043D\u044B \u043E\u0442\u0434\u0435\u043B\u044C\u043D\u043E.",
   updates: "\u041F\u0440\u043E\u0432\u0435\u0440\u044C\u0442\u0435 \u0432\u0435\u0440\u0441\u0438\u0438 \u0438 \u0443\u043F\u0440\u0430\u0432\u043B\u044F\u0439\u0442\u0435 \u0443\u0441\u0442\u0430\u043D\u043E\u0432\u043B\u0435\u043D\u043D\u044B\u043C\u0438 \u043A\u043E\u043C\u043F\u043E\u043D\u0435\u043D\u0442\u0430\u043C\u0438. \u041D\u0430\u043B\u0438\u0447\u0438\u0435 \u043D\u043E\u0432\u043E\u0439 \u0432\u0435\u0440\u0441\u0438\u0438 \u0441\u0430\u043C\u043E \u043F\u043E \u0441\u0435\u0431\u0435 \u043D\u0435 \u043F\u043E\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0430\u0435\u0442 \u0441\u043E\u0432\u043C\u0435\u0441\u0442\u0438\u043C\u043E\u0441\u0442\u044C.",
   advanced: "\u041F\u0440\u043E\u0432\u0435\u0440\u044C\u0442\u0435 \u0441\u043E\u0432\u043C\u0435\u0441\u0442\u0438\u043C\u043E\u0441\u0442\u044C \u0441 3x-ui \u0438 Xray, \u0441\u0440\u0430\u0432\u043D\u0438\u0442\u0435 \u043F\u0440\u043E\u0444\u0438\u043B\u0438, \u0441\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u0435 \u043A\u043E\u043D\u0444\u0438\u0433\u0443\u0440\u0430\u0446\u0438\u044E \u0438\u043B\u0438 \u0432\u043E\u0441\u0441\u0442\u0430\u043D\u043E\u0432\u0438\u0442\u0435 \u0435\u0451."
 };
@@ -18017,7 +20231,6 @@ function mountForkopWorkspace(root) {
   const previous = mounted.get(root);
   const intact = previous && root.contains(previous.menu) && root.contains(previous.panes) && root.contains(previous.main);
   if (intact && !previous.disposed()) return;
-  const previousTheme = previous?.theme();
   previous?.dispose();
   if (intact) root.replaceChildren(...previous.content.childNodes);
   const menu = root.querySelector(".cbi-tabmenu");
@@ -18051,54 +20264,89 @@ function mountForkopWorkspace(root) {
     "\u0421\u043E\u0435\u0434\u0438\u043D\u0435\u043D\u0438\u0435 \u0435\u0449\u0451 \u043D\u0435 \u043F\u0440\u043E\u0432\u0435\u0440\u0435\u043D\u043E"
   );
   status.append(service, connection);
-  const themeLabel = el3("label", "fkp-workspace-theme", "\u0422\u0435\u043C\u0430");
-  const theme = el3("select", "");
-  theme.setAttribute("aria-label", "\u0422\u0435\u043C\u0430 Forkop");
-  for (const [value, label] of [
-    ["auto", "\u041A\u0430\u043A \u0432 LuCI"],
-    ["light", "\u0421\u0432\u0435\u0442\u043B\u0430\u044F"],
-    ["dark", "\u0422\u0451\u043C\u043D\u0430\u044F"]
-  ]) {
-    const option = el3("option", "", label);
-    option.value = value;
-    theme.append(option);
-  }
-  theme.value = previousTheme || "auto";
-  themeLabel.append(theme);
   top.append(status);
-  const preferences = el3("section", "fkp-workspace-preferences");
-  preferences.dataset.workspacePreferences = "";
-  preferences.append(el3("h3", "", "\u041F\u0440\u0435\u0434\u043F\u043E\u0447\u0442\u0435\u043D\u0438\u044F"), themeLabel);
   const heading = el3("h2", "fkp-workspace-title");
   const description = el3("p", "fkp-workspace-description");
   const secondary = el3("div", "fkp-workspace-secondary");
   const content = el3("div", "fkp-workspace-content");
   content.append(...originalContent);
-  main.append(top, heading, description, secondary, preferences, content);
+  main.append(top, heading, description, secondary, content);
   root.append(sidebar, main);
+  const uciEditableTabs = /* @__PURE__ */ new Set(["settings", "section", "server"]);
   let disposed = false;
   let wasConnected = root.isConnected;
   let navigationSignature = "";
   const markedModals = /* @__PURE__ */ new Set();
   const modalContent = /* @__PURE__ */ new WeakMap();
+  function parseOpaqueLuminance(bg) {
+    const match = bg.match(
+      /^rgba?\(\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)(?:\s*,\s*(\d+(?:\.\d+)?))?\s*\)$/i
+    );
+    if (!match) return null;
+    const alpha = match[4] === void 0 ? 1 : Number(match[4]);
+    if (!Number.isFinite(alpha) || alpha <= 0.5) return null;
+    const r = Number(match[1]);
+    const g = Number(match[2]);
+    const b = Number(match[3]);
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  }
   function surroundingTheme() {
     for (let parent = root.parentElement || document.body; parent; parent = parent.parentElement) {
       const choice = parent.dataset.theme || parent.getAttribute("data-darkmode");
       if (choice === "light" || choice === "dark") return choice;
       if (choice === "true") return "dark";
       if (choice === "false") return "light";
-      if (parent.classList.contains("dark") || parent.classList.contains("dark-mode"))
+      if (parent.classList.contains("dark") || parent.classList.contains("dark-mode") || parent.classList.contains("theme-dark"))
         return "dark";
-      if (parent.classList.contains("light") || parent.classList.contains("light-mode"))
+      if (parent.classList.contains("light") || parent.classList.contains("light-mode") || parent.classList.contains("theme-light"))
         return "light";
     }
-    const scheme = getComputedStyle(document.documentElement).colorScheme;
-    if (scheme === "dark" || scheme === "light") return scheme;
+    for (const surface of [document.body, document.documentElement]) {
+      if (!surface) continue;
+      const scheme = getComputedStyle(surface).colorScheme;
+      if (scheme === "dark" || scheme === "light") return scheme;
+    }
+    for (const surface of [document.body, document.documentElement]) {
+      if (!surface) continue;
+      const lum = parseOpaqueLuminance(
+        getComputedStyle(surface).backgroundColor
+      );
+      if (lum !== null) return lum < 128 ? "dark" : "light";
+    }
     return window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light";
   }
+  function hasPendingUciDraft() {
+    if (root.querySelector(
+      ':scope > .fkp-next-notice[role="status"]:not([hidden]), .cbi-value-error, .cbi-input-invalid, [aria-invalid="true"], [data-errors]'
+    ))
+      return true;
+    const uciGlobal = window.uci?.state ? window.uci.state : window.L?.uci?.state;
+    if (!uciGlobal) return false;
+    return ["changes", "creates", "deletes", "removes", "reorder"].some(
+      (kind) => {
+        const pkg = uciGlobal[kind]?.forkop;
+        return pkg === true || Boolean(pkg) && typeof pkg === "object" && Object.keys(pkg).length > 0;
+      }
+    );
+  }
+  const markedFooters = /* @__PURE__ */ new Set();
+  function syncFooters(resolved = root.dataset.theme || "light", active = root.dataset.activeTab || "") {
+    const showFooter = !active || uciEditableTabs.has(active) || hasPendingUciDraft();
+    for (const actions of root.parentElement?.querySelectorAll(
+      ":scope > .cbi-page-actions"
+    ) || []) {
+      actions.dataset.theme = resolved;
+      actions.hidden = !showFooter;
+      markedFooters.add(actions);
+    }
+    for (const actions of markedFooters)
+      if (!actions.isConnected) markedFooters.delete(actions);
+  }
   function applyTheme() {
-    root.dataset.theme = theme.value === "auto" ? surroundingTheme() : theme.value;
-    for (const modal of markedModals) modal.dataset.theme = root.dataset.theme;
+    const resolved = surroundingTheme();
+    root.dataset.theme = resolved;
+    for (const modal of markedModals) modal.dataset.theme = resolved;
+    syncFooters(resolved);
   }
   function markModals() {
     for (const modal of document.querySelectorAll(".modal")) {
@@ -18165,9 +20413,9 @@ function mountForkopWorkspace(root) {
       }
     };
     const active = panes.querySelector(':scope > [data-tab-active="true"]')?.dataset.tab || menu.querySelector(".cbi-tab:not(.cbi-tab-disabled)")?.dataset.tab || "";
+    root.dataset.activeTab = active;
     setText(description, pageHelp[active] || "");
     description.hidden = !description.textContent;
-    preferences.hidden = active !== "settings";
     const signature = [...tabs.keys()].join(",");
     if (signature !== navigationSignature) {
       navigationSignature = signature;
@@ -18253,14 +20501,18 @@ function mountForkopWorkspace(root) {
     const sharedService = store.get().servicesInfoWidget;
     const sharedText = sharedService.failed ? "\u0421\u043E\u0441\u0442\u043E\u044F\u043D\u0438\u0435 \u0441\u0435\u0440\u0432\u0438\u0441\u0430 \u043D\u0435\u0434\u043E\u0441\u0442\u0443\u043F\u043D\u043E. \u041E\u0431\u043D\u043E\u0432\u0438\u0442\u0435 \u0434\u0430\u043D\u043D\u044B\u0435." : isServiceTransitionStatus(sharedService.data.forkopStatus) ? "\u0412\u044B\u043F\u043E\u043B\u043D\u044F\u0435\u0442\u0441\u044F \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u0435 \u0441\u0435\u0440\u0432\u0438\u0441\u0430\u2026" : !sharedService.loading && sharedService.data.forkopRunning === 1 ? "\u0421\u0435\u0440\u0432\u0438\u0441 \u0437\u0430\u043F\u0443\u0449\u0435\u043D" : !sharedService.loading && sharedService.data.forkopRunning === 0 ? "\u0421\u0435\u0440\u0432\u0438\u0441 \u043E\u0441\u0442\u0430\u043D\u043E\u0432\u043B\u0435\u043D" : void 0;
     const overviewText = overview?.querySelector(".fkp-next-service")?.textContent;
-    setText(
-      service,
-      (active === "next" ? overviewText || sharedText : sharedText || (overviewText ? `\u041F\u043E\u0441\u043B\u0435\u0434\u043D\u0435\u0435 \u0441\u043E\u0441\u0442\u043E\u044F\u043D\u0438\u0435: ${overviewText}` : void 0)) || "\u0421\u043E\u0441\u0442\u043E\u044F\u043D\u0438\u0435 \u0441\u0435\u0440\u0432\u0438\u0441\u0430 \u043D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043D\u043E"
+    const resolvedService = (active === "next" ? overviewText || sharedText : sharedText || (overviewText ? `\u041F\u043E\u0441\u043B\u0435\u0434\u043D\u0435\u0435 \u0441\u043E\u0441\u0442\u043E\u044F\u043D\u0438\u0435: ${overviewText}` : void 0)) || "\u0421\u043E\u0441\u0442\u043E\u044F\u043D\u0438\u0435 \u0441\u0435\u0440\u0432\u0438\u0441\u0430 \u043D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043D\u043E";
+    setText(service, resolvedService);
+    service.dataset.state = resolvedService.includes("\u0437\u0430\u043F\u0443\u0449\u0435\u043D") ? "running" : resolvedService.includes("\u043E\u0441\u0442\u0430\u043D\u043E\u0432\u043B\u0435\u043D") ? "stopped" : resolvedService.includes("\u0412\u044B\u043F\u043E\u043B\u043D\u044F\u0435\u0442\u0441\u044F") ? "pending" : resolvedService.includes("\u043D\u0435\u0434\u043E\u0441\u0442\u0443\u043F\u043D\u043E") ? "error" : "unknown";
+    const overviewConn = overview?.querySelector(
+      ".fkp-next-connection"
     );
     setText(
       connection,
-      overview?.querySelector(".fkp-next-connection")?.textContent || "\u0421\u043E\u0435\u0434\u0438\u043D\u0435\u043D\u0438\u0435 \u0435\u0449\u0451 \u043D\u0435 \u043F\u0440\u043E\u0432\u0435\u0440\u0435\u043D\u043E"
+      overviewConn?.textContent || "\u0421\u043E\u0435\u0434\u0438\u043D\u0435\u043D\u0438\u0435 \u0435\u0449\u0451 \u043D\u0435 \u043F\u0440\u043E\u0432\u0435\u0440\u0435\u043D\u043E"
     );
+    connection.dataset.state = overviewConn?.dataset.state || "unknown";
+    syncFooters(root.dataset.theme || "light", active);
   }
   function navigate(event) {
     if (disposed || !(event.target instanceof Element)) return;
@@ -18284,7 +20536,6 @@ function mountForkopWorkspace(root) {
     sync();
   }
   mobileMenu.addEventListener("change", navigateMobile);
-  theme.addEventListener("change", applyTheme);
   const unsubscribeService = store.subscribe((_next, _previous, diff) => {
     if (diff.servicesInfoWidget) sync();
   });
@@ -18300,7 +20551,9 @@ function mountForkopWorkspace(root) {
       enhanceForkopForms(root);
     if (records.some((record) => {
       const target = record.target instanceof Element ? record.target : record.target.parentElement;
-      return target && (menu.contains(target) || target === panes || target.parentElement === panes || target.closest(".fkp-next-overview"));
+      return target && (target === root || menu.contains(target) || target === panes || target.parentElement === panes || target.matches(
+        '.fkp-next-notice,.cbi-input-invalid,[aria-invalid="true"]'
+      ) || target.closest(".fkp-next-overview"));
     }))
       sync();
   });
@@ -18329,8 +20582,18 @@ function mountForkopWorkspace(root) {
       attributes: true,
       attributeFilter: ["data-theme", "data-darkmode", "class", "style"]
     });
+  if (document.head)
+    themeObserver.observe(document.head, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["href", "media", "disabled"]
+    });
   const lifecycle = new MutationObserver((records) => {
-    if (root.isConnected) wasConnected = true;
+    if (!wasConnected && root.isConnected) {
+      wasConnected = true;
+      applyTheme();
+    }
     if (wasConnected && !root.isConnected) {
       dispose();
       return;
@@ -18342,6 +20605,12 @@ function mountForkopWorkspace(root) {
       );
     }))
       markModals();
+    if (records.some(
+      (record) => [...record.addedNodes].some(
+        (node) => node instanceof Element && (node.matches(".cbi-page-actions") || node.querySelector(".cbi-page-actions"))
+      )
+    ))
+      syncFooters();
   });
   function dispose() {
     if (disposed) return;
@@ -18353,13 +20622,17 @@ function mountForkopWorkspace(root) {
     primary.removeEventListener("click", navigate);
     secondary.removeEventListener("click", navigate);
     mobileMenu.removeEventListener("change", navigateMobile);
-    theme.removeEventListener("change", applyTheme);
     media?.removeEventListener("change", applyTheme);
     for (const modal of markedModals) {
       modal.classList.remove("fkp-workspace-modal");
       delete modal.dataset.theme;
     }
     markedModals.clear();
+    for (const actions of markedFooters) {
+      actions.hidden = false;
+      delete actions.dataset.theme;
+    }
+    markedFooters.clear();
   }
   mounted.set(root, {
     menu,
@@ -18367,7 +20640,6 @@ function mountForkopWorkspace(root) {
     main,
     content,
     disposed: () => disposed,
-    theme: () => theme.value,
     dispose
   });
   lifecycle.observe(document.body, {
@@ -18551,25 +20823,46 @@ function scopeSummary(rule) {
     )
   ].filter(Boolean).join(" \xB7 ") || "\u0423\u0441\u043B\u043E\u0432\u0438\u044F \u043D\u0435 \u0437\u0430\u0434\u0430\u043D\u044B";
 }
+function numericCount(value) {
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+}
 function sourceSummary(rule) {
+  const subCount = Math.max(
+    list(rule.subscription_url).length + list(rule.subscription_urls).length,
+    numericCount(rule.subscription_urls_count)
+  );
+  const ifaceCount = Math.max(
+    list(rule.interfaces).length + list(rule.interface).length,
+    numericCount(rule.interfaces_count)
+  );
+  const urltestCount = Math.max(
+    list(rule.urltest).length + list(rule.urltests).length,
+    numericCount(rule.urltest_count)
+  );
+  const priorityCount = Math.max(
+    list(rule.priority_group).length + list(rule.priority_groups).length,
+    numericCount(rule.priority_group_count)
+  );
   return [
     countLabel("\u0421\u0441\u044B\u043B\u043A\u0438", list(rule.selector_proxy_links).length),
-    countLabel("\u041F\u043E\u0434\u043F\u0438\u0441\u043A\u0438", list(rule.subscription_url).length),
-    countLabel("\u0418\u043D\u0442\u0435\u0440\u0444\u0435\u0439\u0441\u044B", list(rule.interfaces).length),
+    countLabel("\u041F\u043E\u0434\u043F\u0438\u0441\u043A\u0438", subCount),
+    countLabel("\u0418\u043D\u0442\u0435\u0440\u0444\u0435\u0439\u0441\u044B", ifaceCount),
     countLabel(
       "JSON",
       Array.isArray(rule.outbound_jsons) ? rule.outbound_jsons.filter(
         (item) => typeof item === "string" && item.trim()
       ).length : typeof rule.outbound_jsons === "string" && rule.outbound_jsons.trim() ? 1 : 0
     ),
-    countLabel("URLTest", list(rule.urltest).length),
-    countLabel("\u041F\u0440\u0438\u043E\u0440\u0438\u0442\u0435\u0442", list(rule.priority_group).length)
+    countLabel("URLTest", urltestCount),
+    countLabel("\u041F\u0440\u0438\u043E\u0440\u0438\u0442\u0435\u0442", priorityCount)
   ].filter(Boolean).join(" \xB7 ") || "\u0418\u0441\u0442\u043E\u0447\u043D\u0438\u043A\u0438 \u043D\u0435 \u0437\u0430\u0434\u0430\u043D\u044B";
 }
 function routeSummary(rule) {
+  const consoleBadge = rule.console_mode === "1" || rule.console_mode === true ? " \xB7 \u041A\u043E\u043D\u0441\u043E\u043B\u044C\u043D\u044B\u0439 \u0440\u0435\u0436\u0438\u043C (UDP \u043D\u0430\u043F\u0440\u044F\u043C\u0443\u044E)" : "";
   switch (rule.action || "connection") {
     case "connection":
-      return sourceSummary(rule);
+      return `${sourceSummary(rule)}${consoleBadge}`;
     case "bypass":
       return "\u041E\u0431\u044B\u0447\u043D\u044B\u0439 \u043C\u0430\u0440\u0448\u0440\u0443\u0442 \u0440\u043E\u0443\u0442\u0435\u0440\u0430";
     case "block":
@@ -18583,7 +20876,7 @@ function routeSummary(rule) {
     case "proxy":
     case "vpn":
     case "outbound":
-      return "\u0421\u043E\u0445\u0440\u0430\u043D\u0435\u043D\u044B \u043F\u0440\u0435\u0436\u043D\u0438\u0435 \u043D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438 \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u044F";
+      return `\u0421\u043E\u0445\u0440\u0430\u043D\u0435\u043D\u044B \u043F\u0440\u0435\u0436\u043D\u0438\u0435 \u043D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438 \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u044F${consoleBadge}`;
     default:
       return "\u041F\u0440\u043E\u0432\u0435\u0440\u044C\u0442\u0435 \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u0435 \u0432 \u0440\u0435\u0434\u0430\u043A\u0442\u043E\u0440\u0435";
   }
@@ -18614,7 +20907,73 @@ function renderRuleRoute(value) {
   );
   return root;
 }
+function normalizeNamedSectionTable(root, headerLabel = "\u041F\u0440\u0430\u0432\u0438\u043B\u043E") {
+  const theadRow = root.querySelector(
+    "tr.cbi-section-table-titles, .tr.cbi-section-table-titles"
+  );
+  const hadNamedPseudo = Boolean(
+    theadRow && (theadRow.classList.contains("named") || theadRow.hasAttribute("data-title"))
+  );
+  if (theadRow) {
+    if (hadNamedPseudo) {
+      theadRow.classList.remove("named");
+      theadRow.removeAttribute("data-title");
+      if (!theadRow.querySelector(":scope > [data-fkp-name-header]")) {
+        const nameHeader = textNode(
+          "th",
+          "th cbi-section-table-cell",
+          headerLabel
+        );
+        nameHeader.dataset.fkpNameHeader = "";
+        theadRow.prepend(nameHeader);
+      }
+    } else {
+      const firstHeader = theadRow.firstElementChild;
+      if (firstHeader && firstHeader.textContent?.trim() === "Name") {
+        firstHeader.textContent = headerLabel;
+      }
+    }
+  }
+  for (const row of root.querySelectorAll(
+    "tr.cbi-section-table-row[data-sid]"
+  )) {
+    if (!row.querySelector(":scope > .cbi-section-table-titles")) {
+      const titleCell = textNode(
+        "td",
+        "td cbi-value-field cbi-section-table-titles",
+        row.getAttribute("data-title") || row.dataset.sid || ""
+      );
+      row.prepend(titleCell);
+    }
+  }
+  if (hadNamedPseudo) {
+    const placeholderTd = root.querySelector(
+      "tr.placeholder > td[colspan]"
+    );
+    if (placeholderTd && placeholderTd.colSpan > 0) {
+      placeholderTd.colSpan += 1;
+    }
+  }
+}
+function ensureRuleActionsBar(actions) {
+  const existing = actions.querySelector(
+    ":scope > .fkp-rule-actions-bar"
+  );
+  if (existing) return existing;
+  const nativeDiv = actions.querySelector(
+    ":scope > div:not(.cbi-dropdown):not(.fkp-rule-order)"
+  );
+  if (nativeDiv) {
+    nativeDiv.classList.add("fkp-rule-actions-bar");
+    return nativeDiv;
+  }
+  const bar = textNode("div", "fkp-rule-actions-bar", "");
+  bar.append(...actions.childNodes);
+  actions.append(bar);
+  return bar;
+}
 function configureRuleOrder(root, move) {
+  normalizeNamedSectionTable(root, "\u041F\u0440\u0430\u0432\u0438\u043B\u043E");
   const status = textNode("p", "fkp-rule-order-status", "");
   status.setAttribute("role", "status");
   status.setAttribute("aria-live", "polite");
@@ -18634,14 +20993,16 @@ function configureRuleOrder(root, move) {
     row.querySelector("input[type=checkbox]")?.setAttribute("aria-label", `\u0412\u043A\u043B\u044E\u0447\u0438\u0442\u044C \u043F\u0440\u0430\u0432\u0438\u043B\u043E ${name}`);
     const actions = row.querySelector(".cbi-section-actions");
     const controls = textNode("div", "fkp-rule-order", "");
-    for (const [direction, label] of [
-      ["up", "\u0412\u044B\u0448\u0435"],
-      ["down", "\u041D\u0438\u0436\u0435"]
+    for (const [direction, label, glyph] of [
+      ["up", "\u0412\u044B\u0448\u0435", "\u2191"],
+      ["down", "\u041D\u0438\u0436\u0435", "\u2193"]
     ]) {
       const button = document.createElement("button");
       button.type = "button";
+      button.className = "cbi-button fkp-rule-order-btn";
       button.dataset.ruleOrder = direction;
-      button.textContent = label;
+      button.textContent = glyph;
+      button.title = label;
       button.setAttribute("aria-label", `${label}: ${name}`);
       button.addEventListener("click", () => {
         const ordered = rows();
@@ -18670,7 +21031,11 @@ function configureRuleOrder(root, move) {
       });
       controls.append(button);
     }
-    actions?.append(controls);
+    if (actions) {
+      const bar = ensureRuleActionsBar(actions);
+      bar.prepend(controls);
+      ensureRowOverflowMenu(bar, name);
+    }
   }
   update();
   const observer = new MutationObserver(update);
@@ -18739,6 +21104,7 @@ function renderExtendedPreview(section, capture) {
   };
   const invalidate = () => {
     generation++;
+    root.setAttribute("aria-busy", "false");
     content.replaceChildren();
     status.textContent = "\u0427\u0435\u0440\u043D\u043E\u0432\u0438\u043A \u0438\u0437\u043C\u0435\u043D\u0451\u043D. \u041F\u043E\u0432\u0442\u043E\u0440\u0438\u0442\u0435 \u043F\u0440\u0435\u0434\u043F\u0440\u043E\u0441\u043C\u043E\u0442\u0440.";
   };
@@ -18753,24 +21119,28 @@ function renderExtendedPreview(section, capture) {
     const requestId = `preview_${current}`;
     status.textContent = "\u0427\u0438\u0442\u0430\u0435\u043C \u0441\u043D\u0438\u043C\u043E\u043A \u0438 \u043F\u0440\u043E\u0432\u0435\u0440\u044F\u0435\u043C \u0447\u0435\u0440\u043D\u043E\u0432\u0438\u043A\u2026";
     root.setAttribute("aria-busy", "true");
-    const reply = await executeShellCommand({
-      command: "/usr/bin/forkop",
-      args: [
-        "extended_preview",
-        JSON.stringify({
-          schema: 1,
-          section,
-          requestId,
-          expectedCapture,
-          draft: snapshot.draft
-        })
-      ],
-      timeout: 15e3,
-      operationName: "\u041F\u0440\u0435\u0434\u043F\u0440\u043E\u0441\u043C\u043E\u0442\u0440 \u0444\u0438\u043B\u044C\u0442\u0440\u043E\u0432"
-    });
+    let reply;
+    try {
+      reply = await executeShellCommand({
+        command: "/usr/bin/forkop",
+        args: [
+          "extended_preview",
+          JSON.stringify({
+            schema: 1,
+            section,
+            requestId,
+            expectedCapture,
+            draft: snapshot.draft
+          })
+        ],
+        timeout: 15e3,
+        operationName: "\u041F\u0440\u0435\u0434\u043F\u0440\u043E\u0441\u043C\u043E\u0442\u0440 \u0444\u0438\u043B\u044C\u0442\u0440\u043E\u0432"
+      });
+    } finally {
+      if (current === generation) root.setAttribute("aria-busy", "false");
+    }
     if (!root.isConnected || current !== generation || capture().revision !== snapshot.revision)
       return;
-    root.setAttribute("aria-busy", "false");
     try {
       const result = JSON.parse(reply.stdout);
       if (!result.success) {
@@ -18785,11 +21155,19 @@ function renderExtendedPreview(section, capture) {
       paragraph(
         "\u042D\u0442\u0438 \u043D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438 \u0435\u0449\u0451 \u043D\u0435 \u043F\u0440\u0438\u043C\u0435\u043D\u0435\u043D\u044B. \u0420\u0430\u0431\u043E\u0442\u0430\u044E\u0449\u0438\u0435 \u0433\u0440\u0443\u043F\u043F\u044B \u0441\u043C\u043E\u0442\u0440\u0438\u0442\u0435 \u0432 \u0440\u0430\u0437\u0434\u0435\u043B\u0435 \xAB\u0421\u0435\u0440\u0432\u0435\u0440\u044B\xBB."
       );
+      const pluralizeNodes = (n) => {
+        const mod100 = Math.abs(n) % 100;
+        const mod10 = mod100 % 10;
+        if (mod100 >= 11 && mod100 <= 19) return "\u0443\u0437\u043B\u043E\u0432";
+        if (mod10 === 1) return "\u0443\u0437\u0435\u043B";
+        if (mod10 >= 2 && mod10 <= 4) return "\u0443\u0437\u043B\u0430";
+        return "\u0443\u0437\u043B\u043E\u0432";
+      };
       const names = new Map(data.candidates.map((c) => [c.id, c.name]));
-      names.set("direct", "Direct");
+      names.set("direct", "\u041D\u0430\u043F\u0440\u044F\u043C\u0443\u044E");
       for (const group of data.groups) {
         const heading = document.createElement("h4");
-        heading.textContent = `${group.name}: ${group.count} \u0443\u0437\u043B\u043E\u0432${group.omitted ? " \xB7 \u043F\u0443\u0441\u0442\u0430\u044F \u0433\u0440\u0443\u043F\u043F\u0430 \u043D\u0435 \u0441\u043E\u0437\u0434\u0430\u0451\u0442\u0441\u044F" : ""}`;
+        heading.textContent = `${group.name}: ${group.count} ${pluralizeNodes(group.count)}${group.omitted ? " \xB7 \u043F\u0443\u0441\u0442\u0430\u044F \u0433\u0440\u0443\u043F\u043F\u0430 \u043D\u0435 \u0441\u043E\u0437\u0434\u0430\u0451\u0442\u0441\u044F" : ""}`;
         content.append(heading);
         paragraph(
           group.interrupt ? "\u0421\u043E\u0435\u0434\u0438\u043D\u0435\u043D\u0438\u044F \u043F\u0440\u0435\u0440\u044B\u0432\u0430\u044E\u0442\u0441\u044F \u043F\u0440\u0438 \u043F\u0435\u0440\u0435\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0438." : "\u0421\u0443\u0449\u0435\u0441\u0442\u0432\u0443\u044E\u0449\u0438\u0435 \u0441\u043E\u0435\u0434\u0438\u043D\u0435\u043D\u0438\u044F \u0441\u043E\u0445\u0440\u0430\u043D\u044F\u044E\u0442\u0441\u044F \u043F\u0440\u0438 \u043F\u0435\u0440\u0435\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0438."
@@ -18858,7 +21236,9 @@ return baseclass.extend({
   configureRuleOrder,
   configureRuleWorkflow,
   coreService,
+  createActionMenu,
   disposeWorkspaceTools,
+  ensureRowOverflowMenu,
   getClashUIUrl,
   getDashboardSections,
   getProxyUrlName,
@@ -18866,6 +21246,7 @@ return baseclass.extend({
   injectGlobalStyles,
   mountForkopWorkspace,
   navigateToRule,
+  normalizeNamedSectionTable,
   parseValueList,
   refreshRuntimeUiState,
   registerConfigurationReload,
@@ -18885,5 +21266,6 @@ return baseclass.extend({
   validatePath,
   validateProxyUrl,
   validateSubnet,
-  validateUrl
+  validateUrl,
+  validateWireGuardUrl
 });

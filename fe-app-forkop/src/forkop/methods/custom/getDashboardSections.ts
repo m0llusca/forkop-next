@@ -368,6 +368,20 @@ function getJsonOutbounds(section: Forkop.ConfigSection) {
   return values.length ? values : getListValues(section.outbound_json);
 }
 
+function getEffectiveSectionAction(
+  section: Forkop.ConfigSection,
+): Forkop.ConfigSection['action'] {
+  if (section.action) {
+    return section.action;
+  }
+
+  if (section.connection_type === 'exclusion') {
+    return 'bypass';
+  }
+
+  return section.connection_type;
+}
+
 function isConnectionAction(action?: string) {
   return Boolean(
     action && ['connection', 'proxy', 'outbound', 'vpn'].includes(action),
@@ -1386,12 +1400,13 @@ export async function getDashboardSections(
     configSections
       .filter(
         (section) =>
-          section.enabled !== '0' && isConnectionAction(section.action),
+          section.enabled !== '0' &&
+          isConnectionAction(getEffectiveSectionAction(section)),
       )
       .map(async (section) => {
         const displayName = getDisplayName(section);
         const sectionName = section['.name'];
-        const sectionAction = section.action;
+        const sectionAction = getEffectiveSectionAction(section);
         const proxyConfigType = getSectionProxyConfigType(section);
 
         if (isConnectionAction(sectionAction) && shouldUseProxyGroup(section)) {

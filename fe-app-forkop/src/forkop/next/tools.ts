@@ -7,6 +7,10 @@ import {
   workflowError,
   type WorkflowTarget,
 } from './workflows';
+import {
+  createActionMenu,
+  decorateActionMenuItems,
+} from '../workspace/actionMenu';
 type Response = { success: boolean; data?: unknown; error?: string };
 type Request = (
   action: string,
@@ -32,10 +36,17 @@ export function renderDeviceProfileTools(
     h.textContent = text;
     group.append(h);
   };
-  const note = (text: string) => {
+  const note = (text: string, target: HTMLElement = group) => {
     const p = document.createElement('p');
     p.textContent = text;
-    group.append(p);
+    target.append(p);
+    return p;
+  };
+  const actionsRow = (target: HTMLElement = group) => {
+    const row = document.createElement('div');
+    row.className = 'fkp-next-actions';
+    target.append(row);
+    return row;
   };
   const field = <K extends 'input' | 'select' | 'textarea'>(
     tag: K,
@@ -84,6 +95,7 @@ export function renderDeviceProfileTools(
     text: string,
     output: HTMLOutputElement,
     task: () => Promise<void>,
+    target: HTMLElement = group,
   ) => {
     const b = document.createElement('button');
     b.type = 'button';
@@ -101,22 +113,13 @@ export function renderDeviceProfileTools(
         output.setAttribute('aria-busy', 'false');
       }
     });
-    group.append(b);
+    target.append(b);
     return b;
   };
   heading('Устройства');
   note(
     'Здесь показаны сохранённые назначения маршрутов. Остальные условия включения и исключения задаются в правилах.',
   );
-  const rules = document.createElement('button');
-  rules.type = 'button';
-  rules.textContent = 'Открыть условия в правилах';
-  rules.onclick = () =>
-    root
-      .closest('.cbi-map')
-      ?.querySelector<HTMLAnchorElement>('.cbi-tabmenu [data-tab="section"] a')
-      ?.click();
-  group.append(rules);
   const devices = document.createElement('ul');
   group.append(devices);
   const device = field('input', 'Адрес устройства');
@@ -127,6 +130,15 @@ export function renderDeviceProfileTools(
   const route = field('select', 'Маршрут устройства');
   options(route, []);
   const deviceResult = result('Результат устройства');
+  const deviceActions = actionsRow();
+  const rules = document.createElement('button');
+  rules.type = 'button';
+  rules.textContent = 'Открыть условия в правилах';
+  rules.onclick = () =>
+    root
+      .closest('.cbi-map')
+      ?.querySelector<HTMLAnchorElement>('.cbi-tabmenu [data-tab="section"] a')
+      ?.click();
   let assignments: Array<{ address: string; section: string }> = [];
   const routeLabels = new Map<string, string>([
     ['direct', 'Всегда напрямую'],
@@ -137,7 +149,11 @@ export function renderDeviceProfileTools(
     devices.replaceChildren();
     for (const item of assignments) {
       const li = document.createElement('li');
-      li.textContent = `${item.address} → ${routeLabels.get(item.section) || item.section}`;
+      const label = document.createElement('span');
+      label.textContent = `${item.address} → ${routeLabels.get(item.section) || item.section}`;
+      const itemActions = document.createElement('div');
+      itemActions.className = 'fkp-next-item-actions';
+      li.append(label, itemActions);
       try {
         requireIPv4(item.address);
       } catch {
@@ -155,7 +171,7 @@ export function renderDeviceProfileTools(
             deviceResult.textContent =
               'Откройте это правило в полном редакторе: IPv6 и подсети сохраняются без изменений.';
         };
-        li.append(native);
+        itemActions.append(native);
         devices.append(li);
         continue;
       }
@@ -167,10 +183,22 @@ export function renderDeviceProfileTools(
         route.value = item.section === 'nxt_direct' ? 'direct' : item.section;
         device.focus();
       };
-      const reset = button('По общим правилам', deviceResult, async () => {
-        await saveDevice(item.address, '');
-      });
-      li.append(edit, reset);
+      itemActions.append(edit);
+      const resetHolder = document.createElement('div');
+      const reset = button(
+        'По общим правилам',
+        deviceResult,
+        async () => {
+          await saveDevice(item.address, '');
+        },
+        resetHolder,
+      );
+      itemActions.append(
+        createActionMenu('⋯', [reset], {
+          compact: true,
+          ariaLabel: `Действия: ${item.address}`,
+        }),
+      );
       devices.append(li);
     }
     if (!assignments.length)
@@ -204,70 +232,140 @@ export function renderDeviceProfileTools(
     const refreshed = await loadDevices();
     deviceResult.textContent = `Маршрут устройства сохранён и применён: ${address} → ${routeLabels.get(section) || section}.${refreshed ? '' : ' Не удалось обновить список устройств; показаны прежние данные.'}`;
   };
-  button('Сохранить маршрут устройства', deviceResult, async () => {
-    if (!device.value.trim() || !route.value)
-      throw new Error('Требуются адрес устройства и маршрут');
-    await saveDevice(
-      device.value,
-      route.value === 'inherit' ? '' : route.value,
-    );
+  const saveDeviceButton = button(
+    'Сохранить маршрут устройства',
+    deviceResult,
+    async () => {
+      if (!device.value.trim() || !route.value)
+        throw new Error('Требуются адрес устройства и маршрут');
+      await saveDevice(
+        device.value,
+        route.value === 'inherit' ? '' : route.value,
+      );
+    },
+    deviceActions,
+  );
+  saveDeviceButton.className = 'fkp-next-primary-action';
+  const deviceMoreMenu = createActionMenu('Ещё', [], {
+    ariaLabel: 'Дополнительные действия с устройствами',
   });
-  button('Обновить устройства', deviceResult, async () => {
-    await loadDevices();
-  });
+  const deviceMorePopover = deviceMoreMenu.querySelector<HTMLElement>(
+    '.fkp-action-menu__popover',
+  )!;
+  deviceActions.append(deviceMoreMenu);
+  button(
+    'Обновить устройства',
+    deviceResult,
+    async () => {
+      await loadDevices();
+    },
+    deviceMorePopover,
+  );
+  decorateActionMenuItems(deviceMorePopover);
 
   heading('Игровые пресеты');
   note(
     'Пресеты направляют домены магазинов и загрузок. Игровые сессии сохраняют текущую маршрутизацию.',
-  );
-  const scope = field('select', 'Охват игрового пресета');
-  options(scope, [
-    { value: 'all', label: 'Все устройства' },
-    { value: 'selected', label: 'Выбранное устройство' },
-  ]);
-  const gamingDevice = field('input', 'Игровое устройство');
-  attachDevicePicker(gamingDevice, root);
-  note(
-    'Для выбранного устройства нужен IPv4. Подсказки DHCP не являются онлайн-статусом.',
   );
   const preset = field('select', 'Игровой пресет');
   options(preset, [
     { value: 'steam', label: 'Steam' },
     { value: 'playstation', label: 'PlayStation' },
     { value: 'xbox', label: 'Xbox' },
+    {
+      value: 'console',
+      label: 'Игровая консоль (TCP через прокси, UDP напрямую)',
+    },
   ]);
   const gamingRoute = field('select', 'Игровой маршрут');
   options(gamingRoute, []);
+  const scope = field('select', 'Охват игрового пресета');
+  options(scope, [
+    { value: 'all', label: 'Все устройства' },
+    { value: 'selected', label: 'Выбранное устройство' },
+  ]);
+  const gamingDevice = field('input', 'Игровое устройство');
+  const gamingDeviceLabel = gamingDevice.closest('label')!;
+  attachDevicePicker(gamingDevice, root);
+  const gamingDeviceNote = note(
+    'Для выбранного устройства нужен IPv4. Подсказки DHCP не являются онлайн-статусом.',
+  );
+  const consoleCheckLabel = document.createElement('label');
+  consoleCheckLabel.className = 'fkp-next-check';
+  const consoleModeCheck = document.createElement('input');
+  consoleModeCheck.type = 'checkbox';
+  consoleModeCheck.dataset.gamingConsoleMode = '';
+  consoleModeCheck.setAttribute(
+    'aria-label',
+    'Консольный режим (TCP через прокси, UDP напрямую)',
+  );
+  consoleCheckLabel.append(
+    consoleModeCheck,
+    'Консольный режим (TCP через прокси, UDP напрямую)',
+  );
+  group.append(consoleCheckLabel);
+  let userConsoleChecked = false;
   const gamingPreview = result('Предварительный охват пресета');
   const showScope = () => {
-    gamingDevice.disabled = scope.value !== 'selected';
+    if (preset.value === 'console' && scope.value !== 'selected') {
+      scope.value = 'selected';
+    }
+    const selectedScope = scope.value === 'selected';
+    gamingDevice.disabled = !selectedScope;
+    gamingDeviceLabel.hidden = !selectedScope;
+    gamingDeviceNote.hidden = !selectedScope;
+    const forcedConsole = preset.value === 'console';
+    consoleModeCheck.disabled = forcedConsole;
+    consoleModeCheck.checked = forcedConsole ? true : userConsoleChecked;
+    const modeSuffix =
+      consoleModeCheck.checked || forcedConsole
+        ? ' · UDP напрямую (Open NAT)'
+        : '';
     gamingPreview.textContent = scope.value
-      ? `Этот пресет затронет ${scope.value === 'all' ? 'все устройства' : gamingDevice.value.trim() || 'выбранное устройство — укажите IPv4'} → ${routeLabels.get(gamingRoute.value) || 'выберите маршрут'}.`
+      ? `Этот пресет затронет ${scope.value === 'all' ? 'все устройства' : gamingDevice.value.trim() || 'выбранное устройство — укажите IPv4'} → ${routeLabels.get(gamingRoute.value) || 'выберите маршрут'}${modeSuffix}.`
       : 'Выберите явно: все устройства или выбранное устройство.';
   };
   scope.onchange = showScope;
+  preset.onchange = showScope;
+  consoleModeCheck.onchange = () => {
+    userConsoleChecked = consoleModeCheck.checked;
+    showScope();
+  };
   gamingDevice.oninput = showScope;
   gamingRoute.onchange = showScope;
   showScope();
   const gamingResult = result('Результат игрового пресета');
-  button('Применить игровой пресет', gamingResult, async () => {
-    if (!preset.value || !gamingRoute.value)
-      throw new Error('Требуются игровой пресет и маршрут');
-    if (!scope.value)
-      throw new Error(
-        'Выберите охват игрового пресета: все устройства или выбранное устройство',
-      );
-    if (gamingRoute.selectedOptions[0]?.disabled)
-      throw new Error('Выберите доступный игровой маршрут');
-    const payload: Record<string, unknown> = {
-      preset: preset.value,
-      section: gamingRoute.value,
-    };
-    if (scope.value === 'selected')
-      payload.device = requireIPv4(gamingDevice.value);
-    await call('gaming_apply', payload);
-    gamingResult.textContent = 'Игровой пресет применён.';
-  });
+  const gamingActions = actionsRow();
+  const applyGamingButton = button(
+    'Применить игровой пресет',
+    gamingResult,
+    async () => {
+      if (!preset.value || !gamingRoute.value)
+        throw new Error('Требуются игровой пресет и маршрут');
+      if (!scope.value)
+        throw new Error(
+          'Выберите охват игрового пресета: все устройства или выбранное устройство',
+        );
+      if (preset.value === 'console' && scope.value !== 'selected')
+        throw new Error(
+          'Для пресета игровой консоли выберите конкретное устройство с IPv4',
+        );
+      if (gamingRoute.selectedOptions[0]?.disabled)
+        throw new Error('Выберите доступный игровой маршрут');
+      const payload: Record<string, unknown> = {
+        preset: preset.value,
+        section: gamingRoute.value,
+      };
+      if (scope.value === 'selected' || preset.value === 'console')
+        payload.device = requireIPv4(gamingDevice.value);
+      if (consoleModeCheck.checked || preset.value === 'console')
+        payload.console_mode = true;
+      await call('gaming_apply', payload);
+      gamingResult.textContent = 'Игровой пресет применён.';
+    },
+    gamingActions,
+  );
+  applyGamingButton.className = 'fkp-next-primary-action';
 
   heading('Импорт и экспорт профилей');
   note(
@@ -275,7 +373,6 @@ export function renderDeviceProfileTools(
   );
   const exportName = field('select', 'Профиль для экспорта');
   options(exportName, []);
-  const profileResult = result('Результат профиля');
   let profilesGeneration = 0;
   let profilesUpdated = '';
   const loadProfiles = async (read: Request = request, announce = true) => {
@@ -301,29 +398,7 @@ export function renderDeviceProfileTools(
       return false;
     }
   };
-  button('Скачать профиль', profileResult, async () => {
-    if (!exportName.value) throw new Error('Требуется профиль для экспорта');
-    const data = (await call('profile_export', { name: exportName.value })) as {
-      name: string;
-      config: string;
-    };
-    if (typeof data.config !== 'string') throw new Error('invalid_response');
-    const url = URL.createObjectURL(
-      new Blob([data.config], { type: 'text/plain;charset=utf-8' }),
-    );
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = `${data.name.replace(/[^a-zA-Z0-9_.-]/g, '_')}.uci`;
-    anchor.hidden = true;
-    root.append(anchor);
-    try {
-      anchor.click();
-      profileResult.textContent = 'Скачивание профиля начато.';
-    } finally {
-      anchor.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 0);
-    }
-  });
+  const exportActions = actionsRow();
   const name = field('input', 'Название импортируемого профиля');
   const file = field('input', 'Файл профиля');
   file.type = 'file';
@@ -331,6 +406,37 @@ export function renderDeviceProfileTools(
   const config = field('textarea', 'Конфигурация профиля');
   config.rows = 5;
   config.autocomplete = 'off';
+  const profileResult = result('Результат профиля');
+  button(
+    'Скачать профиль',
+    profileResult,
+    async () => {
+      if (!exportName.value) throw new Error('Требуется профиль для экспорта');
+      const data = (await call('profile_export', {
+        name: exportName.value,
+      })) as {
+        name: string;
+        config: string;
+      };
+      if (typeof data.config !== 'string') throw new Error('invalid_response');
+      const url = URL.createObjectURL(
+        new Blob([data.config], { type: 'text/plain;charset=utf-8' }),
+      );
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `${data.name.replace(/[^a-zA-Z0-9_.-]/g, '_')}.uci`;
+      anchor.hidden = true;
+      root.append(anchor);
+      try {
+        anchor.click();
+        profileResult.textContent = 'Скачивание профиля начато.';
+      } finally {
+        anchor.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 0);
+      }
+    },
+    exportActions,
+  );
   let fileReadGeneration = 0;
   file.addEventListener('change', async () => {
     const generation = ++fileReadGeneration;
@@ -346,28 +452,40 @@ export function renderDeviceProfileTools(
         'Файл загружен. Проверьте конфигурацию и импортируйте профиль.';
     } catch {
       if (generation !== fileReadGeneration) return;
-      profileResult.textContent = 'file_read_failed';
+      profileResult.textContent = 'Не удалось прочитать выбранный файл.';
     }
   });
-  button('Импортировать профиль', profileResult, async () => {
-    if (!name.value.trim() || !config.value.trim())
-      throw new Error('Требуются название профиля и конфигурация');
-    await call('profile_import', {
-      name: name.value.trim(),
-      config: config.value,
-    });
-    config.value = '';
-    file.value = '';
-    profileResult.textContent = 'Профиль импортирован без активации.';
-    root.dispatchEvent(
-      new CustomEvent('forkop:profiles-changed', { bubbles: true }),
-    );
-    if (!(await loadProfiles(request, false)))
-      profileResult.textContent += ' Не удалось обновить список профилей.';
-  });
-  button('Обновить профили', profileResult, async () => {
-    await loadProfiles();
-  });
+  const importActions = actionsRow();
+  const importButton = button(
+    'Импортировать профиль',
+    profileResult,
+    async () => {
+      if (!name.value.trim() || !config.value.trim())
+        throw new Error('Требуются название профиля и конфигурация');
+      await call('profile_import', {
+        name: name.value.trim(),
+        config: config.value,
+      });
+      config.value = '';
+      file.value = '';
+      profileResult.textContent = 'Профиль импортирован без активации.';
+      root.dispatchEvent(
+        new CustomEvent('forkop:profiles-changed', { bubbles: true }),
+      );
+      if (!(await loadProfiles(request, false)))
+        profileResult.textContent += ' Не удалось обновить список профилей.';
+    },
+    importActions,
+  );
+  importButton.className = 'fkp-next-primary-action';
+  button(
+    'Обновить профили',
+    profileResult,
+    async () => {
+      await loadProfiles();
+    },
+    importActions,
+  );
 
   if (area !== 'profiles') {
     deviceResult.textContent = 'Загрузка устройств…';
@@ -381,7 +499,7 @@ export function renderDeviceProfileTools(
   let routesUpdated = '';
   const routesFreshness = document.createElement('p');
   routesFreshness.setAttribute('aria-label', 'Актуальность маршрутов');
-  gamingResult.after(routesFreshness);
+  gamingActions.after(routesFreshness);
   const loadRoutes = (read = request, announce = false) => {
     const generation = ++routesGeneration;
     return call('status', {}, read)
@@ -438,10 +556,16 @@ export function renderDeviceProfileTools(
   if (area !== 'profiles') {
     void loadRoutes(initialRequest);
     // Keep entered addresses when route loading fails; retry only the read.
-    group = route.closest('section')!;
-    button('Обновить маршруты', gamingResult, async () => {
-      await loadRoutes(request, true);
-    });
+    button(
+      'Обновить маршруты',
+      gamingResult,
+      async () => {
+        await loadRoutes(request, true);
+      },
+      deviceMorePopover,
+    );
+    deviceMorePopover.append(rules);
+    decorateActionMenuItems(deviceMorePopover);
   }
   root.addEventListener('forkop:refresh-tools', (event) => {
     const read =

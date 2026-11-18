@@ -18,6 +18,7 @@ const CONFIG_FILE = getenv("FORKOP_CONFIG_FILE") || "/etc/config/" + CONFIG_NAME
 const LIB_DIR = getenv("FORKOP_LIB") || "/usr/lib/forkop";
 const BIN_PATH = getenv("FORKOP_BIN") || constant_value("FORKOP_BIN", "/usr/bin/forkop");
 const SERVICE_INIT = getenv("FORKOP_SERVICE_INIT") || constant_value("FORKOP_SERVICE_INIT", "/etc/init.d/forkop");
+const SING_BOX_INIT = getenv("FORKOP_SING_BOX_INIT") || "/etc/init.d/sing-box";
 const SERVICE_NAME = getenv("FORKOP_SERVICE_NAME") || constant_value("FORKOP_SERVICE_NAME", "forkop");
 const LUCI_VIEW_DIR = getenv("FORKOP_LUCI_VIEW_DIR") || constant_value("FORKOP_LUCI_VIEW_DIR", "/www/luci-static/resources/view/forkop");
 const LUCI_I18N_DOMAIN = getenv("FORKOP_LUCI_I18N_DOMAIN") || constant_value("FORKOP_LUCI_I18N_DOMAIN", "forkop");
@@ -74,7 +75,8 @@ const NFT_FAKEIP_MARK = constant_value("NFT_FAKEIP_MARK", "0x04000000");
 const NFT_OUTBOUND_MARK = constant_value("NFT_OUTBOUND_MARK", "0x08000000");
 
 const SB_FAKEIP_INET4_RANGE = constant_value("SB_FAKEIP_INET4_RANGE", "198.18.0.0/15");
-const SB_FAKEIP_INET6_RANGE = constant_value("SB_FAKEIP_INET6_RANGE", "fc00::/18");
+const SB_FAKEIP_INET6_RANGE = constant_value("SB_FAKEIP_INET6_RANGE", "2001:2::/112");
+const FAKEIP6_RANGE_STAMP_FILE = getenv("FORKOP_FAKEIP6_RANGE_STAMP_FILE") || RUNTIME_STATE_DIR + "/fakeip6.range";
 const SB_TPROXY_INBOUND6_ADDRESS = constant_value("SB_TPROXY_INBOUND6_ADDRESS", "::1");
 const SB_TPROXY_INBOUND_PORT = constant_value("SB_TPROXY_INBOUND_PORT", "1602");
 const SB_SERVICE_MIXED_INBOUND_ADDRESS = constant_value("SB_SERVICE_MIXED_INBOUND_ADDRESS", "127.0.0.1");
@@ -579,8 +581,30 @@ function release_start_subscription_update_lock() {
     start_subscription_update_lock_held = false;
 }
 
+function sync_fakeip6_range_stamp() {
+    let previous = trim(as_string(fs.readfile(FAKEIP6_RANGE_STAMP_FILE) || ""));
+    if (previous != "" && previous != SB_FAKEIP_INET6_RANGE) {
+        let cache_path = trim(config_get(CONFIG_NAME + ".settings.cache_path", TMP_SING_BOX_FOLDER + "/cache.db"));
+        if (cache_path == "")
+            cache_path = TMP_SING_BOX_FOLDER + "/cache.db";
+        if (fs.stat(cache_path) != null) {
+            log_message("FakeIPv6 range changed from " + previous + " to " + SB_FAKEIP_INET6_RANGE + "; clearing stale FakeIP cache", "info");
+            remove_file(cache_path);
+        }
+    }
+
+    if (previous != SB_FAKEIP_INET6_RANGE) {
+        let slash = rindex(FAKEIP6_RANGE_STAMP_FILE, "/");
+        if (slash > 0)
+            command_success_from_args([ "mkdir", "-p", substr(FAKEIP6_RANGE_STAMP_FILE, 0, slash) ]);
+        fs.writefile(FAKEIP6_RANGE_STAMP_FILE, SB_FAKEIP_INET6_RANGE + "\n");
+    }
+
+    return 0;
+}
+
 function nft_rebuild_runtime() {
-    return module_status(NFT_UC, [
+    let status = module_status(NFT_UC, [
         "nft-rebuild-runtime-from-uci",
         RT_TABLE_NAME,
         NFT_TABLE_NAME,
@@ -609,6 +633,11 @@ function nft_rebuild_runtime() {
         SB_FAKEIP_INET6_RANGE,
         SB_TPROXY_INBOUND6_ADDRESS
     ]);
+    if (status != 0)
+        return status;
+
+    require("service.torrserver").apply_from_uci(SB_FAKEIP_INET4_RANGE, SB_FAKEIP_INET6_RANGE, NFT_OUTBOUND_MARK);
+    return 0;
 }
 
 function nft_populate_runtime_sets() {
@@ -733,6 +762,8 @@ function start_main() {
 
     module_success(BYEDPI_UC, [ "start-runtime" ]);
 
+    sync_fakeip6_range_stamp();
+
     if (!command_success_from_args([ "/etc/init.d/sing-box", "start" ])) {
         log_message("Failed to start sing-box. Aborted.", "fatal");
         return 1;
@@ -828,9 +859,13 @@ function stop_main() {
     module_success(ZAPRET2_UC, [ "stop-runtime" ]);
     module_success(BYEDPI_UC, [ "stop-runtime" ]);
 
+    require("service.torrserver").cleanup();
+
     if (command_success_from_args([ "nft", "list", "table", "inet", NFT_TABLE_NAME ]))
         command_success_from_args([ "nft", "delete", "table", "inet", NFT_TABLE_NAME ]);
 
+    if (module_success(NFT_UC, [ "source-check-rule4-present", NFT_FAKEIP_MARK ]))
+        command_success_from_args([ "ip", "-4", "rule", "del", "iif", "lo", "fwmark", NFT_FAKEIP_MARK + "/" + NFT_FAKEIP_MARK, "lookup", "main", "priority", "104" ]);
     if (module_success(NFT_UC, [ "tproxy-marking-rule4-present", RT_TABLE_NAME, NFT_FAKEIP_MARK ]))
         command_success_from_args([ "ip", "-4", "rule", "del", "fwmark", NFT_FAKEIP_MARK + "/" + NFT_FAKEIP_MARK, "table", RT_TABLE_NAME, "priority", "105" ]);
     if (module_success(NFT_UC, [ "tproxy-marking-rule6-present", RT_TABLE_NAME, NFT_FAKEIP_MARK ]))
@@ -841,7 +876,7 @@ function stop_main() {
     if (module_success(NFT_UC, [ "tproxy-route6-present", RT_TABLE_NAME ]))
         command_success_from_args([ "ip", "-6", "route", "flush", "table", RT_TABLE_NAME ]);
 
-    let sing_box_status = command_status_from_args([ "/etc/init.d/sing-box", "stop" ]);
+    let sing_box_status = command_status_from_args([ SING_BOX_INIT, "stop" ]);
     if (sing_box_status != 0)
         status = sing_box_status;
 
@@ -1268,6 +1303,7 @@ function reload(reason) {
         if (status != 0)
             return abort_reload(status, true);
         nft_populate_enabled = NFT_POPULATE_ENABLED_DEFAULT;
+        sync_fakeip6_range_stamp();
         status = module_status(STATE_UC, [
             "reload-sing-box-runtime",
             sing_box_pid_before,
@@ -1502,6 +1538,8 @@ else if (mode == "selector-restore-pairs-fixture") {
 }
 else if (mode == "dnsmasq-restore" || mode == "restore-dnsmasq")
     status = dnsmasq_restore_fail_safe();
+else if (mode == "sync-fakeip6-range-stamp")
+    status = sync_fakeip6_range_stamp();
 else if (mode == "uninstall")
     status = uninstall();
 else {

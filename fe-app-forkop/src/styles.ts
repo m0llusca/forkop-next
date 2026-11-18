@@ -98,8 +98,8 @@ ${PartialStyles}
 
 /* Skeleton styles*/
 .skeleton {
-    background-color: var(--background-color-low, #e0e0e0);
-    border-radius: 4px;
+    background-color: var(--next-subtle, var(--background-color-low, #e0e0e0));
+    border-radius: 8px;
     position: relative;
     overflow: hidden;
 }
@@ -114,7 +114,7 @@ ${PartialStyles}
     background: linear-gradient(
             90deg,
             transparent,
-            rgba(255, 255, 255, 0.4),
+            color-mix(in srgb, var(--next-fg, #fff) 10%, transparent),
             transparent
     );
     animation: skeleton-shimmer 1.6s infinite;
@@ -128,18 +128,20 @@ ${PartialStyles}
 /* Toast */
 .toast-container {
     position: fixed;
-    bottom: 30px;
-    left: 50%;
-    transform: translateX(-50%);
+    bottom: max(16px, env(safe-area-inset-bottom, 0px));
+    left: 16px;
+    right: 16px;
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: 10px;
     z-index: 9999;
     font-family: system-ui, sans-serif;
+    pointer-events: none;
 }
 
 .toast {
+    box-sizing: border-box;
     opacity: 0;
     transform: translateY(10px);
     transition: opacity 0.3s ease, transform 0.3s ease;
@@ -148,9 +150,12 @@ ${PartialStyles}
     color: #fff;
     font-size: 14px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-    min-width: 220px;
-    max-width: 340px;
+    min-width: 0;
+    width: auto;
+    max-width: min(360px, 100%);
+    overflow-wrap: anywhere;
     text-align: center;
+    pointer-events: auto;
 }
 
 .toast-success {
@@ -164,6 +169,17 @@ ${PartialStyles}
 .toast.visible {
     opacity: 1;
     transform: translateY(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .rotate,
+    .skeleton::after {
+        animation: none !important;
+    }
+
+    .toast {
+        transition: none !important;
+    }
 }
 ${workspaceStyles}
 `;

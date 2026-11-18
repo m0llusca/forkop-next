@@ -17,6 +17,14 @@ export function renderCompatibilityPanel(
     e.textContent = value;
     return e;
   };
+  const setEmptyOption = (select: HTMLSelectElement, label: string) => {
+    select.replaceChildren();
+    const opt = text('option', label);
+    opt.value = '';
+    opt.disabled = true;
+    select.append(opt);
+    select.value = '';
+  };
   if (showHeading) root.append(text('h3', 'Совместимость с 3x-ui и Xray'));
   root.append(
     text(
@@ -26,10 +34,20 @@ export function renderCompatibilityPanel(
   );
   const sectionLabel = text('label', 'Подключение');
   const section = document.createElement('select');
+  section.setAttribute('aria-label', 'Подключение');
+  setEmptyOption(section, 'Нет доступных подключений');
   sectionLabel.append(section);
   const outboundLabel = text('label', 'Сервер для проверки');
   const outbound = document.createElement('select');
-  outboundLabel.append(outbound);
+  outbound.setAttribute('aria-label', 'Сервер для проверки');
+  const outboundHint = text('small', 'Сначала сопоставьте настройки');
+  const clearOutbounds = () => {
+    outbound.replaceChildren();
+    outbound.disabled = true;
+    outboundHint.hidden = false;
+  };
+  clearOutbounds();
+  outboundLabel.append(outbound, outboundHint);
   const domainLabel = text('label', 'Сайт для проверки соединения');
   const domain = document.createElement('input');
   domain.name = 'compatibility_domain';
@@ -45,6 +63,8 @@ export function renderCompatibilityPanel(
     'p',
     'Можно вставить параметры входящего подключения из 3x-ui. Данные используются для сопоставления; пароли и ключи не выводятся в результатах.',
   );
+  const comparisonActions = document.createElement('div');
+  comparisonActions.className = 'fkp-next-actions';
   const result = text('div', 'Проверка не выполнялась');
   result.className = 'fkp-next-result';
   result.setAttribute('role', 'status');
@@ -54,9 +74,15 @@ export function renderCompatibilityPanel(
     domainLabel,
     serverLabel,
     help,
+    comparisonActions,
     result,
   );
-  function button(label: string, work: () => Promise<void>, feedback = result) {
+  function button(
+    label: string,
+    work: () => Promise<void>,
+    feedback = result,
+    target: HTMLElement = root,
+  ) {
     const b = text('button', label);
     b.type = 'button';
     b.onclick = async () => {
@@ -69,7 +95,7 @@ export function renderCompatibilityPanel(
         b.disabled = b === handshake && !outbound.value;
       }
     };
-    root.append(b);
+    target.append(b);
     return b;
   }
   let comparisonGeneration = 0;
@@ -130,16 +156,25 @@ export function renderCompatibilityPanel(
     }
     const data = object(response.data);
     const oldOutbound = outbound.value;
-    outbound.replaceChildren();
-    for (const raw of Array.isArray(data.outbounds) ? data.outbounds : []) {
-      const item = object(raw);
-      const option = text('option', String(item.label || item.outbound_tag));
-      option.value = String(item.outbound_tag);
-      outbound.append(option);
+    const outbounds = Array.isArray(data.outbounds) ? data.outbounds : [];
+    if (!outbounds.length) {
+      clearOutbounds();
+    } else {
+      outbound.replaceChildren();
+      for (const raw of outbounds) {
+        const item = object(raw);
+        const option = text('option', String(item.label || item.outbound_tag));
+        option.value = String(item.outbound_tag);
+        outbound.append(option);
+      }
+      outbound.disabled = false;
+      outboundHint.hidden = true;
+      outbound.value = [...outbound.options].some(
+        (o) => o.value === oldOutbound && o.value !== '',
+      )
+        ? oldOutbound
+        : outbound.options[0]?.value || '';
     }
-    outbound.value = [...outbound.options].some((o) => o.value === oldOutbound)
-      ? oldOutbound
-      : outbound.options[0]?.value || '';
     handshake.disabled = !outbound.value;
     const status = String(data.status);
     const labels: Record<string, string> = {
@@ -223,15 +258,26 @@ export function renderCompatibilityPanel(
       ),
     );
   };
-  const compare = button('Сопоставить настройки', () => comparison(false));
-  const handshake = button('Проверить соединение', () => comparison(true));
+  const compare = button(
+    'Сопоставить настройки',
+    () => comparison(false),
+    result,
+    comparisonActions,
+  );
+  compare.className = 'fkp-next-primary-action';
+  const handshake = button(
+    'Проверить соединение',
+    () => comparison(true),
+    result,
+    comparisonActions,
+  );
   handshake.disabled = true;
   outbound.onchange = invalidate;
   domain.oninput = invalidate;
   server.oninput = invalidate;
   section.onchange = () => {
     invalidate();
-    outbound.replaceChildren();
+    clearOutbounds();
     handshake.disabled = true;
     result.textContent =
       'Параметры изменены — проверьте снова. Подключение изменено. Сопоставьте настройки заново.';
@@ -253,7 +299,9 @@ export function renderCompatibilityPanel(
   const xrayVersion = document.createElement('input');
   xrayVersion.name = 'compatibility_xray_version';
   xrayVersionLabel.append(xrayVersion);
-  root.append(panelVersionLabel, xrayVersionLabel);
+  const updateActions = document.createElement('div');
+  updateActions.className = 'fkp-next-actions';
+  root.append(panelVersionLabel, xrayVersionLabel, updateActions);
   button(
     'Проверить обновления 3x-ui и Xray',
     async () => {
@@ -309,6 +357,7 @@ export function renderCompatibilityPanel(
       );
     },
     updates,
+    updateActions,
   );
   root.append(updates);
   let routesGeneration = 0;
@@ -324,19 +373,24 @@ export function renderCompatibilityPanel(
           return;
         }
         const previous = section.value;
-        section.replaceChildren();
         const sections = object(response.data).sections;
-        for (const raw of Array.isArray(sections) ? sections : []) {
-          const s = object(raw);
-          const option = text('option', String(s.label || s.name));
-          option.value = String(s.name);
-          section.append(option);
+        const list = Array.isArray(sections) ? sections : [];
+        if (!list.length) {
+          setEmptyOption(section, 'Нет доступных подключений');
+        } else {
+          section.replaceChildren();
+          for (const raw of list) {
+            const s = object(raw);
+            const option = text('option', String(s.label || s.name));
+            option.value = String(s.name);
+            section.append(option);
+          }
+          section.value = [...section.options].some(
+            (option) => option.value === previous && option.value !== '',
+          )
+            ? previous
+            : section.options[0]?.value || '';
         }
-        section.value = [...section.options].some(
-          (option) => option.value === previous,
-        )
-          ? previous
-          : section.options[0]?.value || '';
         if (section.value !== previous)
           section.dispatchEvent(new Event('change'));
         result.textContent = 'Подключения загружены. Проверка не выполнялась.';
@@ -347,9 +401,14 @@ export function renderCompatibilityPanel(
             'Не удалось загрузить подключения. Нажмите «Обновить подключения».';
       });
   }
-  button('Обновить подключения', async () => {
-    await refreshRoutes();
-  });
+  button(
+    'Обновить подключения',
+    async () => {
+      await refreshRoutes();
+    },
+    result,
+    comparisonActions,
+  );
   root.addEventListener(
     'forkop:refresh-tools',
     (event) =>

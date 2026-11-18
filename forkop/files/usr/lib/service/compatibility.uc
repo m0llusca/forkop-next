@@ -74,7 +74,7 @@ function normalize(raw,server){
     };
 }
 function local_client(payload){
-    let config_path=getenv('FORKOP_SINGBOX_CONFIG')||uci.get(getenv('FORKOP_CONFIG_NAME')||'forkop','settings','config_path')||'/etc/sing-box/config.json';
+    let config_path=getenv('FORKOP_SINGBOX_CONFIG')||uci.get((getenv('FORKOP_CONFIG_NAME')||'forkop')+'.settings.config_path')||'/etc/sing-box/config.json';
     let stat=fs.stat(config_path);if(!stat||stat.size>1048576)return null;
     let config={};try{config=obj(json(fs.readfile(config_path)));}catch(e){return null;}
     let section=str(payload.section),tag=str(payload.outbound_tag),row=obj(uci.get_all(getenv('FORKOP_CONFIG_NAME')||'forkop',section));
@@ -152,7 +152,11 @@ function check(payload){
             else add('reality','matched','REALITY short ID matches; the key still needs a live handshake.');
         }
     }
-    let result={status:blocked?'unsupported':'probe_required',checks,outbounds:local?[{outbound_tag:local.tag,label:local.tag}]:[],client:{core:'sing-box',version:v},server:{panel_version:safe_version(obj(payload.installed).panel),xray_version:safe_version(obj(payload.installed).xray)},scope:'metadata_preflight',future_compatibility_guaranteed:false};
+    let rt=require('singbox.runtime');
+    let supports_wireguard=rt.sing_box_supports_wireguard(v,'');
+    let supports_amneziawg=rt.sing_box_supports_amneziawg(v);
+    let supports_warp=rt.sing_box_supports_native_warp(v);
+    let result={status:blocked?'unsupported':'probe_required',checks,outbounds:local?[{outbound_tag:local.tag,label:local.tag}]:[],client:{core:'sing-box',version:v,supports_wireguard,supports_amneziawg,supports_warp},capabilities:{supports_wireguard,supports_amneziawg,supports_warp},supports_wireguard,supports_amneziawg,supports_warp,server:{panel_version:safe_version(obj(payload.installed).panel),xray_version:safe_version(obj(payload.installed).xray)},scope:'metadata_preflight',future_compatibility_guaranteed:false};
     if(payload.probe==true&&!blocked&&!unknown&&local&&payload.domain){
         let p=require('service.probe').handle({domain:payload.domain,section:payload.section});
         if(p.success){result.probe={reachable:p.data.reachable,http_status:p.data.http_status,curl_status:p.data.curl_status,checked_at:p.data.checked_at,route:p.data.route};if(p.data.reachable)result.status='verified';}

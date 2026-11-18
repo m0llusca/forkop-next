@@ -1,3 +1,11 @@
+function safeDecodeComponent(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
 export function parseQueryString(query: string): Record<string, string> {
   const clean = query.startsWith('?') ? query.slice(1) : query;
 
@@ -6,14 +14,16 @@ export function parseQueryString(query: string): Record<string, string> {
     .filter(Boolean)
     .reduce(
       (acc, pair) => {
-        const [rawKey, rawValue = ''] = pair.split('=');
+        const eqIdx = pair.indexOf('=');
+        const rawKey = eqIdx >= 0 ? pair.slice(0, eqIdx) : pair;
+        const rawValue = eqIdx >= 0 ? pair.slice(eqIdx + 1) : '';
 
         if (!rawKey) {
           return acc;
         }
 
-        const key = decodeURIComponent(rawKey);
-        const value = decodeURIComponent(rawValue);
+        const key = safeDecodeComponent(rawKey);
+        const value = safeDecodeComponent(rawValue);
 
         return { ...acc, [key]: value };
       },

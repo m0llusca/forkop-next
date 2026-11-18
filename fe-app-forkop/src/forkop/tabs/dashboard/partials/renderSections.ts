@@ -10,6 +10,7 @@ import { prettyBytes } from '../../../../helpers/prettyBytes';
 import { Forkop } from '../../../types';
 import { renderFlagEmojis } from './renderFlagEmojis';
 import { renderSourceEvidence } from './sourceEvidence';
+import { createActionMenu } from '../../../workspace/actionMenu';
 
 // Only the mounted dashboard session owns this display preference. It is never
 // written to UCI or used to choose URLTest members or latency targets.
@@ -160,9 +161,9 @@ function renderSubscriptionMetadata(
   ].filter(Boolean) as { label: string; value: string }[];
 
   const actions = [
-    renderMetadataAction('Profile', metadata.webPageUrl),
-    renderMetadataAction('Support', metadata.supportUrl),
-    renderMetadataAction('More details', metadata.announceUrl),
+    renderMetadataAction(_('Profile'), metadata.webPageUrl),
+    renderMetadataAction(_('Support'), metadata.supportUrl),
+    renderMetadataAction(_('More details'), metadata.announceUrl),
   ].filter(Boolean) as HTMLElement[];
 
   return E('div', { class: 'fkp_dashboard-page__subscription-meta' }, [
@@ -550,7 +551,8 @@ function renderDefaultState({
       {},
       'Поиск меняет только список на экране. Состав URLTest сохраняется.',
     ),
-  ]);
+  ]) as HTMLElement;
+  searchControls.hidden = rows.length <= 1;
 
   return E(
     'div',
@@ -583,37 +585,8 @@ function renderDefaultState({
                 'button',
                 {
                   type: 'button',
-                  click: (event: MouseEvent) => {
-                    const root = event.currentTarget as HTMLElement;
-                    navigateToRule(root, {
-                      kind: 'site',
-                      section: section.sectionName,
-                    });
-                  },
-                },
-                'Добавить сайт',
-              ),
-              E(
-                'button',
-                {
-                  type: 'button',
-                  click: (event: MouseEvent) => {
-                    const root = event.currentTarget as HTMLElement;
-                    navigateToRule(root, {
-                      kind: 'edit',
-                      section: section.sectionName,
-                      option: 'subscription_url',
-                    });
-                  },
-                },
-                'Изменить источники',
-              ),
-              ...(subscriptionUpdateAction ? [subscriptionUpdateAction] : []),
-              E(
-                'button',
-                {
-                  type: 'button',
-                  class: 'btn dashboard-sections-grid-item-test-latency',
+                  class:
+                    'btn dashboard-sections-grid-item-test-latency fkp-next-primary-action',
                   'data-latency-section': section.sectionName,
                   disabled: latencyFetching ? true : undefined,
                   click: (event: MouseEvent) => {
@@ -646,6 +619,47 @@ function renderDefaultState({
                       },
                       _('Test latency'),
                     ),
+              ),
+              createActionMenu(
+                'Ещё',
+                [
+                  ...(subscriptionUpdateAction
+                    ? [subscriptionUpdateAction]
+                    : []),
+                  E(
+                    'button',
+                    {
+                      type: 'button',
+                      click: (event: MouseEvent) => {
+                        const root = event.currentTarget as HTMLElement;
+                        navigateToRule(root, {
+                          kind: 'edit',
+                          section: section.sectionName,
+                          option: 'subscription_url',
+                        });
+                      },
+                    },
+                    'Изменить источники',
+                  ),
+                  E(
+                    'button',
+                    {
+                      type: 'button',
+                      click: (event: MouseEvent) => {
+                        const root = event.currentTarget as HTMLElement;
+                        navigateToRule(root, {
+                          kind: 'site',
+                          section: section.sectionName,
+                        });
+                      },
+                    },
+                    'Добавить сайт',
+                  ),
+                ],
+                {
+                  ariaLabel: `Действия: ${section.displayName}`,
+                  busy: Boolean(subscriptionUpdating),
+                },
               ),
             ],
           ),

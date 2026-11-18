@@ -50,7 +50,7 @@ describe('validateProxyUrl', () => {
   });
 
   it('returns a clear error for unsupported protocols', () => {
-    const res = validateProxyUrl('wireguard://example.com');
+    const res = validateProxyUrl('ftp://example.com');
 
     expect(res.valid).toBe(false);
     expect(res.message).toContain('vmess://');

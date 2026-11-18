@@ -909,7 +909,7 @@ function renderDiagnosticSystemInfoWidget() {
       value: normalizeCompiledVersion(diagnosticsSystemInfo.forkop_version),
     },
     {
-      key: 'Luci App',
+      key: _('LuCI app'),
       value: normalizeCompiledVersion(FORKOP_LUCI_APP_VERSION),
     },
     {
@@ -941,11 +941,11 @@ function renderDiagnosticSystemInfoWidget() {
 
   items.push(
     {
-      key: 'OS',
+      key: _('System'),
       value: diagnosticsSystemInfo.openwrt_version,
     },
     {
-      key: 'Device',
+      key: _('Device'),
       value: diagnosticsSystemInfo.device_model,
     },
   );
@@ -1301,7 +1301,7 @@ export async function initController(): Promise<void> {
         () => void handleViewLogs(),
       );
       guide.dataset.nativeSymptomGuide = '';
-      (host.querySelector('.fkp_diagnostic-page__left-bar') || host).prepend(
+      (host.querySelector('.fkp_diagnostic-page__left-bar') || host).append(
         guide,
       );
     }

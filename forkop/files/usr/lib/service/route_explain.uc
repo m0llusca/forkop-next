@@ -29,17 +29,13 @@ function ipv4_number(value) {
 
 function address_match(actual, candidates) {
     if (actual == null) return "unknown";
+    let actual_family = ip.ip_family(actual);
+    if (actual_family == "") return "unknown";
     let unknown = false;
     for (let candidate in candidates) {
         if (!ip.valid_ip_or_cidr(candidate)) { unknown = true; continue; }
-        let parts = split(candidate, "/");
-        if (length(parts) == 1) { if (lc(actual) == lc(candidate)) return "yes"; continue; }
-        if (ip.valid_ipv4(actual, false, false) && ip.valid_ipv4(parts[0], false, false)) {
-            let divisor = 1;
-            for (let bit = int(parts[1]); bit < 32; bit++) divisor *= 2;
-            if (int(ipv4_number(actual) / divisor) == int(ipv4_number(parts[0]) / divisor)) return "yes";
-        }
-        else unknown = true;
+        if (ip.ip_family(candidate) != actual_family) continue;
+        if (ip.ip_in_cidr(actual, candidate)) return "yes";
     }
     return unknown ? "unknown" : "no";
 }
@@ -124,7 +120,7 @@ function explain(raw) {
     for (let key in ["device", "destination_ip"])
         if (request[key] != null && (type(request[key]) != "string" || !ip.valid_ip(request[key]))) return {success:false,error:"invalid_request"};
     if (request.port != null && (type(request.port) != "int" || request.port < 1 || request.port > 65535)) return {success:false,error:"invalid_request"};
-    if (request.protocol != null && index(["tcp", "udp", "quic", "dns"], request.protocol) < 0) return {success:false,error:"invalid_request"};
+    if (request.protocol != null && index(["tcp", "udp", "quic", "dns", "bittorrent", "stun"], request.protocol) < 0) return {success:false,error:"invalid_request"};
     if (!uci.available()) return {success:false,error:"uci_unavailable"};
     let settings = uci.get_all(package_name, "settings") || {}, trace = [];
     let data = {scope:"configured", connectivity_tested:false, capture_verified:false, request,
@@ -138,18 +134,24 @@ function explain(raw) {
         push(trace, {section:null,match:"yes",reason:"hijack_dns"});
         return {success:true,data};
     }
+    if (common.bool_option(settings, "bittorrent_direct", false) && request.protocol == "bittorrent") {
+        data.decision = {status:"direct",section:null,outbound:"direct-out"};
+        push(trace, {section:null,match:"yes",reason:"bittorrent_direct"});
+        return {success:true,data};
+    }
     if (common.bool_option(settings, "disable_quic", false) && request.protocol == "quic") {
         data.decision = {status:"blocked",section:null,outbound:null};
         push(trace, {section:null,match:"yes",reason:"disable_quic"});
         return {success:true,data};
     }
-    if (request.domain == require("singbox.constants").CHECK_PROXY_IP_DOMAIN) {
+    let runtime_constants = require("singbox.constants");
+    if (request.domain == runtime_constants.CHECK_PROXY_IP_DOMAIN) {
         for (let section in uci.section_objects(package_name,"section")) {
             if (!common.bool_option(section,"enabled",true) || option(section,"next_target","") != "") continue;
             let expires = option(section,"next_expires","");
             if (match(expires,/^[0-9]+$/) && int(expires)>0 && int(expires)<=time()) continue;
             if (index(["connection","proxy","outbound","vpn","byedpi","zapret","zapret2"],option(section,"action","")) < 0) continue;
-            let route=target.target(section,section[".name"]+"-out");
+            let route=target.target(section,runtime_constants.outbound_tag(section[".name"]));
             data.decision={status:"matched",section:section[".name"],outbound:route.outbound};
             push(trace,{section:section[".name"],match:"yes",reason:"service_ip_check"});
             return {success:true,data};
@@ -157,13 +159,15 @@ function explain(raw) {
     }
     let count = 0;
     for (let section in uci.section_objects(package_name, "section")) {
-        if (!common.bool_option(section, "enabled", true) || option(section,"action","") == "dns") continue;
+        let section_action = option(section, "action", "");
+        if (!common.bool_option(section, "enabled", true) || section_action == "dns") continue;
         let expires = option(section, "next_expires", "");
         if (expires != "" && match(expires, /^[0-9]+$/) && int(expires) > 0 && int(expires) <= time()) {
             push(trace, {section:section[".name"],match:"no",reason:"expired"});
             continue;
         }
         if (++count > 200) { data.decision.status = "indeterminate"; data.missing = ["evaluation_limit"]; break; }
+        let is_console_mode = section_action != "bypass" && section_action != "block" && common.bool_option(section, "console_mode", false);
         let fully = list(section, "fully_routed_ips"), evaluated = null;
         if (length(fully)) {
             let matched = address_match(request.device, fully);
@@ -174,9 +178,24 @@ function explain(raw) {
         push(trace, {section:section[".name"],match:evaluated.value,reason:"section_conditions"});
         if (evaluated.value == "no") continue;
         if (evaluated.value == "unknown") {
+            if (is_console_mode && (request.protocol == null || request.protocol == "") && index(evaluated.missing, "protocol") < 0)
+                push(evaluated.missing, "protocol");
             data.decision = {status:"indeterminate",section:section[".name"],outbound:null}; data.missing = evaluated.missing; break;
         }
-        let route = target.target(section, section[".name"] + "-out");
+        if (is_console_mode) {
+            if (request.protocol == "udp" || request.protocol == "quic" || request.protocol == "stun") {
+                data.decision = {status:"direct",section:section[".name"],outbound:"direct-out"};
+                push(trace, {section:section[".name"],match:"yes",reason:"console_udp_direct"});
+                break;
+            }
+            if (request.protocol == null || request.protocol == "") {
+                data.decision = {status:"indeterminate",section:section[".name"],outbound:null};
+                data.missing = ["protocol"];
+                push(trace, {section:section[".name"],match:"unknown",reason:"console_protocol_required"});
+                break;
+            }
+        }
+        let route = target.target(section, runtime_constants.outbound_tag(section[".name"]));
         data.decision = {status:route.unsupported ? "indeterminate" : route.action == "reject" ? "blocked" : route.outbound == "bypass-out" ? "direct" : "matched",
                          section:section[".name"],outbound:route.outbound || null};
         if (route.unsupported) data.missing = ["unsupported_action"];

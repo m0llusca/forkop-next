@@ -2,19 +2,84 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 import assert from 'node:assert/strict';
 import { Window } from 'happy-dom';
-const window = new Window({url:'http://router.example/cgi-bin/luci/admin/services/forkop'});
-const context=vm.createContext({window,document:window.document,CustomEvent:window.CustomEvent,Node:window.Node,MutationObserver:window.MutationObserver,WebSocket:window.WebSocket,structuredClone,performance,URL,AbortController,queueMicrotask,setTimeout,clearTimeout,setInterval,clearInterval,console,_:v=>v,baseclass:{extend:v=>v},fs:{exec:async()=>({code:1,stdout:'',stderr:'fixture backend unavailable'}),read:async()=>'',write:async()=>{}},uci:{load:async()=>'',sections:()=>[]},ui:{}});
-const mainPath='../luci-app-forkop/htdocs/luci-static/resources/view/forkop/main.js';
-const main=new vm.Script('(function(){'+fs.readFileSync(mainPath,'utf8')+'\n})()',{filename:mainPath}).runInContext(context);
-assert.equal(typeof main.renderNextPanel,'function');assert.equal(typeof main.registerConfigurationReload,'function');assert.equal(typeof main.getDashboardSections,'function');
-context.main=main;context.form={DummyValue:'dummy'};
-const nativePath='../luci-app-forkop/htdocs/luci-static/resources/view/forkop/next.js';
-const entry=new vm.Script('(function(){'+fs.readFileSync(nativePath,'utf8')+'\n})()',{filename:nativePath}).runInContext(context);
-const option={};entry.createNextContent({option:()=>option});const element=option.cfgvalue();window.document.body.append(element);main.injectGlobalStyles();
-assert.equal(element.dataset.workspace,'true');assert.equal(element.querySelector('h2'),null);assert.equal(element.querySelector('header'),null);assert.equal(element.querySelector('select'),null);assert.equal(element.dataset.mode,'simple');assert.ok(element.querySelector('.fkp-next-service'));assert.ok(element.querySelector('.fkp-next-connection'));assert.ok(element.querySelector('.fkp-next-metrics'));assert.equal(element.querySelector('.fkp-next-advanced'),null);assert.equal(element.querySelector('.fkp-next-probe').open,false);assert.equal(typeof main.configureRuleOrder,'function');assert.equal(element.querySelector('[name=smart_detect_enabled]'),null);assert.equal(element.querySelector('[name=compatibility_domain]'),null);assert.ok(window.document.querySelector('#forkop-global-styles'));
-const standalone=main.renderNextPanel();assert.equal(standalone.querySelector('h2').textContent,'Подключение');assert.ok(standalone.querySelector('details'));assert.ok(standalone.querySelector('select'));
-await new Promise(resolve=>setTimeout(resolve,10));
+const window = new Window({
+  url: 'http://router.example/cgi-bin/luci/admin/services/forkop',
+});
+const context = vm.createContext({
+  window,
+  document: window.document,
+  CustomEvent: window.CustomEvent,
+  Node: window.Node,
+  MutationObserver: window.MutationObserver,
+  WebSocket: window.WebSocket,
+  structuredClone,
+  performance,
+  URL,
+  AbortController,
+  queueMicrotask,
+  setTimeout,
+  clearTimeout,
+  setInterval,
+  clearInterval,
+  console,
+  _: (v) => v,
+  baseclass: { extend: (v) => v },
+  fs: {
+    exec: async () => ({
+      code: 1,
+      stdout: '',
+      stderr: 'fixture backend unavailable',
+    }),
+    read: async () => '',
+    write: async () => {},
+  },
+  uci: { load: async () => '', sections: () => [] },
+  ui: {},
+});
+const mainPath =
+  '../luci-app-forkop/htdocs/luci-static/resources/view/forkop/main.js';
+const main = new vm.Script(
+  '(function(){' + fs.readFileSync(mainPath, 'utf8') + '\n})()',
+  { filename: mainPath },
+).runInContext(context);
+assert.equal(typeof main.renderNextPanel, 'function');
+assert.equal(typeof main.registerConfigurationReload, 'function');
+assert.equal(typeof main.getDashboardSections, 'function');
+context.main = main;
+context.form = { DummyValue: 'dummy' };
+const nativePath =
+  '../luci-app-forkop/htdocs/luci-static/resources/view/forkop/next.js';
+const entry = new vm.Script(
+  '(function(){' + fs.readFileSync(nativePath, 'utf8') + '\n})()',
+  { filename: nativePath },
+).runInContext(context);
+const option = {};
+entry.createNextContent({ option: () => option });
+const element = option.cfgvalue();
+window.document.body.append(element);
+main.injectGlobalStyles();
+assert.equal(element.dataset.workspace, 'true');
+assert.equal(element.querySelector('h2'), null);
+assert.equal(element.querySelector('header'), null);
+assert.equal(element.querySelector('select'), null);
+assert.equal(element.dataset.mode, 'simple');
+assert.ok(element.querySelector('.fkp-next-service'));
+assert.ok(element.querySelector('.fkp-next-connection'));
+assert.ok(element.querySelector('.fkp-next-metrics'));
+assert.equal(element.querySelector('.fkp-next-advanced'), null);
+assert.equal(element.querySelector('.fkp-next-probe').open, false);
+assert.equal(typeof main.configureRuleOrder, 'function');
+assert.equal(element.querySelector('[name=smart_detect_enabled]'), null);
+assert.equal(element.querySelector('[name=compatibility_domain]'), null);
+assert.ok(window.document.querySelector('#forkop-global-styles'));
+const standalone = main.renderNextPanel();
+assert.equal(standalone.querySelector('h2').textContent, 'Подключение');
+assert.ok(standalone.querySelector('details'));
+assert.equal(standalone.querySelector('select'), null);
+await new Promise((resolve) => setTimeout(resolve, 10));
 element.remove();
-await new Promise(resolve=>setTimeout(resolve,10));
+await new Promise((resolve) => setTimeout(resolve, 10));
 await window.happyDOM.abort();
-console.log('Native LuCI bundle and overview module loaded and rendered successfully.');
+console.log(
+  'Native LuCI bundle and overview module loaded and rendered successfully.',
+);

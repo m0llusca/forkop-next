@@ -2,6 +2,7 @@
 
 let fs = require("fs");
 let common = require("core.common");
+let core_ip = require("core.ip");
 let uci_core = require("core.uci");
 let runtime_constants = require("singbox.constants");
 let runtime_country = require("singbox.country");
@@ -12,6 +13,8 @@ let runtime_servers = require("singbox.servers");
 let runtime_subscription = require("singbox.subscription");
 let runtime_url = require("core.url");
 let runtime_urltest = require("singbox.urltest");
+let runtime_wireguard = require("singbox.wireguard");
+let domain_config = require("config.domain");
 let source_rulesets = require("routing.rulesets");
 let rule_config = require("config.rule");
 let connections = require("config.connections");
@@ -20,8 +23,9 @@ let subscription_share_link = require("subscription.share_link");
 let uci = null;
 let fixture_uci_data = null;
 let runtime_settings_cache = null;
-let runtime_ruleset_folder = runtime_constants.TMP_RULESET_FOLDER;
+let runtime_ruleset_folder = getenv("FORKOP_RULESET_FOLDER") || runtime_constants.TMP_RULESET_FOLDER;
 let runtime_supports_xhttp = true;
+let runtime_is_extended_core = true;
 let preview_basis = require("singbox.preview_basis");
 let preview_snapshot = null;
 let preview_core = null;
@@ -60,36 +64,49 @@ function parent_dir(path) {
     return slash <= 0 ? "" : substr(path, 0, slash);
 }
 
-function ensure_dir(path) {
+function ensure_dir(path, mode) {
     path = as_string(path);
     if (path == "" || path == "/")
         return true;
-    if (fs.stat(path) != null)
+    if (fs.stat(path) != null) {
+        if (mode != null)
+            fs.chmod(path, mode);
         return true;
+    }
 
     let parent = parent_dir(path);
-    if (parent != "" && !ensure_dir(parent))
+    if (parent != "" && !ensure_dir(parent, null))
         return false;
 
-    return fs.mkdir(path, 0755) || fs.stat(path) != null;
+    let dir_mode = mode != null ? mode : 0755;
+    let ok = fs.mkdir(path, dir_mode) || fs.stat(path) != null;
+    if (ok && mode != null)
+        fs.chmod(path, mode);
+    return ok;
 }
 
-function ensure_parent_dir(path) {
-    return ensure_dir(parent_dir(path));
+function ensure_parent_dir(path, mode) {
+    return ensure_dir(parent_dir(path), mode);
 }
 
 function atomic_write_json_file(path, value) {
     let stamp = clock();
     let tmp_path = sprintf("%s.%d.%d.tmp", path, stamp[0], stamp[1]);
+    let dir = parent_dir(path);
+    let restricted = dir != "" && dir == runtime_subscription.get_section_cache_dir();
 
-    if (!ensure_parent_dir(path))
+    if (!ensure_parent_dir(path, restricted ? 0700 : null))
         return false;
     if (!write_json_file(tmp_path, value))
         return false;
+    if (restricted)
+        fs.chmod(tmp_path, 0600);
     if (!fs.rename(tmp_path, path)) {
         fs.unlink(tmp_path);
         return false;
     }
+    if (restricted)
+        fs.chmod(path, 0600);
     return true;
 }
 
@@ -401,8 +418,11 @@ function clash_api_config(settings, service_address) {
             controller = as_string(service_address);
     }
 
+    let controller_host = index(controller, ":") >= 0 && substr(controller, 0, 1) != "["
+        ? "[" + controller + "]"
+        : controller;
     let result = {
-        external_controller: controller + ":9090"
+        external_controller: controller_host + ":9090"
     };
     if (bool_option(settings, "enable_yacd", false))
         result.external_ui = "ui";
@@ -423,6 +443,81 @@ function source_dns_inbound_matcher() {
     return [ runtime_constants.SOURCE_DNS_INBOUND_TAG ];
 }
 
+function extract_ntp_domains_from_sections(ntp_sections) {
+    let seen = {};
+    let domains = [];
+    for (let raw_sec in array_or_empty(ntp_sections)) {
+        let sec = object_or_empty(raw_sec);
+        let enabled = lc(trim(as_string(option(sec, "enabled", "1"))));
+        if (enabled == "0" || enabled == "false" || enabled == "no" || enabled == "off")
+            continue;
+        for (let raw_srv in list_option(sec, "server")) {
+            let srv = trim(as_string(raw_srv));
+            if (srv == "" || srv == "localhost" || core_ip.valid_ip_or_cidr(srv))
+                continue;
+            let norm = domain_config.suffix_to_ascii(srv);
+            if (norm != null && norm != "" && !seen[norm]) {
+                seen[norm] = true;
+                push(domains, norm);
+            }
+        }
+    }
+    return domains;
+}
+
+function ntp_server_domains() {
+    if (fixture_uci_data != null) {
+        let sys = object_or_empty(fixture_uci_data).system;
+        if (sys == null)
+            return [];
+        let ntp_sections = [];
+        if (type(sys) == "array") {
+            ntp_sections = sys;
+        }
+        else if (type(sys) == "object") {
+            if (sys.server != null) {
+                ntp_sections = [ sys ];
+            }
+            else {
+                if (type(sys.timeserver) == "array") {
+                    for (let item in sys.timeserver)
+                        push(ntp_sections, item);
+                }
+                else if (type(sys.timeserver) == "object") {
+                    push(ntp_sections, sys.timeserver);
+                }
+                if (type(sys.ntp) == "object") {
+                    push(ntp_sections, sys.ntp);
+                }
+                else if (length(ntp_sections) == 0) {
+                    for (let k, v in sys) {
+                        if (type(v) == "object" && (as_string(v[".type"] || "") == "timeserver" || k == "ntp" || v.server != null))
+                            push(ntp_sections, v);
+                    }
+                }
+            }
+        }
+        return extract_ntp_domains_from_sections(ntp_sections);
+    }
+
+    let uci_dir = as_string(getenv("FORKOP_UCI_CONFIG_DIR") || "");
+    if (uci_dir != "") {
+        if (fs.stat(uci_dir + "/system") == null)
+            return [];
+    }
+    else if (fs.stat("/etc/config/system") == null) {
+        return [];
+    }
+
+    let ntp_sections = array_or_empty(uci_core.section_objects("system", "timeserver"));
+    if (length(ntp_sections) == 0) {
+        let ntp_sec = uci_core.get_all("system", "ntp");
+        if (type(ntp_sec) == "object" && length(keys(ntp_sec)) > 0)
+            ntp_sections = [ ntp_sec ];
+    }
+    return extract_ntp_domains_from_sections(ntp_sections);
+}
+
 function base_config(settings, service_address, runtime_context) {
     let log_level = option(settings, "log_level", "warn");
     let rewrite_ttl = int_option(settings, "dns_rewrite_ttl", "60");
@@ -434,6 +529,15 @@ function base_config(settings, service_address, runtime_context) {
     let dns_rules = [];
     for (let rule in dns_config.rules)
         push(dns_rules, rule);
+    let ntp_domains = ntp_server_domains();
+    if (length(ntp_domains) > 0) {
+        push(dns_rules, {
+            inbound: runtime_constants.DNS_INBOUND_TAG,
+            domain: length(ntp_domains) == 1 ? ntp_domains[0] : ntp_domains,
+            action: "route",
+            server: runtime_constants.BOOTSTRAP_DNS_SERVER_TAG
+        });
+    }
     for (let rule in [
         { action: "reject", query_type: "HTTPS" },
         { action: "reject", domain_suffix: "use-application-dns.net" },
@@ -504,16 +608,21 @@ function base_config(settings, service_address, runtime_context) {
     };
 }
 
+function is_endpoint_item_type(type_value) {
+    let t = lc(as_string(type_value || ""));
+    return t == "wireguard" || t == "warp";
+}
+
 function supported_subscription_outbound(outbound) {
     if (type(outbound) != "object")
         return false;
-    let t = as_string(outbound.type);
+    let t = lc(as_string(outbound.type));
     if (subscription_group_outbound(outbound))
         return true;
     if (t == "direct" || t == "selector" || t == "urltest" || t == "dns" || t == "block")
         return false;
     return t == "vless" || t == "vmess" || t == "trojan" || t == "shadowsocks" ||
-        t == "socks" || t == "hysteria2";
+        t == "socks" || t == "hysteria2" || t == "wireguard" || t == "warp";
 }
 
 function outbound_uses_xhttp(outbound) {
@@ -566,12 +675,81 @@ function warn_skipped_subscription_outbound(section_name, outbound, reason) {
         subscription_outbound_display_name(outbound), " (", reason, ")\n");
 }
 
+function disallowed_subscription_server(server) {
+    server = lc(trim(as_string(server)));
+    if (server == "")
+        return true;
+    if (server == "localhost" || (length(server) > 10 && substr(server, length(server) - 10) == ".localhost"))
+        return true;
+    return core_ip.is_disallowed_remote_ip(server);
+}
+
+function subscription_item_has_disallowed_server(outbound) {
+    if (is_endpoint_item_type(outbound.type)) {
+        let peers = array_or_empty(outbound.peers);
+        if (length(peers) > 0) {
+            for (let peer in peers) {
+                if (type(peer) != "object" || disallowed_subscription_server(peer.address || peer.server || ""))
+                    return true;
+            }
+            return false;
+        }
+        let addr = type(outbound.address) == "string" ? trim(outbound.address) : "";
+        if (addr != "" && lc(addr) != "auto" && disallowed_subscription_server(addr))
+            return true;
+        return false;
+    }
+    return disallowed_subscription_server(outbound.server);
+}
+
+function normalize_shadowsocks_plugin_fields(plugin, plugin_opts) {
+    plugin = trim(as_string(plugin || ""));
+    plugin_opts = as_string(plugin_opts || "");
+    if (plugin != "" && plugin_opts == "") {
+        let semicolon = index(plugin, ";");
+        if (semicolon >= 0) {
+            plugin_opts = substr(plugin, semicolon + 1);
+            plugin = trim(substr(plugin, 0, semicolon));
+        }
+    }
+    let lowered = lc(plugin);
+    if (lowered == "simple-obfs" || lowered == "obfs")
+        plugin = "obfs-local";
+    return { plugin, plugin_opts };
+}
+
 function compatible_subscription_outbounds(outbounds, section_name) {
     let source_refs = subscription_reference_set(outbounds);
     let retained = [];
     for (let outbound in array_or_empty(outbounds)) {
         if (!supported_subscription_outbound(outbound))
             continue;
+        if (!subscription_group_outbound(outbound)) {
+            if ((fixture_uci_data == null || getenv("FORKOP_STRICT_SUBSCRIPTION_IPS") == "1") &&
+                subscription_item_has_disallowed_server(outbound)) {
+                warn_skipped_subscription_outbound(section_name, outbound, "disallowed loopback or local server address");
+                continue;
+            }
+            if (is_endpoint_item_type(outbound.type)) {
+                let probe_item = {};
+                for (let k, v in outbound)
+                    probe_item[k] = v;
+                if (as_string(probe_item.tag || "") == "")
+                    probe_item.tag = "probe";
+                let probe = runtime_wireguard.to_singbox_endpoint(probe_item, runtime_is_extended_core);
+                if (probe.endpoint == null) {
+                    warn_skipped_subscription_outbound(section_name, outbound, as_string(probe.unsupported_reason || "incompatible endpoint"));
+                    continue;
+                }
+            }
+            if (as_string(outbound.type || "") == "shadowsocks") {
+                let ss_plugin = normalize_shadowsocks_plugin_fields(outbound.plugin, outbound.plugin_opts).plugin;
+                if (ss_plugin != "" && ss_plugin != "obfs-local" && ss_plugin != "v2ray-plugin") {
+                    warn_skipped_subscription_outbound(section_name, outbound, "disallowed shadowsocks plugin '" + ss_plugin + "'");
+                    continue;
+                }
+            }
+        }
         if (!runtime_supports_xhttp && outbound_uses_xhttp(outbound)) {
             warn_skipped_subscription_outbound(section_name, outbound, "XHTTP requires sing-box-extended");
             continue;
@@ -609,18 +787,41 @@ function copy_subscription_outbound(outbound, new_tag) {
     let copy = {};
     for (let key, value in outbound) {
         if (key != "tag" && key != "remark" && key != "share_link" &&
-            key != "__forkop_hidden" && key != "__forkop_allow_group")
+            substr(as_string(key), 0, 9) != "__forkop_" &&
+            key != "bind_interface" && key != "routing_mark" &&
+            key != "inet4_bind_address" && key != "inet6_bind_address" &&
+            key != "domain_resolver")
             copy[key] = value;
     }
-    if (as_string(copy.type || "") == "hysteria2" &&
-        type(copy.tls) == "object" &&
-        copy.tls.utls != null) {
+    if (as_string(copy.type || "") == "shadowsocks" && copy.plugin != null) {
+        let ss_fields = normalize_shadowsocks_plugin_fields(copy.plugin, copy.plugin_opts);
+        if (ss_fields.plugin != "")
+            copy.plugin = ss_fields.plugin;
+        else
+            delete copy.plugin;
+        if (ss_fields.plugin_opts != "")
+            copy.plugin_opts = ss_fields.plugin_opts;
+    }
+    if (type(copy.tls) == "object") {
+        let drop_utls = as_string(copy.type || "") == "hysteria2";
         let tls = {};
         for (let key, value in copy.tls) {
-            if (key != "utls")
+            if (key != "certificate_path" && key != "key_path" &&
+                key != "ech_config_path" && key != "client_certificate_path" &&
+                (!drop_utls || key != "utls"))
                 tls[key] = value;
         }
         copy.tls = tls;
+    }
+    if (as_string(copy.type || "") == "urltest" && copy.url != null) {
+        let probe_url = as_string(copy.url);
+        let probe_host = lc(trim(as_string(url_host(probe_url))));
+        if (lc(as_string(url_scheme(probe_url))) != "https" ||
+            probe_host == "" ||
+            probe_host == "localhost" ||
+            core_ip.valid_ip(probe_host) ||
+            core_ip.is_disallowed_remote_ip(probe_host))
+            delete copy.url;
     }
     copy.tag = new_tag;
     return copy;
@@ -633,7 +834,7 @@ function string_array_contains(values, needle) {
     return false;
 }
 
-function rewrite_subscription_outbound_references(outbounds, tag_map, source_refs) {
+function rewrite_subscription_outbound_references(outbounds, tag_map, _source_refs) {
     for (let outbound in outbounds) {
         if (type(outbound) != "object")
             continue;
@@ -641,7 +842,7 @@ function rewrite_subscription_outbound_references(outbounds, tag_map, source_ref
         let detour = as_string(outbound.detour || "");
         if (detour != "" && tag_map[detour])
             outbound.detour = tag_map[detour];
-        else if (detour != "" && source_refs[detour])
+        else if (detour != "")
             delete outbound.detour;
 
         if (type(outbound.outbounds) == "array") {
@@ -704,12 +905,12 @@ function unique_tag(base, taken) {
     return base + "-overflow";
 }
 
-function reserved_runtime_tag_set(outbounds) {
+function reserved_runtime_tag_set(outbounds, endpoints) {
     let result = {};
     for (let tag_name in keys(object_or_empty(runtime_constants.RESERVED_TAGS)))
         result[tag_name] = true;
 
-    for (let outbound in array_or_empty(outbounds)) {
+    for (let outbound in [ ...array_or_empty(outbounds), ...array_or_empty(endpoints) ]) {
         if (type(outbound) != "object")
             continue;
 
@@ -733,6 +934,38 @@ function assert_unique_outbound_tags(config) {
             runtime_generate_unsupported("generated sing-box config has duplicate outbound tag '" + tag_name + "'");
         seen[tag_name] = true;
     }
+    for (let endpoint in array_or_empty(config.endpoints)) {
+        if (type(endpoint) != "object")
+            runtime_generate_unsupported("generated sing-box endpoint is not an object");
+
+        let tag_name = as_string(endpoint.tag || "");
+        if (tag_name == "")
+            runtime_generate_unsupported("generated sing-box endpoint has an empty tag");
+        if (seen[tag_name])
+            runtime_generate_unsupported("generated sing-box config has duplicate endpoint tag '" + tag_name + "'");
+        seen[tag_name] = true;
+    }
+}
+
+function build_subscription_meta_carrier(outbound, node_prefix) {
+    let meta = {};
+    for (let k, v in outbound)
+        meta[k] = v;
+    if (type(outbound.__forkop_filter_names) == "array" && node_prefix != "") {
+        let expanded = [];
+        for (let alias in outbound.__forkop_filter_names) {
+            alias = as_string(alias);
+            if (alias == "")
+                continue;
+            if (index(expanded, alias) < 0)
+                push(expanded, alias);
+            let prefixed = node_prefix + " " + alias;
+            if (index(expanded, prefixed) < 0)
+                push(expanded, prefixed);
+        }
+        meta.__forkop_filter_names = expanded;
+    }
+    return meta;
 }
 
 function add_subscription_source_with_state(config, section, source_index, source_entry, taken, selector_tags, urltest_candidate_tags, state, show_metadata, include_urltest_groups, hide_urltest_group_outbounds, hide_detour_outbounds, node_prefix) {
@@ -767,9 +1000,11 @@ function add_subscription_source_with_state(config, section, source_index, sourc
         hide_urltest_group_outbounds = false;
     node_prefix = trim(as_string(node_prefix));
     let prepared = [];
+    let meta_carriers = [];
     let display_names = [];
     let source_links = [];
     let group_flags = [];
+    let endpoint_flags = [];
     let hidden_flags = [];
     let tag_map = {};
     for (let i = 0; i < length(outbounds); i++) {
@@ -790,12 +1025,14 @@ function add_subscription_source_with_state(config, section, source_index, sourc
         if (as_string(outbound.remark || "") != "")
             tag_map[as_string(outbound.remark)] = new_tag;
         push(prepared, copy_subscription_outbound(outbound, new_tag));
+        push(meta_carriers, build_subscription_meta_carrier(outbound, node_prefix));
         push(display_names, display_name);
         let source_link = as_string(outbound.share_link || "");
         if (!subscription_share_link.is_copyable_link(source_link))
             source_link = subscription_share_link.serialize_outbound_link(outbound);
         push(source_links, source_link);
         push(group_flags, subscription_group_outbound(outbound));
+        push(endpoint_flags, is_endpoint_item_type(outbound.type));
         push(hidden_flags, subscription_hidden_outbound(outbound, visibility_refs, hide_urltest_group_outbounds, hide_detour_outbounds));
     }
 
@@ -807,25 +1044,39 @@ function add_subscription_source_with_state(config, section, source_index, sourc
     for (let i = 0; i < length(prepared); i++) {
         let outbound = prepared[i];
         let is_group = group_flags[i] === true;
+        let is_endpoint = endpoint_flags[i] === true;
         if (is_group && length(array_or_empty(outbound.outbounds)) == 0) {
             warn("skipped empty subscription group for rule '", section_name, "': ", as_string(display_names[i] || outbound.tag || "unknown"), "\n");
             continue;
         }
 
-        push(config.outbounds, outbound);
+        let emitted_tag = outbound.tag;
+        if (is_endpoint) {
+            let conv = runtime_wireguard.to_singbox_endpoint(outbound, runtime_is_extended_core);
+            if (conv.endpoint == null) {
+                warn_skipped_subscription_outbound(section_name, outbound, as_string(conv.unsupported_reason || "incompatible endpoint"));
+                continue;
+            }
+            push(config.endpoints, conv.endpoint);
+            emitted_tag = conv.endpoint.tag;
+        }
+        else {
+            push(config.outbounds, outbound);
+        }
         added++;
         if (!is_group)
-            push(urltest_candidate_tags, outbound.tag);
+            push(urltest_candidate_tags, emitted_tag);
         runtime_subscription.remember_source_outbound(
             state,
-            outbound.tag,
+            emitted_tag,
             display_names[i],
-            outbound,
+            meta_carriers[i],
             source_links[i]
         );
         if (hidden_flags[i] !== true) {
-            push(selector_tags, outbound.tag);
-            runtime_subscription.remember_urltest_group(state, outbound.tag, display_names[i], outbound);
+            push(selector_tags, emitted_tag);
+            if (!is_endpoint)
+                runtime_subscription.remember_urltest_group(state, emitted_tag, display_names[i], outbound);
         }
     }
     return added;
@@ -978,13 +1229,14 @@ function add_urltest_outbound(config, section, urltest_id, urltest_candidate_tag
     let urltest_outbounds = urltest_filtered_outbounds(section, urltest_id, urltest_candidate_tags, state);
     let urltest_tag = urltest_outbound_tag(section_name, urltest_id);
     let display_name = connections.urltest_display_name(section, urltest_id);
+    let raw_tolerance = int(connections.urltest_tolerance(section, urltest_id), 10);
     let urltest_outbound = {
         type: "urltest",
         tag: urltest_tag,
         outbounds: urltest_outbounds,
         url: connections.urltest_testing_url(section, urltest_id),
         interval: urltest_check_interval(section, urltest_id),
-        tolerance: int(connections.urltest_tolerance(section, urltest_id), 10),
+        tolerance: raw_tolerance <= 0 ? 1 : raw_tolerance,
         interrupt_exist_connections: connections.urltest_interrupt_exist_connections(section, urltest_id)
     };
     let idle_timeout = urltest_idle_timeout(section, urltest_id);
@@ -1110,6 +1362,11 @@ function add_proxy_selector(config, section, selector_tags, urltest_candidate_ta
     if (length(selector_outbounds) == 0)
         runtime_generate_unsupported("dashboard server filtering produced no usable outbounds");
 
+    state.selectorTag = selector_tag;
+    state.selectorOutbounds = [ ...selector_outbounds ];
+    state.urltestTags = [ ...urltest_tags ];
+    state.priorityTags = [ ...priority_tags ];
+
     push(config.outbounds, {
         type: "selector",
         tag: selector_tag,
@@ -1147,6 +1404,23 @@ function apply_section_detour_to_connection_outbounds(config, start_index, detou
         // Preserve subscription chains: only their terminal dial outbound receives the section detour.
         if (as_string(outbound.detour || "") == "")
             outbound.detour = detour_tag;
+    }
+}
+
+function apply_section_detour_to_connection_endpoints(config, start_index, detour_tag) {
+    if (detour_tag == "")
+        return;
+
+    let endpoints = array_or_empty(config.endpoints);
+    for (let i = int(start_index || 0); i < length(endpoints); i++) {
+        let endpoint = endpoints[i];
+        if (type(endpoint) != "object")
+            continue;
+
+        if (as_string(endpoint.detour || "") == "")
+            endpoint.detour = detour_tag;
+        delete endpoint.routing_mark;
+        delete endpoint.bind_interface;
     }
 }
 
@@ -1472,7 +1746,7 @@ function manual_socks_outbound(link, tag_name) {
 }
 
 function manual_shadowsocks_outbound(link, tag_name) {
-    let raw = url_strip_fragment_value(url_decode(link));
+    let raw = url_strip_fragment_value(link);
     let body = substr(raw, 5);
     let question = index(body, "?");
     let query_string = "";
@@ -1499,8 +1773,14 @@ function manual_shadowsocks_outbound(link, tag_name) {
         hostport = substr(decoded, at + 1);
     }
 
-    userinfo = url_decode(userinfo);
-    if (!shadowsocks_userinfo_valid(userinfo)) {
+    if (substr(hostport, length(hostport) - 1, 1) == "/")
+        hostport = substr(hostport, 0, length(hostport) - 1);
+
+    let decoded_userinfo = url_decode(userinfo);
+    if (shadowsocks_userinfo_valid(decoded_userinfo)) {
+        userinfo = decoded_userinfo;
+    }
+    else {
         let decoded = base64_decode_value(userinfo);
         if (decoded == null)
             runtime_generate_unsupported("manual Shadowsocks proxy link is invalid");
@@ -1522,10 +1802,14 @@ function manual_shadowsocks_outbound(link, tag_name) {
         password: substr(userinfo, cred_colon + 1)
     };
     let query = url_query_params("ss://placeholder/?" + query_string);
-    if (as_string(query.plugin || "") != "")
-        outbound.plugin = as_string(query.plugin);
-    if (as_string(query["plugin-opts"] || "") != "")
-        outbound.plugin_opts = as_string(query["plugin-opts"]);
+    let ss_fields = normalize_shadowsocks_plugin_fields(query.plugin, query["plugin-opts"]);
+    if (ss_fields.plugin != "") {
+        if (ss_fields.plugin != "obfs-local" && ss_fields.plugin != "v2ray-plugin")
+            runtime_generate_unsupported("manual Shadowsocks proxy link uses unsupported SIP003 plugin '" + ss_fields.plugin + "'");
+        outbound.plugin = ss_fields.plugin;
+    }
+    if (ss_fields.plugin_opts != "")
+        outbound.plugin_opts = ss_fields.plugin_opts;
     return outbound;
 }
 
@@ -1661,23 +1945,66 @@ function manual_trojan_outbound(link, tag_name) {
     return outbound;
 }
 
+function parse_hysteria2_server_ports(value) {
+    value = trim(as_string(value));
+    if (index(value, ",") < 0 && index(value, "-") < 0)
+        return null;
+
+    let result = [];
+    for (let entry in split(value, ",")) {
+        entry = trim(entry);
+        if (entry == "")
+            return null;
+
+        let dash = index(entry, "-");
+        if (dash >= 0) {
+            if (index(substr(entry, dash + 1), "-") >= 0)
+                return null;
+            let start = parse_port(trim(substr(entry, 0, dash)));
+            let end = parse_port(trim(substr(entry, dash + 1)));
+            if (start == null || end == null || start > end)
+                return null;
+            push(result, start + ":" + end);
+        }
+        else {
+            let single = parse_port(entry);
+            if (single == null)
+                return null;
+            push(result, single + ":" + single);
+        }
+    }
+
+    return length(result) > 0 ? result : null;
+}
+
 function manual_hysteria2_outbound(link, tag_name) {
     let query = url_query_params(link);
     let host = url_host(link);
-    let port = parse_port(as_string(query.mport || "") != "" ? query.mport : url_port(link));
+    let port_spec = trim(as_string(query.mport || ""));
+    if (port_spec == "")
+        port_spec = url_port(link);
+    let server_ports = parse_hysteria2_server_ports(port_spec);
+    let port = server_ports == null ? parse_port(port_spec) : null;
     let password = url_userinfo(link);
-    if (host == "" || port == null || password == "")
+    if (host == "" || (server_ports == null && port == null) || password == "")
         runtime_generate_unsupported("manual Hysteria2 proxy link is invalid");
 
     let outbound = {
         type: "hysteria2",
         tag: tag_name,
         server: host,
-        server_port: port,
         password
     };
-    if (as_string(query.obfs || "") != "")
-        outbound.obfs = { type: as_string(query.obfs), password: as_string(query["obfs-password"] || "") };
+    if (server_ports != null)
+        outbound.server_ports = server_ports;
+    else
+        outbound.server_port = port;
+    let obfs = trim(as_string(query.obfs || ""));
+    if (obfs != "" && lc(obfs) != "none") {
+        outbound.obfs = { type: obfs };
+        if (as_string(query["obfs-password"] || "") != "")
+            outbound.obfs.password = as_string(query["obfs-password"]);
+    }
     if (as_string(query.upmbps || "") != "")
         outbound.up_mbps = int(query.upmbps, 10);
     if (as_string(query.downmbps || "") != "")
@@ -1691,7 +2018,7 @@ function manual_link_outbound(link, tag_name) {
     if (scheme == "vmess")
         return manual_vmess_outbound(link, tag_name);
 
-    link = url_strip_fragment_value(url_decode(link));
+    link = url_strip_fragment_value(link);
     scheme = url_scheme(link);
     if (scheme == "socks4" || scheme == "socks4a" || scheme == "socks5")
         return manual_socks_outbound(link, tag_name);
@@ -1712,10 +2039,28 @@ function add_manual_proxy_link(config, state, section_name, manual_index, link, 
         tag_name = unique_tag(tag_name, taken);
     taken[tag_name] = true;
 
-    let outbound = manual_link_outbound(link, tag_name);
     let display_name = url_fragment(link);
     if (display_name == "")
         display_name = tag_name;
+
+    let scheme = lc(as_string(url_scheme(link)));
+    if (scheme == "wireguard" || scheme == "wg" || scheme == "awg" || scheme == "amneziawg" || scheme == "warp") {
+        let parsed = runtime_wireguard.parse_share_link(link, tag_name);
+        if (parsed == null)
+            runtime_generate_unsupported("manual " + scheme + " proxy link is invalid");
+        parsed.tag = tag_name;
+        let conv = runtime_wireguard.to_singbox_endpoint(parsed, runtime_is_extended_core);
+        if (conv.endpoint == null)
+            runtime_generate_unsupported(as_string(conv.unsupported_reason || "manual endpoint link is incompatible with current sing-box core"));
+        push(config.endpoints, conv.endpoint);
+        push(selector_tags, tag_name);
+        push(urltest_candidate_tags, tag_name);
+        state.links[tag_name] = as_string(link);
+        runtime_subscription.remember_outbound_metadata(state, tag_name, display_name, parsed);
+        return tag_name;
+    }
+
+    let outbound = manual_link_outbound(link, tag_name);
     ensure_explicit_outbound_supported(outbound, "manual outbound", display_name);
     push(config.outbounds, outbound);
     push(selector_tags, tag_name);
@@ -1888,6 +2233,16 @@ function add_connection_json_outbounds(config, state, section, taken, selector_t
     for (let item in prepare_json_connection_outbounds(section, taken)) {
         let outbound = item.outbound;
         let tag_name = outbound.tag;
+        if (is_endpoint_item_type(outbound.type)) {
+            let conv = runtime_wireguard.to_singbox_endpoint(outbound, runtime_is_extended_core);
+            if (conv.endpoint == null)
+                runtime_generate_unsupported(as_string(conv.unsupported_reason || "JSON endpoint is incompatible with current sing-box core"));
+            push(config.endpoints, conv.endpoint);
+            push(selector_tags, tag_name);
+            push(urltest_candidate_tags, tag_name);
+            runtime_subscription.remember_outbound_metadata(state, tag_name, item.displayName, outbound);
+            continue;
+        }
         push(config.outbounds, outbound);
         push(selector_tags, tag_name);
         if (urltest_leaf_candidate_outbound(outbound))
@@ -1903,14 +2258,21 @@ function add_connections_outbound(config, section, taken) {
     let urltest_candidate_tags = [];
     let state = runtime_subscription.new_section_state(section_name);
     let cascade_start = length(array_or_empty(config.outbounds));
+    let endpoint_cascade_start = length(array_or_empty(config.endpoints));
 
     add_connection_manual_links(config, state, section, taken, selector_tags, urltest_candidate_tags);
     add_connection_subscriptions(config, state, section, taken, selector_tags, urltest_candidate_tags);
     // Apply before interface and JSON items are added: those source kinds are intentionally excluded.
+    let detour_tag = outbound_detour_tag_for_section(section);
     apply_section_detour_to_connection_outbounds(
         config,
         cascade_start,
-        outbound_detour_tag_for_section(section)
+        detour_tag
+    );
+    apply_section_detour_to_connection_endpoints(
+        config,
+        endpoint_cascade_start,
+        detour_tag
     );
     add_connection_interfaces(config, state, section, taken, selector_tags, urltest_candidate_tags);
     add_connection_json_outbounds(config, state, section, taken, selector_tags, urltest_candidate_tags);
@@ -2038,14 +2400,22 @@ function rebuild_local_domain_ip_list_ruleset(section_name, references, domains_
         return;
 
     fs.unlink(ruleset_path);
+    ensure_parent_dir(ruleset_path, null);
     source_rulesets.create_source(ruleset_path);
 
     for (let reference in references) {
         reference = as_string(reference);
         if (!reference_is_local(reference))
             continue;
-        if (!source_file_exists(reference)) {
+        let raw_data = fs.readfile(reference);
+        if (raw_data == null) {
             warn("local domain/IP list not found: ", reference, "\n");
+            continue;
+        }
+
+        let ext = lc(as_string(runtime_rulesets.file_extension(reference)));
+        if (ext == "yaml" || ext == "yml" || source_rulesets.content_is_clash_rule_yaml(raw_data)) {
+            source_rulesets.import_clash_yaml(reference, ruleset_path, "", domains_only === true);
             continue;
         }
 
@@ -2403,6 +2773,16 @@ function add_port_matchers(rule, section) {
         rule.port_range = port_ranges;
 }
 
+function section_uses_console_mode_split(section, target) {
+    return bool_option(section, "console_mode", false) &&
+        type(target) == "object" &&
+        target.action == "route" &&
+        target.outbound != null &&
+        target.outbound != "" &&
+        target.outbound != runtime_constants.DIRECT_OUTBOUND_TAG &&
+        target.outbound != runtime_constants.BYPASS_OUTBOUND_TAG;
+}
+
 function add_fully_routed_ips_rules(config, section) {
     let source_ip_cidr = list_option(section, "fully_routed_ips");
     if (length(source_ip_cidr) == 0)
@@ -2421,6 +2801,25 @@ function add_fully_routed_ips_rules(config, section) {
     let target = runtime_route.target(section, outbound_tag(section[".name"]));
     if (target.unsupported)
         runtime_generate_unsupported(target.unsupported);
+
+    if (section_uses_console_mode_split(section, target)) {
+        let src_matcher = single_or_array(source_ip_cidr);
+        push(config.route.rules, {
+            action: "route",
+            inbound: tproxy_inbound_matcher(),
+            network: "udp",
+            outbound: runtime_constants.DIRECT_OUTBOUND_TAG,
+            source_ip_cidr: src_matcher
+        });
+        push(config.route.rules, {
+            action: "route",
+            inbound: tproxy_inbound_matcher(),
+            network: "tcp",
+            outbound: target.outbound,
+            source_ip_cidr: src_matcher
+        });
+        return;
+    }
 
     let route_rule = {
         action: target.action,
@@ -2503,7 +2902,23 @@ function add_combined_route_for_section(config, section) {
             warn(resolve.warning, "\n");
         else if (type(resolve) == "object" && resolve.rule)
             push(config.route.rules, resolve.rule);
-        push(config.route.rules, route_rule);
+        if (section_uses_console_mode_split(section, target)) {
+            let udp_rule = {};
+            let tcp_rule = {};
+            for (let k, v in route_rule) {
+                udp_rule[k] = v;
+                tcp_rule[k] = v;
+            }
+            udp_rule.network = "udp";
+            udp_rule.outbound = runtime_constants.DIRECT_OUTBOUND_TAG;
+            tcp_rule.network = "tcp";
+            tcp_rule.outbound = target.outbound;
+            push(config.route.rules, udp_rule);
+            push(config.route.rules, tcp_rule);
+        }
+        else {
+            push(config.route.rules, route_rule);
+        }
     }
 
     let rewrite_ttl = int_option(runtime_settings(), "dns_rewrite_ttl", "60");
@@ -2585,7 +3000,27 @@ function reserve_section_outbound_tags(sections, taken) {
     }
 }
 
+function has_outbound_tag(config, tag_name) {
+    tag_name = as_string(tag_name);
+    for (let outbound in array_or_empty(config.outbounds)) {
+        if (type(outbound) == "object" && as_string(outbound.tag) == tag_name)
+            return true;
+    }
+    for (let endpoint in array_or_empty(config.endpoints)) {
+        if (type(endpoint) == "object" && as_string(endpoint.tag) == tag_name)
+            return true;
+    }
+    return false;
+}
+
 function add_route_for_section(config, section) {
+    if (option(section, "next_target", "") != "") {
+        let target = runtime_route.target(section, outbound_tag(section[".name"]));
+        if (target.outbound != null && target.outbound != "" && !has_outbound_tag(config, target.outbound)) {
+            warn("skipped route for temporary rule '", section[".name"], "': target outbound '", target.outbound, "' is not active\n");
+            return;
+        }
+    }
     if (option(section, "action", "") == "dns")
         add_dns_action_rules_for_section(config, section);
     else
@@ -2702,9 +3137,17 @@ function add_server_routes(config, servers, sections) {
 }
 
 function generate_config(output_path, service_address, mwan3_active, supports_xhttp, deferred_sections) {
-    runtime_supports_xhttp = supports_xhttp == null || as_string(supports_xhttp) == ""
-        ? true
-        : cli_bool(supports_xhttp);
+    let env_sb_version = getenv("FORKOP_SING_BOX_VERSION") || "";
+    if (supports_xhttp == null || as_string(supports_xhttp) == "") {
+        runtime_is_extended_core = env_sb_version != "" ? index(lc(env_sb_version), "extended") >= 0 : true;
+        runtime_supports_xhttp = runtime_is_extended_core;
+    }
+    else {
+        runtime_supports_xhttp = cli_bool(supports_xhttp);
+        runtime_is_extended_core = env_sb_version != ""
+            ? index(lc(env_sb_version), "extended") >= 0
+            : runtime_supports_xhttp;
+    }
     let cursor = uci_cursor();
     cursor.load(CONFIG_NAME);
     preview_snapshot = fixture_uci_data != null ? {data:fixture_uci_data,rawDigest:fixture_raw_digest} : preview_basis.config_snapshot();
@@ -2725,7 +3168,7 @@ function generate_config(output_path, service_address, mwan3_active, supports_xh
         source_aware_dns: length(source_aware_dns) > 0
     });
     add_source_aware_dns_support(config, source_aware_dns);
-    let taken = reserved_runtime_tag_set(config.outbounds);
+    let taken = reserved_runtime_tag_set(config.outbounds, config.endpoints);
     reserve_section_outbound_tags(sections, taken);
     for (let server in servers)
         runtime_servers.add_server(config, server);
@@ -2739,6 +3182,16 @@ function generate_config(output_path, service_address, mwan3_active, supports_xh
     add_service_mixed_proxy(config, settings, sections);
     for (let section in sections)
         add_mixed_proxy_for_section(config, section, service_address);
+
+    let has_native_warp = false;
+    for (let endpoint in array_or_empty(config.endpoints)) {
+        if (type(endpoint) == "object" && lc(as_string(endpoint.type || "")) == "warp") {
+            has_native_warp = true;
+            break;
+        }
+    }
+    if (has_native_warp && type(config.experimental) == "object" && type(config.experimental.cache_file) == "object")
+        config.experimental.cache_file.store_warp_config = true;
 
     require("service.selection").apply(config);
     assert_unique_outbound_tags(config);
@@ -2764,7 +3217,8 @@ function generate_config(output_path, service_address, mwan3_active, supports_xh
 
 function generate_config_fixture(fixture_path, output_path, service_address, mwan3_active, supports_xhttp, deferred_sections) {
     use_fixture_cursor(fixture_path);
-    runtime_subscription.set_section_cache_dir(output_path + ".section-cache");
+    if ((getenv("FORKOP_SECTION_CACHE_DIR") || "") == "")
+        runtime_subscription.set_section_cache_dir(output_path + ".section-cache");
     runtime_ruleset_folder = output_path + ".rulesets";
     generate_config(output_path, service_address, mwan3_active, supports_xhttp, deferred_sections);
 }

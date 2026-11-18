@@ -5,6 +5,7 @@ on:
   pull_request:
     paths:
       - 'fe-app-forkop/**'
+      - 'luci-app-forkop/**'
       - '.github/workflows/frontend-ci.yml'
 
 jobs:
@@ -27,15 +28,15 @@ jobs:
       - name: Enable Corepack
         run: corepack enable && corepack prepare pnpm@11.25.0 --activate
 
-      - name: Get yarn cache directory path
-        id: yarn-cache-dir-path
+      - name: Get pnpm store directory path
+        id: pnpm-store-dir-path
         working-directory: fe-app-forkop
         run: echo "dir=$(pnpm store path --silent)" >> $GITHUB_OUTPUT
 
-      - name: Cache yarn dependencies
+      - name: Cache pnpm dependencies
         uses: actions/cache@v4.3.0
         with:
-          path: ${{ steps.yarn-cache-dir-path.outputs.dir }}
+          path: ${{ steps.pnpm-store-dir-path.outputs.dir }}
           key: ${{ runner.os }}-pnpm-${{ hashFiles('fe-app-forkop/pnpm-lock.yaml') }}
           restore-keys: |
             ${{ runner.os }}-pnpm-
@@ -48,7 +49,7 @@ jobs:
         run: |
           pnpm exec prettier --check src
           if ! git diff --exit-code; then
-            echo "::error::Code is not formatted. Run 'yarn format' locally."
+            echo "::error::Code is not formatted. Run 'pnpm run format' locally."
             exit 1
           fi
 
@@ -72,8 +73,6 @@ jobs:
         run: |
           echo "## Frontend CI Results" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ Format check: ${{ steps.format.outcome }}" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ Lint check: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ Tests: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ Build: ${{ steps.build.outcome }}" >> $GITHUB_STEP_SUMMARY
-          echo "![Success](https://cdn2.combot.org/boratbrat/webp/6xf09f988f.webp)" >> $GITHUB_STEP_SUMMARY
+          echo "- Format check: ${{ steps.format.outcome }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Lint & Tests: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Build: ${{ steps.build.outcome }}" >> $GITHUB_STEP_SUMMARY

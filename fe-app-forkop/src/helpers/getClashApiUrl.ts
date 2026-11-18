@@ -17,20 +17,27 @@ export function canUseDirectClashApi(settings?: {
   );
 }
 
-export function getClashWsUrl(): string {
-  const { hostname } = window.location;
+function formatUrlHost(hostname: string): string {
+  if (hostname.includes(':') && !hostname.startsWith('[')) {
+    return `[${hostname}]`;
+  }
+  return hostname;
+}
 
-  return `ws://${hostname}:9090`;
+export function getClashWsUrl(): string {
+  const host = formatUrlHost(window.location.hostname);
+
+  return `ws://${host}:9090`;
 }
 
 export function getClashHttpUrl(): string {
-  const { hostname } = window.location;
+  const host = formatUrlHost(window.location.hostname);
 
-  return `http://${hostname}:9090`;
+  return `http://${host}:9090`;
 }
 
 export function getClashUIUrl(): string {
-  const { hostname } = window.location;
+  const host = formatUrlHost(window.location.hostname);
 
-  return `http://${hostname}:9090/ui`;
+  return `http://${host}:9090/ui`;
 }

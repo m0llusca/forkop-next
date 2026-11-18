@@ -33,7 +33,10 @@ export function validateHysteria2Url(url: string): ValidationResult {
         message: _('Invalid HY2 URL: missing credentials/server'),
       };
 
-    const [passwordPart, hostPortPart] = authHostPort.split('@');
+    const atIndex = authHostPort.lastIndexOf('@');
+    const passwordPart = atIndex >= 0 ? authHostPort.slice(0, atIndex) : '';
+    const hostPortPart =
+      atIndex >= 0 ? authHostPort.slice(atIndex + 1).split('/')[0] : '';
 
     if (!passwordPart)
       return { valid: false, message: _('Invalid HY2 URL: missing password') };

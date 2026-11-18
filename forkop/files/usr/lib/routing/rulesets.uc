@@ -499,12 +499,332 @@ function has_rules(path) {
     return length(array_or_empty(ruleset.rules)) > 0;
 }
 
+function strip_utf8_bom(text) {
+    text = as_string(text);
+    if (length(text) >= 3 && ord(substr(text, 0, 1)) == 0xef && ord(substr(text, 1, 1)) == 0xbb && ord(substr(text, 2, 1)) == 0xbf)
+        return substr(text, 3);
+    return text;
+}
+
+function content_is_clash_rule_yaml(text) {
+    text = replace(strip_utf8_bom(text), /\r/g, "");
+    for (let raw_line in split(text, "\n")) {
+        let trimmed = trim_string(raw_line);
+        if (trimmed == "" || substr(trimmed, 0, 1) == "#")
+            continue;
+        if (match(trimmed, /^(---|\.\.\.)([ \t]+#.*)?$/) != null)
+            continue;
+        if (substr(raw_line, 0, 1) != " " && substr(raw_line, 0, 1) != "\t") {
+            if (match(trimmed, /^(payload|rules)[ \t]*:([ \t]*(\[[ \t]*\])?[ \t]*(#.*)?)?$/) != null)
+                return true;
+        }
+    }
+    return false;
+}
+
+function unquote_yaml_scalar(raw) {
+    let s = trim_string(raw);
+    if (s == "")
+        return "";
+
+    let first = substr(s, 0, 1);
+    if (first == "'") {
+        let out = "";
+        for (let i = 1; i < length(s); i++) {
+            let ch = substr(s, i, 1);
+            if (ch == "'") {
+                if (i + 1 < length(s) && substr(s, i + 1, 1) == "'") {
+                    out += "'";
+                    i++;
+                    continue;
+                }
+                return out;
+            }
+            out += ch;
+        }
+        return out;
+    }
+
+    if (first == "\"") {
+        let out = "";
+        for (let i = 1; i < length(s); i++) {
+            let ch = substr(s, i, 1);
+            if (ch == "\\" && i + 1 < length(s)) {
+                let next = substr(s, i + 1, 1);
+                if (next == "n")
+                    out += "\n";
+                else if (next == "t")
+                    out += "\t";
+                else
+                    out += next;
+                i++;
+                continue;
+            }
+            if (ch == "\"")
+                return out;
+            out += ch;
+        }
+        return out;
+    }
+
+    for (let i = 1; i < length(s); i++) {
+        if (substr(s, i, 1) == "#") {
+            let prev = substr(s, i - 1, 1);
+            if (prev == " " || prev == "\t") {
+                s = substr(s, 0, i);
+                break;
+            }
+        }
+    }
+    return trim_string(s);
+}
+
+function normalize_clash_ip_cidr(value) {
+    value = trim_string(value);
+    if (value == "")
+        return null;
+    if (ip.valid_ipv4_cidr(value, false) || ip.valid_ipv6_cidr(value))
+        return value;
+    if (ip.valid_ipv4(value, false, false))
+        return value + "/32";
+    if (ip.valid_ipv6(value))
+        return value + "/128";
+    return null;
+}
+
+function wildcard_domain_to_regex(value) {
+    value = trim_string(value);
+    if (value == "" || index(value, "*") < 0 || index(value, ".") < 0)
+        return null;
+    if (substr(value, 0, 1) == "." || substr(value, length(value) - 1, 1) == ".")
+        return null;
+
+    let labels = split(value, ".");
+    if (length(labels) < 2)
+        return null;
+
+    let regex_labels = [];
+    for (let label in labels) {
+        if (label == "")
+            return null;
+        if (label == "*") {
+            push(regex_labels, "[^.]+");
+            continue;
+        }
+        if (index(label, "*") >= 0)
+            return null;
+        let normalized = domain_config.label_to_ascii(label);
+        if (normalized == null)
+            return null;
+        push(regex_labels, normalized);
+    }
+
+    return "^" + join("\\.", regex_labels) + "$";
+}
+
+function normalize_exact_domain(value) {
+    value = trim_string(value);
+    if (value == "" || substr(value, 0, 1) == "." || ip.valid_ip_or_cidr(value))
+        return null;
+    return domain_config.suffix_to_ascii(value);
+}
+
+function parse_clash_rule_entries(text, domains_only) {
+    let skip_ips = (domains_only === true || domains_only == "1" || domains_only == "true");
+    let domains = [];
+    let suffixes = [];
+    let keywords = [];
+    let regexes = [];
+    let cidrs = [];
+    let skipped_count = 0;
+
+    let in_list = false;
+    text = replace(strip_utf8_bom(text), /\r/g, "");
+
+    for (let raw_line in split(text, "\n")) {
+        let trimmed = trim_string(raw_line);
+        if (trimmed == "" || substr(trimmed, 0, 1) == "#")
+            continue;
+        if (match(trimmed, /^(---|\.\.\.)([ \t]+#.*)?$/) != null)
+            continue;
+
+        let is_top_level = substr(raw_line, 0, 1) != " " && substr(raw_line, 0, 1) != "\t" && substr(trimmed, 0, 1) != "-";
+        if (is_top_level) {
+            in_list = match(trimmed, /^(payload|rules)[ \t]*:([ \t]*(\[[ \t]*\])?[ \t]*(#.*)?)?$/) != null;
+            continue;
+        }
+
+        if (!in_list)
+            continue;
+
+        let item_match = match(trimmed, /^-[ \t]+(.*)$/);
+        if (item_match == null)
+            continue;
+
+        let entry = unquote_yaml_scalar(item_match[1]);
+        if (entry == "")
+            continue;
+
+        if (index(entry, ",") >= 0) {
+            let parts = split(entry, ",");
+            let kind = uc(trim_string(parts[0]));
+            let target = length(parts) >= 2 ? trim_string(parts[1]) : "";
+
+            if (kind == "DOMAIN") {
+                let norm = normalize_exact_domain(target);
+                if (norm != null)
+                    push(domains, norm);
+                else
+                    skipped_count++;
+            }
+            else if (kind == "DOMAIN-SUFFIX") {
+                if (substr(target, 0, 1) == ".")
+                    target = substr(target, 1);
+                let norm = normalize_exact_domain(target);
+                if (norm != null)
+                    push(suffixes, norm);
+                else
+                    skipped_count++;
+            }
+            else if (kind == "DOMAIN-KEYWORD") {
+                let norm = domain_config.keyword_to_ascii(target);
+                if (norm != null && norm != "")
+                    push(keywords, norm);
+                else
+                    skipped_count++;
+            }
+            else if (kind == "DOMAIN-REGEX") {
+                let norm = domain_config.regex_to_ascii(target);
+                if (norm != null && norm != "")
+                    push(regexes, norm);
+                else
+                    skipped_count++;
+            }
+            else if (kind == "IP-CIDR" || kind == "IP-CIDR6") {
+                let cidr = normalize_clash_ip_cidr(target);
+                if (cidr != null) {
+                    if (!skip_ips)
+                        push(cidrs, cidr);
+                }
+                else {
+                    skipped_count++;
+                }
+            }
+            else {
+                // Safely skip PROCESS-NAME, DST-PORT, GEOIP, MATCH, etc.
+                skipped_count++;
+            }
+            continue;
+        }
+
+        // Non-comma entry: Clash `ipcidr` or `domain` behavior
+        let cidr = normalize_clash_ip_cidr(entry);
+        if (cidr != null) {
+            if (!skip_ips)
+                push(cidrs, cidr);
+            continue;
+        }
+
+        if (substr(entry, 0, 2) == "+.") {
+            let norm = normalize_exact_domain(substr(entry, 2));
+            if (norm != null)
+                push(suffixes, norm);
+            else
+                skipped_count++;
+            continue;
+        }
+
+        if (substr(entry, 0, 1) == ".") {
+            let norm = domain_config.suffix_to_ascii(entry);
+            if (norm != null)
+                push(suffixes, norm);
+            else
+                skipped_count++;
+            continue;
+        }
+
+        if (index(entry, "*") >= 0) {
+            let rx = wildcard_domain_to_regex(entry);
+            if (rx != null)
+                push(regexes, rx);
+            else
+                skipped_count++;
+            continue;
+        }
+
+        let exact = normalize_exact_domain(entry);
+        if (exact != null)
+            push(domains, exact);
+        else
+            skipped_count++;
+    }
+
+    return {
+        domain: unique_values(domains),
+        domain_suffix: unique_values(suffixes),
+        domain_keyword: unique_values(keywords),
+        domain_regex: unique_values(regexes),
+        ip_cidr: skip_ips ? [] : unique_values(cidrs),
+        skipped_count
+    };
+}
+
+function import_clash_yaml(yaml_path, ruleset_path, subnets_lst_path, domains_only) {
+    let data = fs.readfile(as_string(yaml_path));
+    if (data == null || !content_is_clash_rule_yaml(data))
+        return false;
+
+    let skip_ips = (domains_only === true || domains_only == "1" || domains_only == "true");
+    let parsed = parse_clash_rule_entries(data, skip_ips);
+
+    if (fs.stat(as_string(ruleset_path)) == null) {
+        if (!write_json_file(ruleset_path, { version: 3, rules: [] }))
+            return false;
+    }
+
+    if (length(parsed.domain) > 0)
+        patch_source_values(ruleset_path, "domain", parsed.domain);
+    if (length(parsed.domain_suffix) > 0)
+        patch_source_values(ruleset_path, "domain_suffix", parsed.domain_suffix);
+    if (length(parsed.domain_keyword) > 0)
+        patch_source_values(ruleset_path, "domain_keyword", parsed.domain_keyword);
+    if (length(parsed.domain_regex) > 0)
+        patch_source_values(ruleset_path, "domain_regex", parsed.domain_regex);
+    if (!skip_ips && length(parsed.ip_cidr) > 0)
+        patch_source_values(ruleset_path, "ip_cidr", parsed.ip_cidr);
+
+    subnets_lst_path = as_string(subnets_lst_path || "");
+    if (subnets_lst_path != "") {
+        let combined = [];
+        let existing_text = fs.readfile(subnets_lst_path);
+        if (existing_text != null && existing_text != "") {
+            for (let line in split(replace(as_string(existing_text), /\r/g, ""), "\n")) {
+                line = trim_string(line);
+                if (line != "")
+                    push(combined, line);
+            }
+        }
+        if (!skip_ips) {
+            for (let cidr in parsed.ip_cidr)
+                push(combined, cidr);
+        }
+        combined = unique_values(combined);
+        if (!write_text_file(subnets_lst_path, length(combined) > 0 ? join("\n", combined) + "\n" : ""))
+            return false;
+    }
+
+    return true;
+}
+
 function module_exports() {
     return {
         create_source,
         patch_source,
         patch_source_values,
         import_plain_list,
+        content_is_clash_rule_yaml,
+        parse_clash_rule_entries,
+        import_clash_yaml,
         extract_ip_cidr,
         extract_ip_cidr_nft_elements,
         has_domain_matchers,
@@ -515,7 +835,7 @@ function module_exports() {
     };
 }
 
-if (sourcepath(1) != null && sourcepath(1) != "")
+if ((sourcepath(1) != null && sourcepath(1) != "") || SCRIPT_NAME != sourcepath(0))
     return module_exports();
 
 let mode = ARGV[0] || "";
@@ -528,6 +848,10 @@ else if (mode == "patch-source")
     patch_source(ARGV[1], ARGV[2], ARGV[3]);
 else if (mode == "import-plain-list")
     import_plain_list(ARGV[1], ARGV[2], ARGV[3], ARGV[4], ARGV[5], ARGV[6], ARGV[7]);
+else if (mode == "import-clash-yaml") {
+    if (!import_clash_yaml(ARGV[1], ARGV[2], ARGV[3] || "", ARGV[4]))
+        exit(1);
+}
 else if (mode == "extract-ip-cidr")
     extract_ip_cidr(ARGV[1], ARGV[2]);
 else if (mode == "extract-ip-cidr-nft")
@@ -537,6 +861,6 @@ else if (mode == "has-domain-matchers")
 else if (mode == "has-rules")
     exit(has_rules(ARGV[1]) ? 0 : 1);
 else {
-    warn("Usage: routing/rulesets.uc <create-source|tag|patch-source|import-plain-list|extract-ip-cidr|extract-ip-cidr-nft|has-domain-matchers|has-rules> ...\n");
+    warn("Usage: routing/rulesets.uc <create-source|tag|patch-source|import-plain-list|import-clash-yaml|extract-ip-cidr|extract-ip-cidr-nft|has-domain-matchers|has-rules> ...\n");
     exit(1);
 }

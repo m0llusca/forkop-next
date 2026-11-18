@@ -50,6 +50,10 @@ function renderCheckSummary(items: IRenderCheckSectionProps['items']) {
   return E('div', { class: 'fkp_diagnostic_alert__summary' }, renderedItems);
 }
 
+function renderSummaryRow(items: IRenderCheckSectionProps['items']) {
+  return items.length > 0 ? [E('div', {}, ''), renderCheckSummary(items)] : [];
+}
+
 function renderLoadingState(props: IRenderCheckSectionProps) {
   const iconWrap = E('span', { class: 'fkp_diagnostic_alert__icon' });
   iconWrap.appendChild(renderLoaderCircleIcon24());
@@ -67,8 +71,7 @@ function renderLoadingState(props: IRenderCheckSectionProps) {
           props.description,
         ),
       ]),
-      E('div', {}, ''),
-      renderCheckSummary(props.items),
+      ...renderSummaryRow(props.items),
     ],
   );
 }
@@ -90,8 +93,7 @@ function renderWarningState(props: IRenderCheckSectionProps) {
           props.description,
         ),
       ]),
-      E('div', {}, ''),
-      renderCheckSummary(props.items),
+      ...renderSummaryRow(props.items),
     ],
   );
 }
@@ -113,8 +115,7 @@ function renderErrorState(props: IRenderCheckSectionProps) {
           props.description,
         ),
       ]),
-      E('div', {}, ''),
-      renderCheckSummary(props.items),
+      ...renderSummaryRow(props.items),
     ],
   );
 }
@@ -136,8 +137,7 @@ function renderSuccessState(props: IRenderCheckSectionProps) {
           props.description,
         ),
       ]),
-      E('div', {}, ''),
-      renderCheckSummary(props.items),
+      ...renderSummaryRow(props.items),
     ],
   );
 }
@@ -159,8 +159,7 @@ function renderSkippedState(props: IRenderCheckSectionProps) {
           props.description,
         ),
       ]),
-      E('div', {}, ''),
-      renderCheckSummary(props.items),
+      ...renderSummaryRow(props.items),
     ],
   );
 }

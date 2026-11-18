@@ -45,16 +45,22 @@ function starts_with(value, prefix) {
 }
 
 function is_supported_share_link(line) {
-    return starts_with(line, "ss://") ||
-        starts_with(line, "vmess://") ||
-        starts_with(line, "vless://") ||
-        starts_with(line, "trojan://") ||
-        starts_with(line, "hysteria2://") ||
-        starts_with(line, "hy2://") ||
-        starts_with(line, "socks://") ||
-        starts_with(line, "socks4://") ||
-        starts_with(line, "socks4a://") ||
-        starts_with(line, "socks5://");
+    let lower = lc(as_string(line));
+    return starts_with(lower, "ss://") ||
+        starts_with(lower, "vmess://") ||
+        starts_with(lower, "vless://") ||
+        starts_with(lower, "trojan://") ||
+        starts_with(lower, "hysteria2://") ||
+        starts_with(lower, "hy2://") ||
+        starts_with(lower, "socks://") ||
+        starts_with(lower, "socks4://") ||
+        starts_with(lower, "socks4a://") ||
+        starts_with(lower, "socks5://") ||
+        starts_with(lower, "wireguard://") ||
+        starts_with(lower, "wg://") ||
+        starts_with(lower, "awg://") ||
+        starts_with(lower, "amneziawg://") ||
+        starts_with(lower, "warp://");
 }
 
 function split_csv(value) {
@@ -335,7 +341,10 @@ function canonical_runtime_value(value) {
         });
 
         for (let name in names) {
-            if (name == "share_link")
+            if (name == "share_link" ||
+                name == "__forkop_filter_id" ||
+                name == "__forkop_filter_names" ||
+                name == "__forkop_endpoint")
                 continue;
             result[name] = canonical_runtime_value(value[name]);
         }
@@ -866,6 +875,14 @@ function is_shadowsocks_userinfo_format(value) {
     return second < 0 || index(substr(rest, second + 1), ":") < 0;
 }
 
+function normalize_shadowsocks_plugin_name(value) {
+    value = trim(as_string(value));
+    let lowered = lc(value);
+    if (lowered == "simple-obfs" || lowered == "obfs")
+        return "obfs-local";
+    return value;
+}
+
 function process_shadowsocks(raw) {
     if (!starts_with(raw, "ss://"))
         return null;
@@ -929,6 +946,7 @@ function process_shadowsocks(raw) {
             plugin_opts = parsed_plugin[2];
         }
     }
+    plugin = normalize_shadowsocks_plugin_name(plugin);
 
     let outbound = {
         type: "shadowsocks",
@@ -1080,6 +1098,19 @@ function process_vmess(raw) {
 }
 
 function parse_share_link(line) {
+    let lower = lc(as_string(line));
+    if (starts_with(lower, "wireguard://") ||
+        starts_with(lower, "wg://") ||
+        starts_with(lower, "awg://") ||
+        starts_with(lower, "amneziawg://") ||
+        starts_with(lower, "warp://")) {
+        let wg_out = require("singbox.wireguard").parse_share_link(line);
+        if (type(wg_out) != "object" || wg_out == null)
+            return null;
+        wg_out.share_link = line;
+        return wg_out;
+    }
+
     if (starts_with(line, "vmess://"))
         return process_vmess(line);
     if (starts_with(line, "ss://"))
@@ -1244,6 +1275,8 @@ let clash_nested_keys = {
     "grpc-opts": true,
     "reality-opts": true,
     "obfs-opts": true,
+    "plugin-opts": true,
+    "amnezia-wg-option": true,
     headers: true
 };
 
@@ -1391,14 +1424,106 @@ function add_clash_transport(outbound, options) {
     }
 }
 
+function build_clash_shadowsocks_plugin_opts(plugin, record) {
+    let scalar_opts = trim(as_string(record["plugin-opts"] || ""));
+    if (scalar_opts != "")
+        return scalar_opts;
+
+    let parts = [];
+    if (plugin == "obfs-local") {
+        let mode = trim(as_string(record["plugin-opts.mode"] || ""));
+        let host = trim(as_string(record["plugin-opts.host"] || ""));
+        if (mode != "")
+            push(parts, "obfs=" + mode);
+        if (host != "")
+            push(parts, "obfs-host=" + host);
+    }
+    else if (plugin == "v2ray-plugin") {
+        let mode = trim(as_string(record["plugin-opts.mode"] || ""));
+        let host = trim(as_string(record["plugin-opts.host"] || ""));
+        let path = trim(as_string(record["plugin-opts.path"] || ""));
+        if (mode != "")
+            push(parts, "mode=" + mode);
+        if (is_true(record["plugin-opts.tls"]))
+            push(parts, "tls");
+        if (host != "")
+            push(parts, "host=" + host);
+        if (path != "")
+            push(parts, "path=" + path);
+        let mux = lc(trim(as_string(record["plugin-opts.mux"] || "")));
+        if (mux == "false" || mux == "0")
+            push(parts, "mux=0");
+    }
+    return join(";", parts);
+}
+
+function clash_inline_list_values(raw) {
+    if (type(raw) == "array")
+        return raw;
+    let text = trim(as_string(raw || ""));
+    if (text == "")
+        return [];
+    if (substr(text, 0, 1) == "[" && substr(text, length(text) - 1, 1) == "]")
+        text = substr(text, 1, length(text) - 2);
+    let out = [];
+    for (let item in split_top_level(text, ",")) {
+        let cleaned = clean_scalar(item);
+        if (cleaned != "")
+            push(out, cleaned);
+    }
+    return out;
+}
+
+function parse_clash_wireguard_record(record) {
+    let wg_rec = {};
+    let awg_opts = {};
+    let has_awg = false;
+
+    for (let k in keys(record)) {
+        if (starts_with(k, "amnezia-wg-option.")) {
+            let subkey = substr(k, length("amnezia-wg-option."));
+            if (subkey != "") {
+                awg_opts[subkey] = record[k];
+                has_awg = true;
+            }
+        }
+        else {
+            wg_rec[k] = record[k];
+        }
+    }
+
+    if (has_awg && type(wg_rec["amnezia-wg-option"]) != "object")
+        wg_rec["amnezia-wg-option"] = awg_opts;
+
+    if (wg_rec.address != null && type(wg_rec.address) != "array")
+        wg_rec.address = clash_inline_list_values(wg_rec.address);
+
+    if (wg_rec["allowed-ips"] != null && type(wg_rec["allowed-ips"]) != "array")
+        wg_rec["allowed-ips"] = clash_inline_list_values(wg_rec["allowed-ips"]);
+
+    if (type(wg_rec.reserved) == "string") {
+        let res_str = trim(wg_rec.reserved);
+        if (substr(res_str, 0, 1) == "[" && substr(res_str, length(res_str) - 1, 1) == "]")
+            wg_rec.reserved = substr(res_str, 1, length(res_str) - 2);
+    }
+
+    return require("singbox.wireguard").parse_clash_wireguard(wg_rec);
+}
+
 function parse_clash_record(record) {
     let proxy_type = lc(as_string(record.type));
+    if (proxy_type == "wireguard")
+        return parse_clash_wireguard_record(record);
+
     let name = as_string(record.name);
     let server = as_string(record.server);
     let port = int(record.port || 0);
+    let hy2_ports = (proxy_type == "hysteria2" || proxy_type == "hy2")
+        ? parse_hysteria2_server_ports(record.ports || record.mport || "")
+        : null;
     if (name == "")
-        name = server + ":" + as_string(record.port);
-    if (proxy_type == "" || server == "" || !valid_port(port))
+        name = server + ":" + as_string(record.ports || record.mport || record.port);
+    if (proxy_type == "" || server == "" || (!valid_port(port) && hy2_ports == null))
         return null;
 
     let options = {
@@ -1420,7 +1545,23 @@ function parse_clash_record(record) {
         let password = as_string(record.password);
         if (method == "" || method == "ss" || password == "")
             return null;
-        return { type: "shadowsocks", tag: name, server: server, server_port: port, method: method, password: password };
+        let outbound = { type: "shadowsocks", tag: name, server: server, server_port: port, method: method, password: password };
+        let plugin = normalize_shadowsocks_plugin_name(record.plugin || "");
+        let plugin_opts = "";
+        if (plugin != "") {
+            let split_plugin = match(plugin, /^([^;]+);(.*)$/);
+            if (split_plugin) {
+                plugin = normalize_shadowsocks_plugin_name(split_plugin[1]);
+                plugin_opts = split_plugin[2];
+            }
+            else {
+                plugin_opts = build_clash_shadowsocks_plugin_opts(plugin, record);
+            }
+            outbound.plugin = plugin;
+            if (plugin_opts != "")
+                outbound.plugin_opts = plugin_opts;
+        }
+        return outbound;
     }
     if (proxy_type == "vmess") {
         let uuid = as_string(record.uuid);
@@ -1472,7 +1613,11 @@ function parse_clash_record(record) {
         let password = as_string(record.password);
         if (password == "")
             return null;
-        let outbound = { type: "hysteria2", tag: name, server: server, server_port: port, password: password, tls: { enabled: true } };
+        let outbound = { type: "hysteria2", tag: name, server: server, password: password, tls: { enabled: true } };
+        if (hy2_ports != null)
+            outbound.server_ports = hy2_ports;
+        else
+            outbound.server_port = port;
         if (options.sni != "")
             outbound.tls.server_name = options.sni;
         if (is_true(options.skip_verify))
@@ -2655,6 +2800,21 @@ function normalize_sing_box_hysteria2_outbound(outbound) {
     return outbound;
 }
 
+function normalize_sing_box_shadowsocks_outbound(outbound) {
+    if (type(outbound) == "object" && lc(as_string(outbound.type || "")) == "shadowsocks" && outbound.plugin != null) {
+        let plugin = as_string(outbound.plugin);
+        if (plugin != "" && as_string(outbound.plugin_opts || "") == "") {
+            let parsed_plugin = match(plugin, /^([^;]+);(.*)$/);
+            if (parsed_plugin) {
+                plugin = parsed_plugin[1];
+                outbound.plugin_opts = parsed_plugin[2];
+            }
+        }
+        outbound.plugin = normalize_shadowsocks_plugin_name(plugin);
+    }
+    return outbound;
+}
+
 function sing_box_urltest_group(outbound) {
     return type(outbound) == "object" && lc(as_string(outbound.type || "")) == "urltest";
 }
@@ -2672,6 +2832,7 @@ function normalize_sing_box_json_outbounds(candidates) {
         if (type(outbound) != "object")
             continue;
         outbound = normalize_sing_box_hysteria2_outbound(outbound);
+        outbound = normalize_sing_box_shadowsocks_outbound(outbound);
         push(outbounds, normalize_sing_box_xhttp_transport(outbound));
     }
 
@@ -2720,11 +2881,23 @@ function normalize_sing_box_json_value(value, output_file) {
     }
 
     if (type(value) == "object" && type(value.outbounds) == "array")
-        candidates = value.outbounds;
+        candidates = [ ...value.outbounds ];
     else if (type(value) == "array")
         candidates = value;
     else if (type(value) == "object" && type(value.type) == "string")
         candidates = [value];
+
+    if (type(value) == "object" && type(value.endpoints) == "array") {
+        for (let ep in value.endpoints) {
+            if (type(ep) != "object" || ep == null)
+                continue;
+            let ep_type = lc(as_string(ep.type || ""));
+            if (ep_type == "wireguard" || ep_type == "warp") {
+                ep.__forkop_endpoint = true;
+                push(candidates, ep);
+            }
+        }
+    }
 
     outbounds = normalize_sing_box_json_outbounds(candidates);
 
@@ -2753,13 +2926,18 @@ function gzip_decode_file(input_file, output_file) {
     if (as_string(input_file) == "" || as_string(output_file) == "" || !fs.stat(input_file))
         return false;
 
+    const MAX_GZIP_DECODED_BYTES = 10485760;
     for (let command in [ "gzip -dc", "gunzip -c", "zcat" ]) {
         let pipe = fs.popen(command + " " + shell_quote(input_file) + " 2>/dev/null", "r");
         if (!pipe)
             continue;
 
-        let data = pipe.read("all");
+        let data = pipe.read(MAX_GZIP_DECODED_BYTES + 1);
         let status = pipe.close();
+        if (data != null && length(data) > MAX_GZIP_DECODED_BYTES) {
+            fs.unlink(output_file);
+            return false;
+        }
         if (status == 0 && data != null && data != "") {
             if (fs.writefile(output_file, data))
                 return true;
@@ -2846,6 +3024,18 @@ function normalize_content_data(data, output_file, depth) {
         let ok = normalize_clash_yaml(tmp, output_file);
         fs.unlink(tmp);
         return ok;
+    }
+
+    if (match(data, /(^|\n)[ \t]*\[[Ii]nterface\][ \t]*(\n|$)/) != null) {
+        let wg_item = require("singbox.wireguard").parse_wg_conf(data, "");
+        if (type(wg_item) == "object" && wg_item != null) {
+            return write_json_file(output_file, {
+                version: 1,
+                format: "wireguard-conf",
+                skipped: 0,
+                outbounds: [wg_item]
+            });
+        }
     }
 
     if (index(data, "://") >= 0) {
@@ -2939,6 +3129,8 @@ function parse_subscription_source_entry_tsv(entry) {
 function module_exports() {
     return {
         parse_subscription_source_entry,
+        parse_share_link,
+        is_supported_share_link,
         validate_subscription,
         normalize_content_validated,
         normalized_skipped_message,

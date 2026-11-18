@@ -165,13 +165,38 @@ function release_by_tag(tag) {
     }
 }
 
+function safe_asset_name(name) {
+    name = as_string(name);
+    if (name == "" || name == "." || name == ".." || index(name, "..") >= 0)
+        return false;
+    return match(name, /^[A-Za-z0-9._+-]+$/) != null;
+}
+
+function allowed_download_url(url) {
+    url = trim(as_string(url));
+    if (!str_startswith(url, "https://"))
+        return false;
+    let rest = substr(url, 8);
+    let slash = index(rest, "/");
+    let host = lc(slash >= 0 ? substr(rest, 0, slash) : rest);
+    if (slash < 0 || host == "")
+        return false;
+    return host == "github.com" ||
+        host == "api.github.com" ||
+        host == "objects.githubusercontent.com" ||
+        host == "release-assets.githubusercontent.com" ||
+        host == "codeload.github.com" ||
+        host == "raw.githubusercontent.com";
+}
+
 function release_asset_name(prefix, ext) {
     let release = object_or_empty(read_stdin_json());
     for (let asset in array_or_empty(release.assets)) {
         if (type(asset) != "object")
             continue;
         let name = as_string(asset.name || "");
-        if ((str_startswith(name, prefix + "_") || str_startswith(name, prefix + "-")) &&
+        if (safe_asset_name(name) &&
+            (str_startswith(name, prefix + "_") || str_startswith(name, prefix + "-")) &&
             str_endswith(name, "." + ext)) {
             print(name, "\n");
             return;
@@ -180,6 +205,8 @@ function release_asset_name(prefix, ext) {
 }
 
 function release_asset_url(name) {
+    if (!safe_asset_name(name))
+        return;
     let release = object_or_empty(read_stdin_json());
     for (let asset in array_or_empty(release.assets)) {
         if (type(asset) == "object" && as_string(asset.name || "") == name) {
@@ -193,7 +220,7 @@ function release_asset_name_by_suffix(suffix) {
     let release = object_or_empty(read_stdin_json());
     for (let asset in array_or_empty(release.assets)) {
         let name = type(asset) == "object" ? as_string(asset.name || "") : "";
-        if (str_endswith(name, suffix)) {
+        if (safe_asset_name(name) && str_endswith(name, suffix)) {
             print(name, "\n");
             return;
         }
@@ -206,7 +233,7 @@ function release_asset_url_by_suffix_from_release(release, suffix) {
         if (type(asset) != "object")
             continue;
         let name = as_string(asset.name || "");
-        if (str_endswith(name, suffix))
+        if (safe_asset_name(name) && str_endswith(name, suffix))
             return as_string(asset.browser_download_url || "");
     }
 
@@ -221,13 +248,15 @@ function release_asset_url_by_suffix(suffix) {
 }
 
 function release_asset_pair(release, expected_name) {
+    if (!safe_asset_name(expected_name))
+        return null;
     for (let asset in array_or_empty(release.assets)) {
         if (type(asset) != "object")
             continue;
 
         let name = as_string(asset.name || "");
         let url = as_string(asset.browser_download_url || "");
-        if (name == as_string(expected_name) && url != "")
+        if (safe_asset_name(name) && name == as_string(expected_name) && url != "")
             return { name, url };
     }
 
@@ -448,6 +477,22 @@ function fourth_whitespace_field(line) {
     return length(fields) >= 4 ? as_string(fields[3]) : "";
 }
 
+function apk_basename_is_main_package(base, component) {
+    base = as_string(base);
+    component = as_string(component);
+    if (!safe_asset_name(base) || !str_endswith(base, ".apk"))
+        return false;
+    if (str_startswith(base, component + "-")) {
+        let rest = substr(base, length(component) + 1);
+        return match(rest, /^v?[0-9]/) != null;
+    }
+    if (str_startswith(base, component + "_")) {
+        let rest = substr(base, length(component) + 1);
+        return match(rest, /^v?[0-9]/) != null;
+    }
+    return false;
+}
+
 function updates_zip_inner_package_path(component, arch, ext) {
     component = as_string(component);
     arch = as_string(arch);
@@ -456,19 +501,40 @@ function updates_zip_inner_package_path(component, arch, ext) {
     let fallback = "";
     for (let line in split(read_stdin(), "\n")) {
         let path = fourth_whitespace_field(line);
-        if (path == "")
+        if (path == "" || index(path, "..") >= 0 || substr(path, 0, 1) == "/")
             continue;
 
         if (ext == "apk") {
-            if (str_startswith(path, "apk/" + component + "-") && str_endswith(path, ".apk")) {
+            let base = path_basename(path);
+            if (!apk_basename_is_main_package(base, component))
+                continue;
+
+            if (arch != "") {
+                if (path == "apk/" + arch + "/" + base ||
+                    (str_startswith(path, "apk/") &&
+                        (str_contains(base, "_" + arch + ".apk") || str_contains(base, "-" + arch + ".apk")))) {
+                    print(path, "\n");
+                    return;
+                }
+                if (path == "apk/" + base && fallback == "")
+                    fallback = path;
+                continue;
+            }
+
+            if (path == "apk/" + base) {
                 print(path, "\n");
                 return;
             }
+            if (str_startswith(path, "apk/") && fallback == "")
+                fallback = path;
             continue;
         }
 
-        if (ext == "ipk" && str_startswith(path, component + "_") && str_endswith(path, ".ipk")) {
-            if (arch != "" && str_endswith(path, "_" + arch + ".ipk")) {
+        if (ext == "ipk") {
+            let base = path_basename(path);
+            if (!safe_asset_name(base) || !str_startswith(base, component + "_") || !str_endswith(base, ".ipk"))
+                continue;
+            if (arch != "" && str_endswith(base, "_" + arch + ".ipk")) {
                 print(path, "\n");
                 return;
             }
@@ -826,7 +892,7 @@ function named_release_select_asset(release_prefix, asset_prefix, asset_ext, arc
 
                 let name = as_string(asset.name || "");
                 let url = as_string(asset.browser_download_url || "");
-                if (url != "" && release_asset_matches_arch(name, asset_prefix, arch, asset_ext)) {
+                if (safe_asset_name(name) && url != "" && release_asset_matches_arch(name, asset_prefix, arch, asset_ext)) {
                     print(arch, "\t", name, "\t", url, "\t",
                         as_string(release.html_url || ""), "\t", as_string(release.tag_name || ""), "\n");
                     return;
@@ -850,7 +916,7 @@ function release_select_arch_suffix_asset(asset_ext, arch_candidates) {
 
             let name = as_string(asset.name || "");
             let url = as_string(asset.browser_download_url || "");
-            if (url != "" && str_endswith(name, suffix)) {
+            if (safe_asset_name(name) && url != "" && str_endswith(name, suffix)) {
                 print(arch, "\t", name, "\t", url, "\t",
                     as_string(release.html_url || ""), "\t", as_string(release.tag_name || ""), "\n");
                 return;
@@ -868,7 +934,7 @@ function select_byedpi_asset_from_release(release, asset_ext, arch_candidates) {
                 continue;
             let name = as_string(asset.name || "");
             let url = as_string(asset.browser_download_url || "");
-            if (url != "" && byedpi_asset_matches(name, arch, asset_ext)) {
+            if (safe_asset_name(name) && url != "" && byedpi_asset_matches(name, arch, asset_ext)) {
                 print(arch, "\t", name, "\t", url, "\t", as_string(release.html_url || ""), "\n");
                 return true;
             }
@@ -1141,6 +1207,14 @@ function updates_fallback_job_state(component, action, message, exit_code, updat
     });
 }
 
+if (sourcepath(1) != null && sourcepath(1) != "") {
+    return {
+        safe_asset_name,
+        allowed_download_url,
+        updates_zip_inner_package_path
+    };
+}
+
 let mode = ARGV[0] || "";
 
 if (mode == "file-json-valid")
@@ -1191,7 +1265,7 @@ else if (mode == "forkop-release-version-valid")
     exit(forkop_release_version_valid(ARGV[1]) ? 0 : 1);
 else if (mode == "forkop-release-version-compare")
     exit(forkop_release_version_compare(ARGV[1], ARGV[2]) ? 0 : 1);
-else if (mode == "updates-zip-inner-package-path")
+else if (mode == "updates-zip-inner-package-path" || mode == "zip-inner-package-path")
     updates_zip_inner_package_path(ARGV[1], ARGV[2], ARGV[3]);
 else if (mode == "updates-archive-member-path")
     updates_archive_member_path(ARGV[1]);

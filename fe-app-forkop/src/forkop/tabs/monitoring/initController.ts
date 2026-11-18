@@ -16,6 +16,7 @@ import {
   refreshRuntimeUiState,
   subscribeRuntimeUiState,
 } from '../../services/runtimeUiState.service';
+import { isActiveLuciTab } from '../../helpers/isActiveLuciTab';
 import {
   getServiceAvailability,
   type ServiceAvailability,
@@ -789,9 +790,29 @@ function renderConnectionRow(connection: MonitoredConnection) {
   const target = getTargetCellParts(connection);
   const source = getSourceCellParts(connection);
   const isClosing = closingConnectionIds.has(connection.id);
-  const closeButton =
-    activeTab === 'active'
-      ? E(
+  const cells = [
+    renderTableCell(_('Host'), [renderValue(target.primary)]),
+    renderTableCell(_('Type'), [
+      renderValue(getNetwork(connection), 'fkp_monitoring-page__network'),
+    ]),
+    renderTableCell(_('Route'), [
+      renderValue(getRoute(connection), 'fkp_monitoring-page__route'),
+    ]),
+    renderTableCell(_('Time'), [
+      renderValue(formatConnectionDuration(connection)),
+    ]),
+    renderTableCell(_('Downloaded'), [
+      renderValue(formatBytes(connection.download)),
+    ]),
+    renderTableCell(_('Uploaded'), [
+      renderValue(formatBytes(connection.upload)),
+    ]),
+    renderTableCell(_('Source'), [renderSourceValue(source)]),
+  ];
+  if (activeTab === 'active') {
+    cells.push(
+      renderTableCell(_('Close'), [
+        E(
           'button',
           {
             class: 'btn cbi-button fkp_monitoring-page__row-action',
@@ -802,34 +823,17 @@ function renderConnectionRow(connection: MonitoredConnection) {
             ...(isClosing ? { disabled: true } : {}),
           },
           [renderXIcon24()],
-        )
-      : E('span', {}, '-');
+        ),
+      ]),
+    );
+  }
 
   return E(
     'tr',
     {
       class: isClosing ? 'fkp_monitoring-page__row--closing' : '',
     },
-    [
-      renderTableCell(_('Host'), [renderValue(target.primary)]),
-      renderTableCell(_('Type'), [
-        renderValue(getNetwork(connection), 'fkp_monitoring-page__network'),
-      ]),
-      renderTableCell(_('Route'), [
-        renderValue(getRoute(connection), 'fkp_monitoring-page__route'),
-      ]),
-      renderTableCell(_('Time'), [
-        renderValue(formatConnectionDuration(connection)),
-      ]),
-      renderTableCell(_('Downloaded'), [
-        renderValue(formatBytes(connection.download)),
-      ]),
-      renderTableCell(_('Uploaded'), [
-        renderValue(formatBytes(connection.upload)),
-      ]),
-      renderTableCell(_('Source'), [renderSourceValue(source)]),
-      renderTableCell(_('Close'), [closeButton]),
-    ],
+    cells,
   );
 }
 
@@ -839,7 +843,7 @@ function renderStateRow(text: string, className = '') {
       'td',
       {
         class: 'fkp_monitoring-page__state-cell',
-        colSpan: 8,
+        colSpan: activeTab === 'active' ? 8 : 7,
       },
       [
         E(
@@ -878,7 +882,7 @@ function renderConnectionsTable(
             E('th', {}, `\u2193 ${_('Downloaded')}`),
             E('th', {}, `\u2191 ${_('Uploaded')}`),
             E('th', {}, _('Source')),
-            E('th', {}, _('Close')),
+            ...(activeTab === 'active' ? [E('th', {}, _('Close'))] : []),
           ]),
         ]),
         E('tbody', {}, rows),
@@ -1673,7 +1677,10 @@ export async function initController(
   onMount('monitoring-status').then(() => {
     registerLifecycleListeners();
 
-    if (store.get().tabService.current === 'monitoring') {
+    if (
+      store.get().tabService.current === 'monitoring' ||
+      isActiveLuciTab('monitoring')
+    ) {
       onPageMount();
     }
   });

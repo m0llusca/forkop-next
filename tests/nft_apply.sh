@@ -235,16 +235,17 @@ assert_contains "$NFT_LOG" $'nft\tadd\trule\tinet\tForkopTable\tdns_redirect\tii
 if grep -Fq $'forkop_dns_sources\tudp\tdport\t53\tmeta\tmark' "$NFT_LOG"; then
   fail "source-aware DNS must not use TPROXY marks"
 fi
-assert_contains "$NFT_LOG" $'nft\tadd\trule\tinet\tForkopTable\tmangle\tiifname\t@forkop_interfaces\tip6\tdaddr\t@localv6\tip6\tdaddr\t!=\tfc00::/18\treturn' "runtime local6 return preserves FakeIP6 capture"
+assert_contains "$NFT_LOG" $'nft\tadd\trule\tinet\tForkopTable\tmangle\tiifname\t@forkop_interfaces\tip6\tdaddr\t@localv6\tip6\tdaddr\t!=\t2001:2::/112\treturn' "runtime local6 return preserves FakeIP6 capture"
 assert_contains "$NFT_LOG" $'nft\tadd\trule\tinet\tForkopTable\tmangle\tjump\tpriority_rules' "runtime priority jump"
 assert_contains "$NFT_LOG" $'nft\tadd\trule\tinet\tForkopTable\tmangle\tiifname\t@forkop_interfaces\tip\tdaddr\t@forkop_subnets\tmeta\tl4proto\ttcp\tmeta\tmark\tset\t0x00100000\tcounter' "runtime common tcp rule"
 assert_contains "$NFT_LOG" $'nft\tadd\trule\tinet\tForkopTable\tmangle\tiifname\t@forkop_interfaces\tip6\tdaddr\t@forkop_subnets6\tmeta\tl4proto\ttcp\tmeta\tmark\tset\t0x00100000\tcounter' "runtime common6 tcp rule"
 assert_contains "$NFT_LOG" $'nft\tadd\trule\tinet\tForkopTable\tproxy\tmeta\tmark\t&\t0x00100000\t==\t0x00100000\tmeta\tl4proto\ttcp\ttproxy\tip\tto\t:1602\tcounter' "runtime proxy tcp rule"
 assert_contains "$NFT_LOG" $'nft\tadd\trule\tinet\tForkopTable\tproxy\tmeta\tmark\t&\t0x00100000\t==\t0x00100000\tmeta\tl4proto\ttcp\ttproxy\tip6\tto\t[::1]:1602\tcounter' "runtime proxy6 tcp rule"
 assert_contains "$NFT_LOG" $'nft\tadd\trule\tinet\tForkopTable\tmangle_output\tmeta\tmark\t0x00200000\tcounter\treturn' "runtime outbound return"
-assert_contains "$NFT_LOG" $'nft\tadd\trule\tinet\tForkopTable\tmangle_output\tip6\tdaddr\t@localv6\tip6\tdaddr\t!=\tfc00::/18\treturn' "runtime output local6 return preserves FakeIP6 capture"
+assert_contains "$NFT_LOG" $'nft\tadd\trule\tinet\tForkopTable\tmangle_output\tip6\tdaddr\t@localv6\tip6\tdaddr\t!=\t2001:2::/112\treturn' "runtime output local6 return preserves FakeIP6 capture"
 assert_contains "$NFT_LOG" $'nft\tadd\trule\tinet\tForkopTable\tmangle_output\tjump\tpriority_output_rules' "runtime priority output jump"
 assert_contains "$NFT_LOG" $'nft\tinsert\trule\tinet\tForkopTable\tmangle\tudp\tdport\t123\treturn' "runtime ntp exclusion"
+assert_contains "$NFT_LOG" $'nft\tinsert\trule\tinet\tForkopTable\tmangle_output\tudp\tdport\t123\treturn' "runtime output ntp exclusion"
 
 cat >"$WORK_DIR/runtime-base-uci.state" <<'EOF_UCI'
 forkop.settings=settings
@@ -257,6 +258,7 @@ FORKOP_UCI_STATE_FILE="$WORK_DIR/runtime-base-uci.state" \
 assert_contains "$NFT_LOG" $'nft\tadd\telement\tinet\tForkopTable\tforkop_interfaces\t{ br-lan }' "runtime base from UCI br-lan interface"
 assert_contains "$NFT_LOG" $'nft\tadd\telement\tinet\tForkopTable\tforkop_interfaces\t{ tun0 }' "runtime base from UCI tun0 interface"
 assert_contains "$NFT_LOG" $'nft\tinsert\trule\tinet\tForkopTable\tmangle\tudp\tdport\t123\treturn' "runtime base from UCI ntp exclusion"
+assert_contains "$NFT_LOG" $'nft\tinsert\trule\tinet\tForkopTable\tmangle_output\tudp\tdport\t123\treturn' "runtime base from UCI output ntp exclusion"
 
 : > "$NFT_LOG"
 nft_ucode nft-create-runtime-output-rules ForkopTable localv4 forkop_subnets forkop_ports forkop_ip_ports 0x00100000 198.18.0.0/15
@@ -341,7 +343,7 @@ assert_contains "$NFT_LOG" $'nft\tadd\tset\tinet\tForkopTable\tforkop_rule_bypas
 assert_contains "$NFT_LOG" $'nft\tadd\tset\tinet\tForkopTable\tforkop_rule_wide_proxy_subnets\t{ type ipv4_addr; flags interval; auto-merge; }' "proxy priority subnet set"
 assert_contains "$NFT_LOG" $'nft\tadd\tset\tinet\tForkopTable\tforkop_rule_bypass_first_fully_sources\t{ type ipv4_addr; flags interval; auto-merge; }' "bypass fully routed source set"
 assert_contains "$NFT_LOG" $'nft\tadd\trule\tinet\tForkopTable\tpriority_rules\tiifname\t@forkop_interfaces\tip\tsaddr\t@forkop_rule_bypass_first_fully_sources\tip\tdaddr\t!=\t@localv4\tip\tdaddr\t!=\t198.18.0.0/15\tcounter\taccept' "bypass fully routed real IP fast path"
-assert_contains "$NFT_LOG" $'nft\tadd\trule\tinet\tForkopTable\tpriority_rules\tiifname\t@forkop_interfaces\tip6\tsaddr\t@forkop_rule_bypass_first_fully_sources6\tip6\tdaddr\t!=\t@localv6\tip6\tdaddr\t!=\tfc00::/18\tcounter\taccept' "bypass fully routed6 real IP fast path"
+assert_contains "$NFT_LOG" $'nft\tadd\trule\tinet\tForkopTable\tpriority_rules\tiifname\t@forkop_interfaces\tip6\tsaddr\t@forkop_rule_bypass_first_fully_sources6\tip6\tdaddr\t!=\t@localv6\tip6\tdaddr\t!=\t2001:2::/112\tcounter\taccept' "bypass fully routed6 real IP fast path"
 assert_contains "$NFT_LOG" $'nft\tadd\trule\tinet\tForkopTable\tpriority_rules\tiifname\t@forkop_interfaces\tip\tsaddr\t@forkop_rule_wide_proxy_fully_sources\tip\tdaddr\t!=\t@localv4\tmeta\tl4proto\ttcp\tmeta\tmark\tset\t0x00100000\tcounter\taccept' "proxy fully routed capture path"
 assert_contains "$NFT_LOG" $'nft\tadd\trule\tinet\tForkopTable\tpriority_rules\tiifname\t@forkop_interfaces\tip\tdaddr\t!=\t@localv4\tip\tdaddr\t@forkop_rule_bypass_first_subnets\tcounter\taccept' "bypass priority accept rule"
 assert_contains "$NFT_LOG" $'nft\tadd\trule\tinet\tForkopTable\tpriority_rules\tiifname\t@forkop_interfaces\tip\tdaddr\t!=\t@localv4\tip\tdaddr\t@forkop_rule_wide_proxy_subnets\tmeta\tmark\tset\t0x00100000\tcounter\taccept' "proxy priority capture rule"
@@ -355,6 +357,28 @@ assert_line_before "$NFT_LOG" \
   $'nft\tadd\trule\tinet\tForkopTable\tpriority_rules\tiifname\t@forkop_interfaces\tip\tsaddr\t@forkop_rule_wide_proxy_fully_sources\tip\tdaddr\t!=\t@localv4\tmeta\tl4proto\ttcp\tmeta\tmark\tset\t0x00100000\tcounter\taccept' \
   "fully routed section order"
 
+cat >"$WORK_DIR/console-rules.json" <<'JSON'
+{
+  "section": [
+    {
+      ".name": "ps5",
+      ".type": "section",
+      "enabled": "1",
+      "action": "proxy",
+      "console_mode": "1",
+      "ip_cidr": [ "203.0.113.0/24" ],
+      "fully_routed_ips": [ "192.168.1.55/32", "2001:db8::55/128" ]
+    }
+  ]
+}
+JSON
+: > "$NFT_LOG"
+nft_ucode nft-add-section-priority-rules-fixture "$WORK_DIR/console-rules.json" ForkopTable forkop_interfaces localv4 localv6 0x00100000 198.18.0.0/15
+assert_contains "$NFT_LOG" $'nft\tadd\trule\tinet\tForkopTable\tpriority_rules\tiifname\t@forkop_interfaces\tip\tsaddr\t@forkop_rule_ps5_fully_sources\tip\tdaddr\t!=\t@localv4\tmeta\tl4proto\ttcp\tmeta\tmark\tset\t0x00100000\tcounter\taccept' "console fully routed tcp mark"
+assert_contains "$NFT_LOG" $'nft\tadd\trule\tinet\tForkopTable\tpriority_rules\tiifname\t@forkop_interfaces\tip\tsaddr\t@forkop_rule_ps5_fully_sources\tip\tdaddr\t!=\t@localv4\tip\tdaddr\t!=\t198.18.0.0/15\tmeta\tl4proto\tudp\tcounter\taccept' "console fully routed non-FakeIP udp fast path"
+assert_contains "$NFT_LOG" $'nft\tadd\trule\tinet\tForkopTable\tpriority_rules\tiifname\t@forkop_interfaces\tip6\tsaddr\t@forkop_rule_ps5_fully_sources6\tip6\tdaddr\t!=\t@localv6\tip6\tdaddr\t!=\t2001:2::/112\tmeta\tl4proto\tudp\tcounter\taccept' "console fully routed6 non-FakeIP6 udp fast path"
+assert_contains "$NFT_LOG" $'nft\tadd\trule\tinet\tForkopTable\tpriority_rules\tiifname\t@forkop_interfaces\tip\tdaddr\t!=\t@localv4\tip\tdaddr\t@forkop_rule_ps5_subnets\tmeta\tl4proto\ttcp\tmeta\tmark\tset\t0x00100000\tcounter\taccept' "console subnet tcp-only mark"
+
 : > "$IP_LOG"
 : > "$LOGGER_LOG"
 rt_tables="$WORK_DIR/rt_tables"
@@ -365,6 +389,7 @@ IP_ROUTE_LIST_FAIL=1 IP_ROUTE6_LIST_FAIL=1 IP_RULE_OUTPUT='' IP_RULE6_OUTPUT='' 
 assert_contains "$rt_tables" "105 forkop" "tproxy route table registry"
 assert_contains "$IP_LOG" $'ip\troute\tadd\tlocal\t0.0.0.0/0\tdev\tlo\ttable\tforkop' "tproxy route add"
 assert_contains "$IP_LOG" $'ip\t-6\troute\tadd\tlocal\t::/0\tdev\tlo\ttable\tforkop' "tproxy route6 add"
+assert_contains "$IP_LOG" $'ip\t-4\trule\tadd\tiif\tlo\tfwmark\t0x00100000/0x00100000\tlookup\tmain\tpriority\t104' "tproxy priority 104 source check rule add"
 assert_contains "$IP_LOG" $'ip\t-4\trule\tadd\tfwmark\t0x00100000/0x00100000\ttable\tforkop\tpriority\t105' "tproxy marking rule add"
 assert_contains "$IP_LOG" $'ip\t-6\trule\tadd\tfwmark\t0x00100000/0x00100000\ttable\tforkop\tpriority\t105' "tproxy marking rule6 add"
 assert_contains "$LOGGER_LOG" "[debug] Added IPv4 TPROXY route" "tproxy route creation log"
@@ -377,7 +402,7 @@ assert_contains "$LOGGER_LOG" "[debug] Creating IPv6 TPROXY marking rule" "tprox
 printf '%s\n' '105 forkop' >"$rt_tables"
 IP_ROUTE_OUTPUT='local default dev lo scope host' \
   IP_ROUTE6_OUTPUT='local default dev lo metric 1024 pref medium' \
-  IP_RULE_OUTPUT='105: from all fwmark 0x100000/0x100000 lookup forkop' \
+  IP_RULE_OUTPUT=$'104: from all fwmark 0x100000/0x100000 iif lo lookup main\n105: from all fwmark 0x100000/0x100000 lookup forkop' \
   IP_RULE6_OUTPUT='105: from all fwmark 0x100000/0x100000 lookup forkop' \
   nft_ucode ensure-tproxy-route-rule forkop 0x00100000 "$rt_tables"
 if grep -Fq $'\tadd\t' "$IP_LOG"; then
@@ -389,12 +414,19 @@ assert_contains "$LOGGER_LOG" "[debug] IPv4 TPROXY marking rule already exists" 
 assert_contains "$LOGGER_LOG" "[debug] IPv6 TPROXY marking rule already exists" "existing tproxy marking rule6 log"
 IP_ROUTE_OUTPUT='local default dev lo scope host' \
   IP_ROUTE6_OUTPUT='local default dev lo metric 1024 pref medium' \
-  IP_RULE_OUTPUT='105: from all fwmark 0x100000/0x100000 lookup forkop' \
+  IP_RULE_OUTPUT=$'104: from all fwmark 0x100000/0x100000 iif lo lookup main\n105: from all fwmark 0x100000/0x100000 lookup forkop' \
   IP_RULE6_OUTPUT='105: from all fwmark 0x100000/0x100000 lookup forkop' \
   nft_ucode tproxy-route-rule-present forkop 0x00100000
 if IP_ROUTE_OUTPUT='local default dev lo scope host' \
   IP_ROUTE6_OUTPUT='local default dev lo metric 1024 pref medium' \
-  IP_RULE_OUTPUT='105: from all fwmark 0x100000/0x100000 lookup other' \
+  IP_RULE_OUTPUT='105: from all fwmark 0x100000/0x100000 lookup forkop' \
+  IP_RULE6_OUTPUT='105: from all fwmark 0x100000/0x100000 lookup forkop' \
+  nft_ucode tproxy-route-rule-present forkop 0x00100000 >/dev/null 2>&1; then
+  fail "tproxy route/rule presence should require priority 104 source-check rule"
+fi
+if IP_ROUTE_OUTPUT='local default dev lo scope host' \
+  IP_ROUTE6_OUTPUT='local default dev lo metric 1024 pref medium' \
+  IP_RULE_OUTPUT=$'104: from all fwmark 0x100000/0x100000 iif lo lookup main\n105: from all fwmark 0x100000/0x100000 lookup other' \
   IP_RULE6_OUTPUT='105: from all fwmark 0x100000/0x100000 lookup forkop' \
   nft_ucode tproxy-route-rule-present forkop 0x00100000 >/dev/null 2>&1; then
   fail "tproxy route/rule presence should require matching lookup table"

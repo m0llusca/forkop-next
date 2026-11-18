@@ -10,6 +10,11 @@ import {
   renderXIcon24,
 } from '../../../icons';
 import { renderButton } from '../../../partials';
+import {
+  actionMenuDivider,
+  actionMenuHeading,
+  createActionMenu,
+} from '../../workspace/actionMenu';
 import { getComponentActionKey } from '../../helpers/getComponentActionKey';
 import type { UpdatesActionKey } from '../../helpers/getComponentActionKey';
 import { isTransientRpcError } from '../../helpers/isTransientRpcError';
@@ -129,13 +134,23 @@ function getLatestVersion(component: Forkop.ComponentName) {
   return checkResult.latest_version || undefined;
 }
 
+function isSafeHttpsReleaseUrl(url?: string): boolean {
+  if (!url) return false;
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
 function getGitHubReleaseUrl(component: Forkop.ComponentName) {
   const checkResult = getVisibleCheckResult(component);
 
   if (
     !checkResult ||
     !shouldShowInstallAfterCheck(component) ||
-    !checkResult.release_url
+    !isSafeHttpsReleaseUrl(checkResult.release_url)
   ) {
     return undefined;
   }
@@ -1054,7 +1069,7 @@ function renderComponentCard(card: ComponentCard) {
       const versionToShow =
         checkResult.latest_version || card.latestVersion || card.version;
 
-      if (checkResult.release_url) {
+      if (isSafeHttpsReleaseUrl(checkResult.release_url)) {
         latestValueNodes.push(
           E(
             'a',
@@ -1076,7 +1091,7 @@ function renderComponentCard(card: ComponentCard) {
       labelText = `${_('Installed version is newer than release')}. ${_('Latest version:')}`;
       const versionToShow = checkResult.latest_version || card.latestVersion;
 
-      if (checkResult.release_url) {
+      if (isSafeHttpsReleaseUrl(checkResult.release_url)) {
         latestValueNodes.push(
           E(
             'a',
@@ -1185,45 +1200,80 @@ function renderComponentCard(card: ComponentCard) {
     });
   });
 
-  if (primaryButtons.length > 0 || dangerButtons.length > 0) {
+  const variantButtons = variantActions.map((action) => {
+    const loading = updatesActions[action.key].loading;
+    return renderButton({
+      text: action.text,
+      icon: action.icon,
+      loading,
+      disabled:
+        systemInfoLoading ||
+        serviceRuntimeActionLoading ||
+        (anyActionLoading && !loading),
+      onClick: () => previewComponentAction(action),
+    });
+  });
+
+  if (primaryButtons.length > 0) {
+    const overflowBusy = [...variantActions, ...dangerActions].some(
+      (a) => updatesActions[a.key].loading,
+    );
+    const hasSecondary = variantButtons.length > 0 || dangerButtons.length > 0;
     actionElements.push(
       E('div', { class: 'fkp_updates-page__component__actions-main' }, [
         ...primaryButtons,
-        ...dangerButtons,
+        ...(hasSecondary
+          ? [
+              createActionMenu(
+                variantButtons.length > 0 ? 'Сборки' : 'Ещё',
+                [
+                  ...(variantButtons.length > 0
+                    ? [
+                        actionMenuHeading(_('Install another build:')),
+                        ...variantButtons,
+                      ]
+                    : []),
+                  ...(variantButtons.length > 0 && dangerButtons.length > 0
+                    ? [actionMenuDivider()]
+                    : []),
+                  ...dangerButtons,
+                ],
+                {
+                  ariaLabel: `Действия: ${card.title}`,
+                  open: overflowBusy,
+                  busy: overflowBusy,
+                },
+              ),
+            ]
+          : []),
       ]),
     );
-  }
-
-  // Render variant buttons if any
-  if (variantActions.length > 0) {
-    const variantButtons = variantActions.map((action) => {
-      const loading = updatesActions[action.key].loading;
-      return renderButton({
-        text: action.text,
-        icon: action.icon,
-        loading,
-        disabled:
-          systemInfoLoading ||
-          serviceRuntimeActionLoading ||
-          (anyActionLoading && !loading),
-        onClick: () => previewComponentAction(action),
-      });
-    });
-
-    actionElements.push(
-      E('div', { class: 'fkp_updates-page__component__variants' }, [
+  } else {
+    if (dangerButtons.length > 0) {
+      actionElements.push(
         E(
           'div',
-          { class: 'fkp_updates-page__component__variants-title' },
-          _('Install another build:'),
+          { class: 'fkp_updates-page__component__actions-main' },
+          dangerButtons,
         ),
-        E(
-          'div',
-          { class: 'fkp_updates-page__component__variants-buttons' },
-          variantButtons,
-        ),
-      ]),
-    );
+      );
+    }
+    if (variantButtons.length > 0) {
+      actionElements.push(
+        E('div', { class: 'fkp_updates-page__component__variants' }, [
+          E(
+            'div',
+            { class: 'fkp_updates-page__component__variants-title' },
+            _('Install another build:'),
+          ),
+          E(
+            'div',
+            { class: 'fkp_updates-page__component__variants-buttons' },
+            variantButtons,
+          ),
+        ]),
+      );
+    }
   }
 
   const actionsContainer = E(
@@ -1250,6 +1300,16 @@ function renderComponentCard(card: ComponentCard) {
   return E('div', { class: 'fkp_updates-page__component' }, cardChildren);
 }
 
+async function checkAllInstalledUpdates() {
+  const checkActions = getComponentCards()
+    .flatMap((card) => card.actions)
+    .filter((act) => act.action === 'check_update');
+  for (const act of checkActions) {
+    if (!updatesMounted) break;
+    await handleComponentAction(act);
+  }
+}
+
 function renderUpdatesComponents() {
   const container = document.getElementById('fkp_updates-components');
 
@@ -1257,10 +1317,36 @@ function renderUpdatesComponents() {
     return;
   }
 
+  const cards = getComponentCards();
   const columns = [[], []] as Node[][];
-  getComponentCards().forEach((card) => {
+  cards.forEach((card) => {
     columns[card.column].push(renderComponentCard(card));
   });
+
+  const pageRoot = document.getElementById('updates-status');
+  if (pageRoot) {
+    let toolbar = document.getElementById('fkp_updates-toolbar');
+    if (!toolbar) {
+      toolbar = E('div', {
+        id: 'fkp_updates-toolbar',
+        class: 'fkp_updates-page__toolbar',
+      });
+      pageRoot.prepend(toolbar);
+    }
+    const busy =
+      isAnyActionLoading() ||
+      isServiceRuntimeActionLoading() ||
+      isSystemInfoLoading();
+    toolbar.replaceChildren(
+      renderButton({
+        text: 'Проверить все обновления',
+        icon: renderSearchIcon24,
+        loading: busy,
+        disabled: busy,
+        onClick: () => void checkAllInstalledUpdates(),
+      }),
+    );
+  }
 
   return preserveScrollForPage(() => {
     container.replaceChildren(

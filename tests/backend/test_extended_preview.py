@@ -305,8 +305,9 @@ class ExtendedPreview(unittest.TestCase):
 
     def test_manual_link_label_uses_actual_generator_credential_decoding(self):
         for encoded,fragment,credential in [
-                ('%2570lainCredential731','plainCredential731','plainCredential731'),
-                ('%252570lainCredential731','%2570lainCredential731','%70lainCredential731')]:
+                ('%70lainCredential731','plainCredential731','plainCredential731'),
+                ('%2570lainCredential731','%2570lainCredential731','%70lainCredential731'),
+                ('p%40ss%3Fword731','p%40ss%3Fword731','p@ss?word731')]:
             with self.subTest(encoded=encoded):
                 self.data['section'][0]['selector_proxy_links']=[
                     f'trojan://{encoded}@127.0.0.1:443#{fragment}',

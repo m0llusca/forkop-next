@@ -21,7 +21,7 @@ function record(id,identity,outcome){
     let value=read(id,identity);
     value.schema=1;value.identity=sha(identity);value.lastAttempt=outcome.attemptedAt;
     value.status=outcome.succeeded?'success':'failed';
-    value.error=outcome.succeeded?null:index(['download_failed','download_or_import_failed','source_changed','invalid_source'],outcome.reason)>=0?outcome.reason:'download_or_import_failed';
+    value.error=outcome.succeeded?null:index(['download_failed','download_or_import_failed','source_changed','invalid_source','subscription_shrunk'],outcome.reason)>=0?outcome.reason:'download_or_import_failed';
     if(outcome.succeeded){value.lastSuccess=outcome.attemptedAt;value.import={added:number(outcome.added),accepted:number(outcome.accepted),
         skipped:number(outcome.skipped),duplicates:null,unsupported:null};}
     fs.mkdir(DIR,0700);

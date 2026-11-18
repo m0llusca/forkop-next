@@ -160,4 +160,73 @@ verification="$(ucode -L "$FORKOP_LIB" "$FAILOVER" verification-plan-fixture "$W
 printf '%s' "$verification" | grep -Eq '"main"[[:space:]]*:[[:space:]]*false' || fail "bootstrap-only switch must not require a dead main DNS to recover"
 printf '%s' "$verification" | grep -Eq '"bootstrap"[[:space:]]*:[[:space:]]*true' || fail "bootstrap-only switch must verify the selected bootstrap DNS"
 
+strikes_file="$WORK_DIR/strikes.json"
+rm -f "$strikes_file"
+for strike in 1 2; do
+  selected="$(FORKOP_DNS_FAILOVER_STRIKES=3 ucode -L "$FORKOP_LIB" "$FAILOVER" select-fixture "$WORK_DIR/select-state.json" "$WORK_DIR/alive-failover.json" main 0 "$strikes_file")"
+  printf '%s' "$selected" | grep -Eq '"index"[[:space:]]*:[[:space:]]*0' || fail "strike $strike must keep active DNS index 0"
+  printf '%s' "$selected" | grep -Eq '"reason"[[:space:]]*:[[:space:]]*"debounce"' || fail "strike $strike must report debounce"
+done
+selected="$(FORKOP_DNS_FAILOVER_STRIKES=3 ucode -L "$FORKOP_LIB" "$FAILOVER" select-fixture "$WORK_DIR/select-state.json" "$WORK_DIR/alive-recovery.json" main 0 "$strikes_file")"
+printf '%s' "$selected" | grep -Eq '"reason"[[:space:]]*:[[:space:]]*"alive"' || fail "healthy active DNS must report alive"
+selected="$(FORKOP_DNS_FAILOVER_STRIKES=3 ucode -L "$FORKOP_LIB" "$FAILOVER" select-fixture "$WORK_DIR/select-state.json" "$WORK_DIR/alive-failover.json" main 0 "$strikes_file")"
+printf '%s' "$selected" | grep -Eq '"reason"[[:space:]]*:[[:space:]]*"debounce"' || fail "healthy active DNS must reset strike counter"
+FORKOP_DNS_FAILOVER_STRIKES=3 ucode -L "$FORKOP_LIB" "$FAILOVER" select-fixture "$WORK_DIR/select-state.json" "$WORK_DIR/alive-failover.json" main 0 "$strikes_file" >/dev/null
+selected="$(FORKOP_DNS_FAILOVER_STRIKES=3 ucode -L "$FORKOP_LIB" "$FAILOVER" select-fixture "$WORK_DIR/select-state.json" "$WORK_DIR/alive-failover.json" main 0 "$strikes_file")"
+printf '%s' "$selected" | grep -Eq '"index"[[:space:]]*:[[:space:]]*1' || fail "third consecutive failure must switch to live backup"
+printf '%s' "$selected" | grep -Eq '"reason"[[:space:]]*:[[:space:]]*"active_dead"' || fail "third strike must report active_dead"
+
+mkdir -p "$WORK_DIR/mock-bin" "$WORK_DIR/proc/4242" "$WORK_DIR/run"
+printf '4242 (sing-box) S 1 4242 4242 0 -1 0 0 0 0 0 0 0 0 0 20 0 1 0 77777 0 0\n' >"$WORK_DIR/proc/4242/stat"
+cat >"$WORK_DIR/mock-bin/ubus" <<'SH'
+#!/bin/sh
+printf '{"sing-box":{"instances":{"main":{"running":true,"pid":4242}}}}\n'
+SH
+cat >"$WORK_DIR/mock-bin/dig" <<SH
+#!/bin/sh
+printf 'probed\n' >>"$WORK_DIR/dig.log"
+exit 1
+SH
+chmod +x "$WORK_DIR/mock-bin/ubus" "$WORK_DIR/mock-bin/dig"
+cat >"$WORK_DIR/uci.state" <<'EOF'
+forkop.settings=settings
+forkop.settings.dns_type=udp
+forkop.settings.dns_server=1.1.1.1 8.8.8.8
+forkop.settings.bootstrap_dns_server=77.88.8.8
+EOF
+cat >"$WORK_DIR/run/dns-failover.json" <<'JSON'
+{
+  "version": 1,
+  "dns_type": "udp",
+  "dns_detour": "",
+  "main_servers": [ "1.1.1.1", "8.8.8.8" ],
+  "bootstrap_servers": [ "77.88.8.8" ],
+  "main_index": 0,
+  "bootstrap_index": 0
+}
+JSON
+
+step_out="$(PATH="$WORK_DIR/mock-bin:$PATH" \
+  FORKOP_UCI_STATE_FILE="$WORK_DIR/uci.state" \
+  FORKOP_RUNTIME_STATE_DIR="$WORK_DIR/run" \
+  FORKOP_DNS_FAILOVER_STATE_FILE="$WORK_DIR/run/dns-failover.json" \
+  FORKOP_PROC_ROOT="$WORK_DIR/proc" \
+  FORKOP_DNS_FAILOVER_GRACE_SECONDS=90 \
+  ucode -L "$FORKOP_LIB" "$FAILOVER" step-fixture "$WORK_DIR/run/loop.json" 100)"
+printf '%s' "$step_out" | grep -Eq '"reason"[[:space:]]*:[[:space:]]*"startup_grace"' || fail "startup grace window must skip DNS probes"
+[ ! -e "$WORK_DIR/dig.log" ] || fail "dig must not run during sing-box startup grace window"
+
+sleep 30 &
+recycled_pid=$!
+mkdir -p "$WORK_DIR/proc/$recycled_pid"
+printf '%s (other) S 1 %s %s 0 -1 0 0 0 0 0 0 0 0 0 20 0 1 0 99999 0 0\n' "$recycled_pid" "$recycled_pid" "$recycled_pid" >"$WORK_DIR/proc/$recycled_pid/stat"
+printf '%s\n11111\n' "$recycled_pid" >"$WORK_DIR/run/dns-failover.pid"
+FORKOP_RUNTIME_STATE_DIR="$WORK_DIR/run" \
+  FORKOP_DNS_FAILOVER_PID_FILE="$WORK_DIR/run/dns-failover.pid" \
+  FORKOP_PROC_ROOT="$WORK_DIR/proc" \
+  ucode -L "$FORKOP_LIB" "$FAILOVER" stop-runtime
+kill -0 "$recycled_pid" 2>/dev/null || fail "stop-runtime must not kill recycled PID when start_ticks differ"
+kill "$recycled_pid" 2>/dev/null || true
+wait "$recycled_pid" 2>/dev/null || true
+
 printf 'DNS failover checks passed\n'
